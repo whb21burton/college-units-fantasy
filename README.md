@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/25662035/README.md)
 # College Units Fantasy — Backend Setup
 
 Full Next.js + Supabase app with auth, league creation, and invite flow.
