@@ -1,4 +1,3 @@
-[System.IO.File]::WriteAllText("$PWD\app\page.tsx", @'
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
