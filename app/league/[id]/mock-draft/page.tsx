@@ -1,1 +1,1 @@
-[System.IO.File]::WriteAllText("$PWD\app\league\[id]\mock-draft\page.tsx", (Get-Clipboard))
+$fullpath = (Get-Item -LiteralPath 'app\league\[id]\mock-draft\page.tsx').FullName [System.IO.File]::WriteAllText($fullpath, (Get-Clipboard)) Get-Content -LiteralPath 'app\league\[id]\mock-draft\page.tsx' | Select-Object -First 3
