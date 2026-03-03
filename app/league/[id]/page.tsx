@@ -245,6 +245,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               copied={copied}
               onCopy={copyLink}
               onStartDraft={startDraft}
+              onMockDraft={() => router.push(`/league/${params.id}/mock-draft`)}
             />
           )}
           {activeTab !== 'draft' && (
@@ -322,11 +323,11 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
 }
 
 /* ── Draft Tab ──────────────────────────────────────────────── */
-function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, inviteUrl, copied, onCopy, onStartDraft }: {
+function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, inviteUrl, copied, onCopy, onStartDraft, onMockDraft }: {
   league: any; members: any[]; userId: string | null;
   spotsLeft: number; isFull: boolean; isCommissioner: boolean;
   inviteUrl: string; copied: boolean;
-  onCopy: () => void; onStartDraft: () => void;
+  onCopy: () => void; onStartDraft: () => void; onMockDraft: () => void;
 }) {
   const size = league?.league_size || 0;
 
@@ -356,7 +357,7 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
           </div>
         </div>
         <button
-          onClick={() => router.push(`/league/${params.id}/mock-draft`)}
+          onClick={onMockDraft}
           style={{ padding: '9px 18px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: C.sub, transition: 'all .15s' }}
         >Mock Draft</button>
       </div>
