@@ -1,0 +1,1 @@
+[System.IO.File]::WriteAllText("$PWD\app\league\[id]\mock-draft\page.tsx", (Get-Clipboard))
