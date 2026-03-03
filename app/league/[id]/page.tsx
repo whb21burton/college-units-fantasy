@@ -356,7 +356,7 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
           </div>
         </div>
         <button
-          onClick={() => alert('Mock Draft coming soon!\n\nThis will let you simulate your picks against mock AI managers.')}
+          onClick={() => router.push(`/league/${params.id}/mock-draft`)}
           style={{ padding: '9px 18px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: C.sub, transition: 'all .15s' }}
         >Mock Draft</button>
       </div>
