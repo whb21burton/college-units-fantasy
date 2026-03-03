@@ -45,15 +45,20 @@ const POOL = FULL_POOL
   .filter(u => ACTIVE_SCHOOLS.has(u.school))
   .sort((a, b) => a.adp - b.adp);
 
+// ── Settings ───────────────────────────────────────────────────────────────────
+type DraftType     = 'snake' | 'linear';
+type DraftSettings = { draftType: DraftType; timerSeconds: number; autoPick: boolean };
+const DEFAULT_SETTINGS: DraftSettings = { draftType: 'snake', timerSeconds: 60, autoPick: false };
+
 // ── Draft math ─────────────────────────────────────────────────────────────────
-function teamForPick(pickNum: number): number {
+function teamForPick(pickNum: number, dt: DraftType = 'snake'): number {
   const round = Math.floor(pickNum / NUM_TEAMS);
   const pos   = pickNum % NUM_TEAMS;
-  return round % 2 === 0 ? pos : NUM_TEAMS - 1 - pos;
+  return (dt === 'linear' || round % 2 === 0) ? pos : NUM_TEAMS - 1 - pos;
 }
 
-function pickForCell(round: number, teamCol: number): number {
-  return round * NUM_TEAMS + (round % 2 === 0 ? teamCol : NUM_TEAMS - 1 - teamCol);
+function pickForCell(round: number, col: number, dt: DraftType = 'snake'): number {
+  return round * NUM_TEAMS + (dt === 'snake' && round % 2 === 1 ? NUM_TEAMS - 1 - col : col);
 }
 
 // ── AI helpers ─────────────────────────────────────────────────────────────────
@@ -74,13 +79,12 @@ function aiPickUnit(roster: Roster, available: DraftUnit[]): DraftUnit | null {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
 function shortLabel(unit: DraftUnit, max = 15): string {
   const s = unit.playerName ?? unit.school;
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
+// ── FilterBtn ──────────────────────────────────────────────────────────────────
 function FilterBtn({
   active, onClick, color, children,
 }: {
@@ -105,6 +109,191 @@ function FilterBtn({
   );
 }
 
+// ── SettingsModal ──────────────────────────────────────────────────────────────
+function SettingsModal({
+  settings, onSave, onClose, draftStarted,
+}: {
+  settings: DraftSettings;
+  onSave: (s: DraftSettings, restart: boolean) => void;
+  onClose: () => void;
+  draftStarted: boolean;
+}) {
+  const [local, setLocal] = useState<DraftSettings>(settings);
+  const typeChanged = draftStarted && local.draftType !== settings.draftType;
+
+  const TIMER_OPTS = [
+    { label: '15s', value: 15 },
+    { label: '30s', value: 30 },
+    { label: '60s', value: 60 },
+    { label: '90s', value: 90 },
+    { label: '∞',   value: 0  },
+  ];
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 200,
+        background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: C.surf, border: `1px solid ${C.surf3}`,
+          borderRadius: 14, padding: '28px 28px 24px', width: 430, maxWidth: '94vw',
+        }}
+      >
+        {/* Title */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 26,
+        }}>
+          <div style={{
+            fontFamily: "'Anton', sans-serif", fontSize: 17,
+            letterSpacing: 3, color: C.text, textTransform: 'uppercase',
+            display: 'flex', alignItems: 'center', gap: 9,
+          }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={C.gold} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Draft Settings
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: C.muted, fontSize: 17, lineHeight: 1, padding: 4,
+          }}>✕</button>
+        </div>
+
+        {/* Draft Type */}
+        <div style={{ marginBottom: 22 }}>
+          <div style={{
+            fontFamily: "'Oswald', sans-serif", fontSize: 10,
+            letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10,
+          }}>Draft Type</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {(['snake', 'linear'] as DraftType[]).map(t => (
+              <button
+                key={t}
+                onClick={() => setLocal(d => ({ ...d, draftType: t }))}
+                style={{
+                  flex: 1, padding: '11px 0', borderRadius: 8, cursor: 'pointer',
+                  fontFamily: "'Oswald', sans-serif", fontSize: 12,
+                  letterSpacing: 1, textTransform: 'uppercase',
+                  background: local.draftType === t ? `${C.gold}1a` : C.surf2,
+                  border: `1px solid ${local.draftType === t ? C.gold : C.surf3}`,
+                  color: local.draftType === t ? C.gold : C.sub,
+                  transition: 'all .15s',
+                }}
+              >
+                {t === 'snake' ? '🐍 Snake' : '→ Linear'}
+                <div style={{
+                  fontFamily: "'Oswald', sans-serif", fontSize: 9,
+                  color: local.draftType === t ? `${C.gold}99` : C.muted,
+                  marginTop: 3, textTransform: 'none', letterSpacing: .3,
+                }}>
+                  {t === 'snake' ? 'Serpentine order' : 'Same order every round'}
+                </div>
+              </button>
+            ))}
+          </div>
+          {typeChanged && (
+            <div style={{
+              marginTop: 8, padding: '6px 10px', borderRadius: 6,
+              background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.3)',
+              fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.red, letterSpacing: .3,
+            }}>⚠ Changing draft type will restart the draft</div>
+          )}
+        </div>
+
+        {/* Pick Timer */}
+        <div style={{ marginBottom: 22 }}>
+          <div style={{
+            fontFamily: "'Oswald', sans-serif", fontSize: 10,
+            letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10,
+          }}>Pick Timer</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {TIMER_OPTS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setLocal(d => ({ ...d, timerSeconds: opt.value }))}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 8, cursor: 'pointer',
+                  fontFamily: "'Anton', sans-serif", fontSize: 14, letterSpacing: .5,
+                  background: local.timerSeconds === opt.value ? `${C.gold}1a` : C.surf2,
+                  border: `1px solid ${local.timerSeconds === opt.value ? C.gold : C.surf3}`,
+                  color: local.timerSeconds === opt.value ? C.gold : C.sub,
+                  transition: 'all .15s',
+                }}
+              >{opt.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Auto Pick */}
+        <div style={{ marginBottom: 28 }}>
+          <div style={{
+            fontFamily: "'Oswald', sans-serif", fontSize: 10,
+            letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10,
+          }}>Auto Pick</div>
+          <button
+            onClick={() => setLocal(d => ({ ...d, autoPick: !d.autoPick }))}
+            style={{
+              width: '100%', padding: '12px 16px', borderRadius: 8, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: local.autoPick ? 'rgba(46,204,113,0.08)' : C.surf2,
+              border: `1px solid ${local.autoPick ? C.green : C.surf3}`,
+              transition: 'all .15s',
+            }}
+          >
+            <div style={{ textAlign: 'left' }}>
+              <div style={{
+                fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: .5,
+                color: local.autoPick ? C.green : C.sub,
+              }}>
+                {local.autoPick ? 'Enabled — AI picks for you' : 'Disabled — You pick manually'}
+              </div>
+              <div style={{
+                fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted, marginTop: 2,
+              }}>
+                Simulate a fully automated draft
+              </div>
+            </div>
+            {/* Toggle pill */}
+            <div style={{
+              width: 38, height: 20, borderRadius: 10, position: 'relative', flexShrink: 0,
+              background: local.autoPick ? C.green : C.surf3, transition: 'background .2s',
+            }}>
+              <div style={{
+                position: 'absolute', top: 2, borderRadius: '50%',
+                width: 16, height: 16, background: '#fff',
+                left: local.autoPick ? 20 : 2, transition: 'left .2s',
+              }} />
+            </div>
+          </button>
+        </div>
+
+        {/* Save */}
+        <button
+          onClick={() => onSave(local, typeChanged)}
+          style={{
+            width: '100%', padding: '13px 0',
+            background: `linear-gradient(135deg, ${C.gold}, ${C.goldLight})`,
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+            fontFamily: "'Anton', sans-serif", fontSize: 14,
+            letterSpacing: 2, textTransform: 'uppercase', color: C.bg,
+          }}
+        >
+          {typeChanged ? 'Save & Restart Draft' : 'Save Settings'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── DraftSummary ───────────────────────────────────────────────────────────────
 function DraftSummary({ rosters, onExit }: { rosters: Rosters; onExit: () => void }) {
   return (
     <div style={{
@@ -113,24 +302,18 @@ function DraftSummary({ rosters, onExit }: { rosters: Rosters; onExit: () => voi
     }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
 
-        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <div style={{ fontSize: 52, marginBottom: 12 }}>🏈</div>
           <div style={{
             fontFamily: "'Anton', sans-serif", fontSize: 38,
             letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8,
-          }}>
-            Draft Complete!
-          </div>
+          }}>Draft Complete!</div>
           <div style={{
             fontFamily: "'Oswald', sans-serif", fontSize: 14,
             color: C.sub, letterSpacing: 1,
-          }}>
-            Mock Draft 2026 · {NUM_TEAMS} Teams · {TOTAL_ROUNDS} Rounds
-          </div>
+          }}>Mock Draft 2026 · {NUM_TEAMS} Teams · {TOTAL_ROUNDS} Rounds</div>
         </div>
 
-        {/* Roster grid */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
@@ -166,13 +349,8 @@ function DraftSummary({ rosters, onExit }: { rosters: Rosters; onExit: () => voi
                     )}
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{
-                      fontFamily: "'Anton', sans-serif", fontSize: 20, color: C.text,
-                    }}>{totalProj}</div>
-                    <div style={{
-                      fontFamily: "'Oswald', sans-serif", fontSize: 9,
-                      color: C.muted, letterSpacing: 1,
-                    }}>PROJ PTS</div>
+                    <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 20, color: C.text }}>{totalProj}</div>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, letterSpacing: 1 }}>PROJ PTS</div>
                   </div>
                 </div>
 
@@ -180,28 +358,18 @@ function DraftSummary({ rosters, onExit }: { rosters: Rosters; onExit: () => voi
                   {roster.map((unit, i) => {
                     const pc = POS_COLOR[unit.unitType];
                     return (
-                      <div key={unit.id} style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '5px 14px',
-                      }}>
-                        <span style={{
-                          fontFamily: "'Anton', sans-serif", fontSize: 10,
-                          color: C.muted, width: 16,
-                        }}>{i + 1}</span>
+                      <div key={unit.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 14px' }}>
+                        <span style={{ fontFamily: "'Anton', sans-serif", fontSize: 10, color: C.muted, width: 16 }}>{i + 1}</span>
                         <span style={{
                           fontFamily: "'Oswald', sans-serif", fontSize: 10,
                           color: pc.text, background: pc.bg,
-                          padding: '2px 5px', borderRadius: 3,
-                          flexShrink: 0, letterSpacing: .5,
+                          padding: '2px 5px', borderRadius: 3, flexShrink: 0, letterSpacing: .5,
                         }}>{unit.unitType}</span>
                         <span style={{
-                          fontFamily: "'Oswald', sans-serif", fontSize: 12,
-                          color: C.text, flex: 1,
+                          fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.text, flex: 1,
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>{unit.playerName ?? `${unit.school} Unit`}</span>
-                        <span style={{
-                          fontFamily: "'Anton', sans-serif", fontSize: 12,
-                          color: C.sub, flexShrink: 0,
-                        }}>{unit.projectedPoints}</span>
+                        <span style={{ fontFamily: "'Anton', sans-serif", fontSize: 12, color: C.sub, flexShrink: 0 }}>{unit.projectedPoints}</span>
                       </div>
                     );
                   })}
@@ -218,9 +386,7 @@ function DraftSummary({ rosters, onExit }: { rosters: Rosters; onExit: () => voi
             border: 'none', borderRadius: 8, cursor: 'pointer',
             fontFamily: "'Anton', sans-serif", fontSize: 15,
             letterSpacing: 2, textTransform: 'uppercase', color: C.bg,
-          }}>
-            ← Back to League Dashboard
-          </button>
+          }}>← Back to League Dashboard</button>
         </div>
       </div>
     </div>
@@ -233,30 +399,63 @@ export default function MockDraftPage() {
   const router   = useRouter();
   const leagueId = params.id as string;
 
+  const [settings,     setSettings]     = useState<DraftSettings>(DEFAULT_SETTINGS);
+  const [showSettings, setShowSettings] = useState(false);
   const [picks,        setPicks]        = useState<(DraftUnit | null)[]>(Array(TOTAL_PICKS).fill(null));
   const [available,    setAvailable]    = useState<DraftUnit[]>(POOL);
   const [currentPick,  setCurrentPick]  = useState(0);
   const [filterPos,    setFilterPos]    = useState<UnitType | null>(null);
-  const [timer,        setTimer]        = useState(60);
+  const [timer,        setTimer]        = useState(DEFAULT_SETTINGS.timerSeconds);
   const [complete,     setComplete]     = useState(false);
   const [rosters,      setRosters]      = useState<Rosters>(
     Object.fromEntries(Array.from({ length: NUM_TEAMS }, (_, i) => [i, [] as Roster]))
   );
 
-  // Refs for stale-closure safety inside callbacks and effects
-  const availRef   = useRef(available);
-  const rostersRef = useRef(rosters);
-  const pickRef    = useRef(currentPick);
-  useEffect(() => { availRef.current   = available;   }, [available]);
-  useEffect(() => { rostersRef.current = rosters;     }, [rosters]);
-  useEffect(() => { pickRef.current    = currentPick; }, [currentPick]);
+  const availRef    = useRef(available);
+  const rostersRef  = useRef(rosters);
+  const pickRef     = useRef(currentPick);
+  const settingsRef = useRef(settings);
+  useEffect(() => { availRef.current    = available;   }, [available]);
+  useEffect(() => { rostersRef.current  = rosters;     }, [rosters]);
+  useEffect(() => { pickRef.current     = currentPick; }, [currentPick]);
+  useEffect(() => { settingsRef.current = settings;    }, [settings]);
 
-  const isUserTurn = !complete && teamForPick(currentPick) === USER_TEAM;
+  const isUserTurn = !complete && teamForPick(currentPick, settings.draftType) === USER_TEAM;
 
-  // Core pick executor — works for both user and AI
+  // ── Restart draft ─────────────────────────────────────────────────────────────
+  const restartDraft = useCallback((newSettings: DraftSettings) => {
+    const emptyRosters = Object.fromEntries(Array.from({ length: NUM_TEAMS }, (_, i) => [i, [] as Roster]));
+    setSettings(newSettings);
+    settingsRef.current = newSettings;
+    setPicks(Array(TOTAL_PICKS).fill(null));
+    setAvailable(POOL);
+    availRef.current = POOL;
+    setCurrentPick(0);
+    pickRef.current = 0;
+    setTimer(newSettings.timerSeconds || 60);
+    setComplete(false);
+    setRosters(emptyRosters);
+    rostersRef.current = emptyRosters;
+    setShowSettings(false);
+  }, []);
+
+  // ── Handle settings save ──────────────────────────────────────────────────────
+  const handleSaveSettings = useCallback((newSettings: DraftSettings, restart: boolean) => {
+    if (restart) {
+      restartDraft(newSettings);
+    } else {
+      setSettings(newSettings);
+      if (newSettings.timerSeconds !== settingsRef.current.timerSeconds) {
+        setTimer(newSettings.timerSeconds || 60);
+      }
+      setShowSettings(false);
+    }
+  }, [restartDraft]);
+
+  // ── Core pick executor ────────────────────────────────────────────────────────
   const executePick = useCallback((unit: DraftUnit) => {
     const idx     = pickRef.current;
-    const teamIdx = teamForPick(idx);
+    const teamIdx = teamForPick(idx, settingsRef.current.draftType);
 
     const nextAvail   = availRef.current.filter(u => u.id !== unit.id);
     const nextRosters = {
@@ -264,7 +463,6 @@ export default function MockDraftPage() {
       [teamIdx]: [...rostersRef.current[teamIdx], unit],
     };
 
-    // Sync refs immediately so next AI pick sees updated state
     availRef.current   = nextAvail;
     rostersRef.current = nextRosters;
 
@@ -278,13 +476,13 @@ export default function MockDraftPage() {
     } else {
       pickRef.current = next;
       setCurrentPick(next);
-      setTimer(60);
+      setTimer(settingsRef.current.timerSeconds || 60);
     }
   }, []);
 
-  // Countdown timer — only active on user's turn
+  // ── Countdown timer (user turn only, skipped when timerSeconds === 0) ─────────
   useEffect(() => {
-    if (!isUserTurn || complete) return;
+    if (!isUserTurn || complete || settings.timerSeconds === 0) return;
     if (timer <= 0) {
       const pick = aiPickUnit(rostersRef.current[USER_TEAM], availRef.current);
       if (pick) executePick(pick);
@@ -292,14 +490,24 @@ export default function MockDraftPage() {
     }
     const id = setTimeout(() => setTimer(s => s - 1), 1000);
     return () => clearTimeout(id);
-  }, [timer, isUserTurn, complete, executePick]);
+  }, [timer, isUserTurn, complete, executePick, settings.timerSeconds]);
 
-  // AI auto-pick — fires whenever current pick belongs to an AI team
+  // ── Auto-pick for user when autoPick is enabled ───────────────────────────────
+  useEffect(() => {
+    if (complete || !isUserTurn || !settings.autoPick) return;
+    const delay = 700 + Math.random() * 700;
+    const id = setTimeout(() => {
+      const pick = aiPickUnit(rostersRef.current[USER_TEAM], availRef.current);
+      if (pick) executePick(pick);
+    }, delay);
+    return () => clearTimeout(id);
+  }, [currentPick, isUserTurn, complete, executePick, settings.autoPick]);
+
+  // ── AI auto-pick for AI teams ─────────────────────────────────────────────────
   useEffect(() => {
     if (complete) return;
-    const team = teamForPick(currentPick);
+    const team = teamForPick(currentPick, settingsRef.current.draftType);
     if (team === USER_TEAM) return;
-
     const delay = 600 + Math.random() * 900;
     const id = setTimeout(() => {
       const pick = aiPickUnit(rostersRef.current[team], availRef.current);
@@ -319,9 +527,10 @@ export default function MockDraftPage() {
 
   const round        = Math.floor(currentPick / NUM_TEAMS) + 1;
   const slotInRound  = (currentPick % NUM_TEAMS) + 1;
-  const currentTeam  = teamForPick(currentPick);
+  const currentTeam  = teamForPick(currentPick, settings.draftType);
   const userCounts   = countPos(rosters[USER_TEAM]);
   const filteredPool = filterPos ? available.filter(u => u.unitType === filterPos) : available;
+  const draftStarted = currentPick > 0;
 
   return (
     <div style={{
@@ -337,6 +546,15 @@ export default function MockDraftPage() {
         ::-webkit-scrollbar-thumb { background:${C.surf3}; border-radius:3px; }
         ::-webkit-scrollbar-thumb:hover { background:${C.muted}; }
       `}</style>
+
+      {showSettings && (
+        <SettingsModal
+          settings={settings}
+          onSave={handleSaveSettings}
+          onClose={() => setShowSettings(false)}
+          draftStarted={draftStarted}
+        />
+      )}
 
       {/* ── Header ── */}
       <header style={{
@@ -380,12 +598,39 @@ export default function MockDraftPage() {
           </div>
         </div>
 
-        <div style={{
-          fontFamily: "'Oswald', sans-serif", fontSize: 11,
-          color: C.muted, letterSpacing: 1, textAlign: 'right',
-        }}>
-          <div style={{ color: C.sub }}>{NUM_TEAMS} Teams · {TOTAL_ROUNDS} Rounds</div>
-          <div>Overall Pick {currentPick + 1} / {TOTAL_PICKS}</div>
+        {/* Right: info + gear icon */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            fontFamily: "'Oswald', sans-serif", fontSize: 11,
+            color: C.muted, letterSpacing: 1, textAlign: 'right',
+          }}>
+            <div style={{ color: C.sub }}>{NUM_TEAMS} Teams · {TOTAL_ROUNDS} Rounds</div>
+            <div>Overall Pick {currentPick + 1} / {TOTAL_PICKS}</div>
+          </div>
+
+          <button
+            onClick={() => setShowSettings(true)}
+            title="Draft Settings"
+            style={{
+              width: 36, height: 36, borderRadius: 8, cursor: 'pointer',
+              background: 'transparent', border: `1px solid ${C.surf3}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: C.muted, transition: 'all .15s', flexShrink: 0,
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLElement).style.borderColor = C.gold;
+              (e.currentTarget as HTMLElement).style.color = C.gold;
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.borderColor = C.surf3;
+              (e.currentTarget as HTMLElement).style.color = C.muted;
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -401,8 +646,7 @@ export default function MockDraftPage() {
             minWidth: NUM_TEAMS * 112 + 48,
           }}>
 
-            {/* Team header row */}
-            <div /> {/* round-label corner */}
+            <div />
             {Array.from({ length: NUM_TEAMS }, (_, t) => (
               <div key={`h${t}`} style={{
                 padding: '6px 4px', textAlign: 'center',
@@ -418,9 +662,7 @@ export default function MockDraftPage() {
               </div>
             ))}
 
-            {/* Round rows — flattened to avoid keyed Fragment */}
             {Array.from({ length: TOTAL_ROUNDS }, (_, r) => [
-              // Round label
               <div key={`rl${r}`} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontFamily: "'Anton', sans-serif", fontSize: 11,
@@ -429,9 +671,8 @@ export default function MockDraftPage() {
                 R{r + 1}
               </div>,
 
-              // Team cells
               ...Array.from({ length: NUM_TEAMS }, (_, t) => {
-                const pickIdx = pickForCell(r, t);
+                const pickIdx = pickForCell(r, t, settings.draftType);
                 const unit    = picks[pickIdx];
                 const isCur   = pickIdx === currentPick;
                 const isPast  = pickIdx < currentPick;
@@ -493,10 +734,10 @@ export default function MockDraftPage() {
                         height: '100%', minHeight: 40,
                         fontFamily: "'Oswald', sans-serif", fontSize: 9,
                         letterSpacing: 1.5, textTransform: 'uppercase',
-                        color: isUser ? C.gold : C.sub,
+                        color: isUser && !settings.autoPick ? C.gold : C.sub,
                         animation: 'pulse 1.3s ease infinite',
                       }}>
-                        {isUser ? 'ON CLOCK' : 'AI…'}
+                        {isUser && !settings.autoPick ? 'ON CLOCK' : 'AI…'}
                       </div>
                     ) : (
                       <div style={{
@@ -521,29 +762,21 @@ export default function MockDraftPage() {
           display: 'flex', flexDirection: 'column', flexShrink: 0,
           background: C.surf,
         }}>
-          {/* Panel header */}
           <div style={{
             padding: '12px 14px 10px',
             borderBottom: `1px solid ${C.surf3}`, flexShrink: 0,
           }}>
-            <div style={{
-              display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10,
-            }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
               <div style={{
                 fontFamily: "'Anton', sans-serif", fontSize: 13,
                 letterSpacing: 2, color: C.text, textTransform: 'uppercase',
-              }}>
-                Available
-              </div>
+              }}>Available</div>
               <div style={{
                 fontFamily: "'Oswald', sans-serif", fontSize: 11,
                 color: C.muted, letterSpacing: 1,
-              }}>
-                ({filteredPool.length})
-              </div>
+              }}>({filteredPool.length})</div>
             </div>
 
-            {/* Position filters */}
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               <FilterBtn active={filterPos === null} onClick={() => setFilterPos(null)} color={C.gold}>
                 All
@@ -561,7 +794,6 @@ export default function MockDraftPage() {
             </div>
           </div>
 
-          {/* Column header row */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: '28px 16px 34px 1fr 50px',
@@ -579,7 +811,6 @@ export default function MockDraftPage() {
             ))}
           </div>
 
-          {/* Scrollable pool list */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {filteredPool.length === 0 ? (
               <div style={{
@@ -592,7 +823,7 @@ export default function MockDraftPage() {
             ) : filteredPool.map(unit => {
               const pc       = POS_COLOR[unit.unitType];
               const atCap    = userCounts[unit.unitType] >= POSITION_CAPS[unit.unitType];
-              const canDraft = isUserTurn && !atCap;
+              const canDraft = isUserTurn && !atCap && !settings.autoPick;
 
               return (
                 <div
@@ -616,7 +847,6 @@ export default function MockDraftPage() {
                     (e.currentTarget as HTMLElement).style.background = 'transparent';
                   }}
                 >
-                  {/* ADP */}
                   <div style={{
                     fontFamily: "'Anton', sans-serif", fontSize: 11,
                     color: C.muted, textAlign: 'right',
@@ -624,19 +854,16 @@ export default function MockDraftPage() {
                     {Math.round(unit.adp)}
                   </div>
 
-                  {/* Tier badge */}
                   <div style={{
                     width: 16, height: 16, borderRadius: 3,
                     background: TIER_COLOR[unit.tier],
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontFamily: "'Anton', sans-serif", fontSize: 9,
-                    color: '#05080f',
-                    flexShrink: 0,
+                    color: '#05080f', flexShrink: 0,
                   }}>
                     {unit.tier[0]}
                   </div>
 
-                  {/* Position badge */}
                   <div style={{
                     fontFamily: "'Oswald', sans-serif", fontSize: 10,
                     letterSpacing: .5, color: pc.text,
@@ -646,7 +873,6 @@ export default function MockDraftPage() {
                     {unit.unitType}
                   </div>
 
-                  {/* Player name + school */}
                   <div style={{ minWidth: 0 }}>
                     <div style={{
                       fontFamily: "'Oswald', sans-serif", fontSize: 13,
@@ -663,16 +889,11 @@ export default function MockDraftPage() {
                     </div>
                   </div>
 
-                  {/* Projected points */}
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{
-                      fontFamily: "'Anton', sans-serif", fontSize: 14, color: C.text,
-                    }}>
+                    <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 14, color: C.text }}>
                       {unit.projectedPoints}
                     </div>
-                    <div style={{
-                      fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted,
-                    }}>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted }}>
                       pts
                     </div>
                   </div>
@@ -689,7 +910,6 @@ export default function MockDraftPage() {
         padding: '0 20px', height: 68, flexShrink: 0,
         background: C.surf, borderTop: `1px solid ${C.surf3}`,
       }}>
-        {/* On the clock */}
         <div style={{ flex: 1 }}>
           <div style={{
             fontFamily: "'Oswald', sans-serif", fontSize: 9,
@@ -712,7 +932,6 @@ export default function MockDraftPage() {
           </div>
         </div>
 
-        {/* User roster counts vs caps */}
         <div style={{
           display: 'flex', gap: 10, alignItems: 'center',
           padding: '0 16px',
@@ -743,25 +962,33 @@ export default function MockDraftPage() {
         </div>
 
         {/* Timer / AI indicator */}
-        <div style={{
-          width: 72, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {isUserTurn ? (
-            <div style={{
-              width: 68, height: 52, borderRadius: 8,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: timer <= 10 ? 'rgba(231,76,60,0.15)' : 'rgba(212,168,40,0.1)',
-              border: `2px solid ${timer <= 10 ? C.red : C.gold}`,
-              animation: timer <= 10 ? 'blink .7s ease infinite' : 'none',
-            }}>
+        <div style={{ width: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {isUserTurn && !settings.autoPick ? (
+            settings.timerSeconds === 0 ? (
               <div style={{
-                fontFamily: "'Anton', sans-serif", fontSize: 30,
-                color: timer <= 10 ? C.red : C.gold,
-                letterSpacing: -1, lineHeight: 1,
+                width: 68, height: 52, borderRadius: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(212,168,40,0.1)', border: `2px solid ${C.gold}`,
               }}>
-                {timer}
+                <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 26, color: C.gold }}>∞</div>
               </div>
-            </div>
+            ) : (
+              <div style={{
+                width: 68, height: 52, borderRadius: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: timer <= 10 ? 'rgba(231,76,60,0.15)' : 'rgba(212,168,40,0.1)',
+                border: `2px solid ${timer <= 10 ? C.red : C.gold}`,
+                animation: timer <= 10 ? 'blink .7s ease infinite' : 'none',
+              }}>
+                <div style={{
+                  fontFamily: "'Anton', sans-serif", fontSize: 30,
+                  color: timer <= 10 ? C.red : C.gold,
+                  letterSpacing: -1, lineHeight: 1,
+                }}>
+                  {timer}
+                </div>
+              </div>
+            )
           ) : (
             <div style={{
               fontFamily: "'Oswald', sans-serif", fontSize: 10,
