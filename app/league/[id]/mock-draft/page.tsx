@@ -6,6 +6,15 @@ import {
   FULL_POOL, POSITION_CAPS, ROSTER_SLOTS, CONFERENCES,
   type DraftUnit, type UnitType,
 } from '@/lib/playerPool';
+import type { TeamEfficiency } from '@/types';
+
+function multiplierFromPercentile(p: number): number {
+  if (p >= 95) return 1.20;
+  if (p >= 90) return 1.15;
+  if (p >= 80) return 1.10;
+  if (p >= 60) return 1.05;
+  return 1.00;
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const NUM_TEAMS    = 8;
@@ -39,8 +48,14 @@ const C = {
   text: '#e8edf5', sub: '#7a90b0', red: '#e74c3c', green: '#2ecc71',
 };
 
-// Default pool: SEC + Big Ten
-const ACTIVE_SCHOOLS = new Set([...CONFERENCES.SEC, ...CONFERENCES['Big Ten']]);
+// Pool: all 5 supported conferences
+const ACTIVE_SCHOOLS = new Set([
+  ...CONFERENCES.SEC,
+  ...CONFERENCES['Big Ten'],
+  ...CONFERENCES['Big 12'],
+  ...CONFERENCES.ACC,
+  ...CONFERENCES['FBS Independents'],
+]);
 const POOL = FULL_POOL
   .filter(u => ACTIVE_SCHOOLS.has(u.school))
   .sort((a, b) => a.adp - b.adp);
@@ -399,9 +414,10 @@ export default function MockDraftPage() {
   const router   = useRouter();
   const leagueId = params.id as string;
 
-  const [settings,     setSettings]     = useState<DraftSettings>(DEFAULT_SETTINGS);
-  const [showSettings, setShowSettings] = useState(false);
-  const [picks,        setPicks]        = useState<(DraftUnit | null)[]>(Array(TOTAL_PICKS).fill(null));
+  const [settings,       setSettings]     = useState<DraftSettings>(DEFAULT_SETTINGS);
+  const [showSettings,   setShowSettings] = useState(false);
+  const [efficiencyMap,  setEfficiencyMap] = useState<Record<string, TeamEfficiency>>({});
+  const [picks,          setPicks]        = useState<(DraftUnit | null)[]>(Array(TOTAL_PICKS).fill(null));
   const [available,    setAvailable]    = useState<DraftUnit[]>(POOL);
   const [currentPick,  setCurrentPick]  = useState(0);
   const [filterPos,    setFilterPos]    = useState<UnitType | null>(null);
@@ -419,6 +435,21 @@ export default function MockDraftPage() {
   useEffect(() => { rostersRef.current  = rosters;     }, [rosters]);
   useEffect(() => { pickRef.current     = currentPick; }, [currentPick]);
   useEffect(() => { settingsRef.current = settings;    }, [settings]);
+
+  // Fetch current-week efficiency data on mount (best-effort; no error shown if unavailable)
+  useEffect(() => {
+    const season = new Date().getFullYear();
+    const week = 1; // Replace with current week from league once weekly tracking is live
+    fetch(`/api/efficiency?week=${week}&season=${season}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!json?.data?.length) return;
+        const map: Record<string, TeamEfficiency> = {};
+        for (const row of json.data as TeamEfficiency[]) map[row.school] = row;
+        setEfficiencyMap(map);
+      })
+      .catch(() => {/* silently ignore — efficiency badges are non-critical */});
+  }, []);
 
   const isUserTurn = !complete && teamForPick(currentPick, settings.draftType) === USER_TEAM;
 
@@ -884,8 +915,27 @@ export default function MockDraftPage() {
                     <div style={{
                       fontFamily: "'Oswald', sans-serif", fontSize: 10,
                       color: C.muted, letterSpacing: .3,
+                      display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap',
                     }}>
-                      {unit.school} · {unit.conference}
+                      <span>{unit.school} · {unit.conference}</span>
+                      {(() => {
+                        const eff = efficiencyMap[unit.school];
+                        if (!eff) return null;
+                        const isOff = unit.unitType !== 'DEF';
+                        const pct = isOff ? eff.off_percentile : eff.def_percentile;
+                        const mult = isOff ? eff.off_multiplier : eff.def_multiplier;
+                        if (mult === 1.00) return null;
+                        const bg = mult >= 1.15 ? '#16a34a' : mult >= 1.10 ? '#15803d' : '#a16207';
+                        return (
+                          <span title={`${isOff ? 'OFF' : 'DEF'} ${pct}th percentile`} style={{
+                            fontSize: 9, fontWeight: 700, letterSpacing: .5,
+                            background: bg, color: '#fff',
+                            padding: '1px 4px', borderRadius: 3,
+                          }}>
+                            {isOff ? 'OFF' : 'DEF'} {mult.toFixed(2)}×
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
 

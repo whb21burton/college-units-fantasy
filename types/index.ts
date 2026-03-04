@@ -103,6 +103,49 @@ export interface JoinLeagueFormData {
   team_name:  string;
 }
 
+// ── Efficiency system ────────────────────────────────────────
+
+export interface TeamEfficiency {
+  id:                   string;
+  school:               string;
+  conference:           string;
+  week:                 number;
+  season:               number;
+  off_points_per_drive: number;
+  off_yards_per_play:   number;
+  off_success_rate:     number;
+  off_turnover_rate:    number;
+  off_composite:        number;
+  off_percentile:       number;
+  def_points_per_drive: number;
+  def_yards_per_play:   number;
+  def_success_rate:     number;
+  def_turnover_rate:    number;
+  def_composite:        number;
+  def_percentile:       number;
+  off_multiplier:       number;
+  def_multiplier:       number;
+  calculated_at:        string;
+}
+
+export interface SchoolMatchup {
+  id:           string;
+  week:         number;
+  season:       number;
+  home_school:  string;
+  away_school:  string;
+  cfbd_game_id: number | null;
+  start_time:   string | null;
+  completed:    boolean;
+}
+
+// Extend WeeklyScore with base/adjusted columns
+export interface WeeklyScoreExtended extends WeeklyScore {
+  base_score:      number | null;
+  adjusted_score:  number | null;
+  multiplier_used: number | null;
+}
+
 // ── API response types ───────────────────────────────────────
 export interface ApiSuccess<T> {
   data:  T;

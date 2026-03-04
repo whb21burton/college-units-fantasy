@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
+import type { TeamEfficiency, SchoolMatchup, WeeklyScore } from '@/types';
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft';
 
@@ -280,10 +281,13 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               onMockDraft={() => router.push(`/league/${params.id}/mock-draft`)}
             />
           )}
-          {activeTab !== 'draft' && (
+          {activeTab === 'scores' && (
+            <ScoresTab leagueId={params.id} members={members} league={league} userId={userId} />
+          )}
+          {activeTab !== 'draft' && activeTab !== 'scores' && (
             <PlaceholderTab
               label={TABS.find(t => t.key === activeTab)?.label || ''}
-              icon={activeTab === 'team' ? '🏆' : activeTab === 'league' ? '⚙️' : activeTab === 'players' ? '🏈' : '📊'}
+              icon={activeTab === 'team' ? '🏆' : activeTab === 'league' ? '⚙️' : '🏈'}
             />
           )}
         </div>
@@ -453,6 +457,225 @@ function PlaceholderTab({ label, icon }: { label: string; icon: string }) {
       <div style={{ fontSize: 44 }}>{icon}</div>
       <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{label}</div>
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.surf3, letterSpacing: 1 }}>Coming soon</div>
+    </div>
+  );
+}
+
+/* ── Scores Tab ─────────────────────────────────────────────── */
+function multiplierColor(m: number) {
+  if (m >= 1.15) return '#16a34a';
+  if (m >= 1.10) return '#15803d';
+  if (m >= 1.05) return '#a16207';
+  return C.muted;
+}
+
+function ScoresTab({
+  leagueId, members, league, userId,
+}: {
+  leagueId: string; members: any[]; league: any; userId: string | null;
+}) {
+  const [efficiency,  setEfficiency]  = useState<Record<string, TeamEfficiency>>({});
+  const [matchups,    setMatchups]    = useState<SchoolMatchup[]>([]);
+  const [weeklyScore, setWeeklyScore] = useState<WeeklyScore[]>([]);
+  const [loadingEff,  setLoadingEff]  = useState(true);
+
+  const season      = new Date().getFullYear();
+  const currentWeek = league?.current_week ?? 1;
+
+  useEffect(() => {
+    async function load() {
+      setLoadingEff(true);
+      try {
+        const [effRes, schedRes, scoresRes] = await Promise.all([
+          fetch(`/api/efficiency?week=${currentWeek}&season=${season}`),
+          fetch(`/api/schedule?week=${currentWeek}&season=${season}`),
+          supabase
+            .from('weekly_scores')
+            .select('*')
+            .eq('league_id', leagueId)
+            .eq('week', currentWeek),
+        ]);
+
+        if (effRes.ok) {
+          const json = await effRes.json();
+          const map: Record<string, TeamEfficiency> = {};
+          for (const row of (json.data ?? []) as TeamEfficiency[]) map[row.school] = row;
+          setEfficiency(map);
+        }
+        if (schedRes.ok) {
+          const json = await schedRes.json();
+          setMatchups(json.data ?? []);
+        }
+        const { data: scores } = scoresRes;
+        setWeeklyScore(scores ?? []);
+      } finally {
+        setLoadingEff(false);
+      }
+    }
+    load();
+  }, [leagueId, currentWeek, season]);
+
+  // Build schedule lookup: school → opponent
+  const scheduleMap = new Map<string, string>();
+  for (const m of matchups) {
+    scheduleMap.set(m.home_school, m.away_school);
+    scheduleMap.set(m.away_school, m.home_school);
+  }
+
+  // Build standings from weekly_scores adjusted_score
+  const standings = [...members].map(member => {
+    const score = weeklyScore.find(s => s.user_id === member.user_id);
+    return {
+      ...member,
+      baseScore:     (score as any)?.base_score     ?? 0,
+      adjustedScore: (score as any)?.adjusted_score ?? (score?.score ?? 0),
+      multiplierUsed:(score as any)?.multiplier_used ?? 1.00,
+    };
+  }).sort((a, b) => b.adjustedScore - a.adjustedScore);
+
+  const noEffData = Object.keys(efficiency).length === 0;
+
+  return (
+    <div style={{ padding: 24, maxWidth: 700 }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase' }}>
+          Week {currentWeek} Scores
+        </div>
+        {noEffData && !loadingEff && (
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginTop: 4 }}>
+            No efficiency data for this week yet. Commissioner can trigger calculation via the admin API.
+          </div>
+        )}
+      </div>
+
+      {/* Efficiency legend */}
+      {!noEffData && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          {([['≥95th', '1.20×', '#16a34a'], ['≥80th', '1.10×', '#15803d'], ['≥60th', '1.05×', '#a16207'], ['<60th', '1.00×', C.muted]] as const).map(([pct, mult, color]) => (
+            <div key={pct} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: .5 }}>
+                {pct} → {mult}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Standings table */}
+      <div style={{ background: C.surf, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.surf3}` }}>
+        {/* Column headers */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '24px 1fr 80px 80px 60px',
+          gap: 8, padding: '8px 16px',
+          borderBottom: `1px solid ${C.surf3}`,
+          fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1,
+          color: C.muted, textTransform: 'uppercase',
+        }}>
+          <div>#</div>
+          <div>Team</div>
+          <div style={{ textAlign: 'right' }}>Base Pts</div>
+          <div style={{ textAlign: 'right' }}>Adj Pts</div>
+          <div style={{ textAlign: 'right' }}>Bonus</div>
+        </div>
+
+        {standings.map((member, idx) => {
+          const bonus = member.adjustedScore - member.baseScore;
+          return (
+            <div
+              key={member.id}
+              style={{
+                display: 'grid', gridTemplateColumns: '24px 1fr 80px 80px 60px',
+                gap: 8, padding: '10px 16px',
+                borderBottom: idx < standings.length - 1 ? `1px solid ${C.surf3}` : 'none',
+                background: member.user_id === userId ? `${C.surf2}` : 'transparent',
+              }}
+            >
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.muted, paddingTop: 2 }}>
+                {idx + 1}
+              </div>
+              <div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text }}>
+                  {member.team_name}
+                </div>
+                {!noEffData && (
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 1 }}>
+                    Multiplier: {(member.multiplierUsed as number).toFixed(2)}×
+                  </div>
+                )}
+              </div>
+              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.sub, paddingTop: 2 }}>
+                {member.baseScore > 0 ? member.baseScore.toFixed(1) : '—'}
+              </div>
+              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.text, paddingTop: 1 }}>
+                {member.adjustedScore > 0 ? member.adjustedScore.toFixed(1) : '—'}
+              </div>
+              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 12, paddingTop: 2,
+                color: bonus > 0 ? '#16a34a' : C.muted }}>
+                {bonus > 0 ? `+${bonus.toFixed(1)}` : '—'}
+              </div>
+            </div>
+          );
+        })}
+
+        {standings.length === 0 && (
+          <div style={{ padding: 32, textAlign: 'center', fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted }}>
+            No members yet
+          </div>
+        )}
+      </div>
+
+      {/* School efficiency reference */}
+      {!noEffData && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 12 }}>
+            School Efficiency — Week {currentWeek}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+            {Object.values(efficiency)
+              .sort((a, b) => b.def_percentile - a.def_percentile)
+              .slice(0, 20)
+              .map(eff => {
+                const opponent = scheduleMap.get(eff.school);
+                return (
+                  <div key={eff.school} style={{
+                    background: C.surf2, borderRadius: 8, padding: '10px 14px',
+                    border: `1px solid ${C.surf3}`,
+                  }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, fontWeight: 600 }}>
+                      {eff.school}
+                    </div>
+                    {opponent && (
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 4 }}>
+                        vs {opponent}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                        background: multiplierColor(eff.off_multiplier), color: '#fff',
+                      }}>
+                        OFF {eff.off_multiplier.toFixed(2)}×
+                      </span>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                        background: multiplierColor(eff.def_multiplier), color: '#fff',
+                      }}>
+                        DEF {eff.def_multiplier.toFixed(2)}×
+                      </span>
+                    </div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 4 }}>
+                      OFF {eff.off_percentile}th · DEF {eff.def_percentile}th percentile
+                    </div>
+                  </div>
+                );
+              })
+            }
+          </div>
+        </div>
+      )}
     </div>
   );
 }

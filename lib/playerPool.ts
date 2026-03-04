@@ -1,6 +1,6 @@
 export type UnitType = 'QB' | 'RB' | 'WR' | 'TE' | 'DEF' | 'K';
 export type Tier = 'Elite' | 'Solid' | 'Depth';
-export type Conference = 'SEC' | 'Big Ten' | 'Big 12' | 'ACC';
+export type Conference = 'SEC' | 'Big Ten' | 'Big 12' | 'ACC' | 'FBS Independents';
 
 export interface DraftUnit {
   id: string;
@@ -49,6 +49,9 @@ export const CONFERENCES: Record<Conference, string[]> = {
     'Clemson', 'Florida State', 'Miami', 'NC State', 'North Carolina', 'Duke',
     'Wake Forest', 'Louisville', 'Virginia Tech', 'Pittsburgh', 'Syracuse',
     'Boston College', 'Georgia Tech', 'Virginia', 'Cal', 'Stanford', 'SMU',
+  ],
+  'FBS Independents': [
+    'Notre Dame', 'Army', 'Navy', 'Liberty', 'New Mexico State', 'Connecticut',
   ],
 };
 
@@ -369,6 +372,38 @@ export const FULL_POOL: DraftUnit[] = [
     { id: uid(school,'TE'),             school, conference:'ACC' as Conference, unitType:'TE' as UnitType,  tier:'Depth' as Tier,   adp:74+i*2,            projectedPoints:125-i*4  },
     { id: uid(school,'DEF'),            school, conference:'ACC' as Conference, unitType:'DEF' as UnitType, tier:defTier,           adp:42+i*3,            projectedPoints:220-i*8  },
     { id: uid(school,'K','Kicker'),     school, conference:'ACC' as Conference, unitType:'K' as UnitType,   playerName:'Kicker',    tier:'Depth' as Tier,  adp:60+i*2,   projectedPoints:102-i*3  },
+  ]),
+
+  // ═══════════════════════════════════════════════════════════
+  // FBS INDEPENDENTS
+  // ═══════════════════════════════════════════════════════════
+
+  // Notre Dame
+  { id: uid('Notre Dame','QB','Riley Leonard'),   school:'Notre Dame', conference:'FBS Independents', unitType:'QB', playerName:'Riley Leonard',   tier:'Elite', adp:16,  projectedPoints:278 },
+  { id: uid('Notre Dame','QB','Backup QB'),        school:'Notre Dame', conference:'FBS Independents', unitType:'QB', playerName:'Backup QB',        tier:'Solid', adp:52,  projectedPoints:168 },
+  { id: uid('Notre Dame','QB','Third QB'),         school:'Notre Dame', conference:'FBS Independents', unitType:'QB', playerName:'Third QB',         tier:'Depth', adp:118, projectedPoints:58  },
+  { id: uid('Notre Dame','RB'),                    school:'Notre Dame', conference:'FBS Independents', unitType:'RB', tier:'Elite', adp:9,   projectedPoints:352 },
+  { id: uid('Notre Dame','WR'),                    school:'Notre Dame', conference:'FBS Independents', unitType:'WR', tier:'Elite', adp:11,  projectedPoints:328 },
+  { id: uid('Notre Dame','TE'),                    school:'Notre Dame', conference:'FBS Independents', unitType:'TE', tier:'Elite', adp:12,  projectedPoints:238 },
+  { id: uid('Notre Dame','DEF'),                   school:'Notre Dame', conference:'FBS Independents', unitType:'DEF',tier:'Elite', adp:4,   projectedPoints:318 },
+  { id: uid('Notre Dame','K','Mitch Jeter'),       school:'Notre Dame', conference:'FBS Independents', unitType:'K',  playerName:'Mitch Jeter',      tier:'Elite', adp:16,  projectedPoints:142 },
+
+  // Remaining FBS Independents (Army, Navy, Liberty, New Mexico State, Connecticut)
+  ...([
+    { school:'Army',             qb:'Bryson Daily',    rbAdp:38, wrAdp:52, defTier:'Solid' as Tier, qbTier:'Solid' as Tier, qbAdp:36 },
+    { school:'Navy',             qb:'Blake Horvath',   rbAdp:42, wrAdp:56, defTier:'Solid' as Tier, qbTier:'Solid' as Tier, qbAdp:40 },
+    { school:'Liberty',          qb:'Kaidon Salter',   rbAdp:46, wrAdp:60, defTier:'Depth' as Tier, qbTier:'Solid' as Tier, qbAdp:44 },
+    { school:'New Mexico State', qb:'Diego Pavia',     rbAdp:55, wrAdp:70, defTier:'Depth' as Tier, qbTier:'Depth' as Tier, qbAdp:55 },
+    { school:'Connecticut',      qb:'TaQuan Roberson', rbAdp:60, wrAdp:75, defTier:'Depth' as Tier, qbTier:'Depth' as Tier, qbAdp:60 },
+  ] as const).flatMap(({ school, qb, rbAdp, wrAdp, defTier, qbTier, qbAdp }, i) => [
+    { id: uid(school,'QB',qb),          school, conference:'FBS Independents' as Conference, unitType:'QB' as UnitType,  playerName:qb,         tier:qbTier,           adp:qbAdp,    projectedPoints:245-i*10 },
+    { id: uid(school,'QB','Backup QB'), school, conference:'FBS Independents' as Conference, unitType:'QB' as UnitType,  playerName:'Backup QB', tier:'Depth' as Tier,  adp:78+i*4,   projectedPoints:140-i*6  },
+    { id: uid(school,'QB','Third QB'),  school, conference:'FBS Independents' as Conference, unitType:'QB' as UnitType,  playerName:'Third QB',  tier:'Depth' as Tier,  adp:138+i*3,  projectedPoints:48-i*4   },
+    { id: uid(school,'RB'),             school, conference:'FBS Independents' as Conference, unitType:'RB' as UnitType,  tier:'Solid' as Tier,   adp:rbAdp,             projectedPoints:270-i*15 },
+    { id: uid(school,'WR'),             school, conference:'FBS Independents' as Conference, unitType:'WR' as UnitType,  tier:'Depth' as Tier,   adp:wrAdp,             projectedPoints:248-i*15 },
+    { id: uid(school,'TE'),             school, conference:'FBS Independents' as Conference, unitType:'TE' as UnitType,  tier:'Depth' as Tier,   adp:85+i*4,            projectedPoints:118-i*6  },
+    { id: uid(school,'DEF'),            school, conference:'FBS Independents' as Conference, unitType:'DEF' as UnitType, tier:defTier,           adp:48+i*4,            projectedPoints:205-i*10 },
+    { id: uid(school,'K','Kicker'),     school, conference:'FBS Independents' as Conference, unitType:'K' as UnitType,   playerName:'Kicker',    tier:'Depth' as Tier,  adp:68+i*4,   projectedPoints:98-i*5   },
   ]),
 ];
 
