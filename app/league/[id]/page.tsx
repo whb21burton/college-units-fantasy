@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 
+type SettingsSection = 'league' | 'team' | 'roster' | 'draft';
+
 const C = {
   bg: '#05080f', surf: '#0c1220', surf2: '#131d30', surf3: '#1e2d47',
   gold: '#d4a828', muted: '#4a5d7a', text: '#e8edf5', sub: '#7a90b0',
@@ -29,6 +31,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const [loading,      setLoading]      = useState(true);
   const [copied,       setCopied]       = useState(false);
   const [activeTab,    setActiveTab]    = useState<Tab>('draft');
+  const [showSettings, setShowSettings] = useState(false);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput,    setChatInput]    = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -135,6 +138,17 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   return (
     <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
 
+      {showSettings && (
+        <LeagueSettingsModal
+          league={league}
+          myMember={myMember}
+          isCommissioner={isCommissioner}
+          userId={userId}
+          onClose={() => setShowSettings(false)}
+          onUpdate={() => loadData()}
+        />
+      )}
+
       {/* ══════════════════════════════════════════════
           LEFT SIDEBAR
       ══════════════════════════════════════════════ */}
@@ -186,7 +200,25 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                 {myMember?.team_name || userEmail.split('@')[0]}
               </div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>MANAGER</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>MANAGER</div>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  title="League Settings"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    padding: 2, color: C.muted, display: 'flex', alignItems: 'center',
+                    borderRadius: 4, transition: 'color .15s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = C.gold}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = C.muted}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
           <button
@@ -421,6 +453,341 @@ function PlaceholderTab({ label, icon }: { label: string; icon: string }) {
       <div style={{ fontSize: 44 }}>{icon}</div>
       <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{label}</div>
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.surf3, letterSpacing: 1 }}>Coming soon</div>
+    </div>
+  );
+}
+
+/* ── League Settings Modal ───────────────────────────────────── */
+const SETTINGS_NAV: { key: SettingsSection; label: string; commOnly: boolean }[] = [
+  { key: 'league', label: 'League Settings', commOnly: true  },
+  { key: 'team',   label: 'Team Settings',   commOnly: false },
+  { key: 'roster', label: 'Roster Settings', commOnly: true  },
+  { key: 'draft',  label: 'Draft Settings',  commOnly: true  },
+];
+
+function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose, onUpdate }: {
+  league: any; myMember: any; isCommissioner: boolean;
+  userId: string | null; onClose: () => void; onUpdate: () => void;
+}) {
+  const [section, setSection] = useState<SettingsSection>(isCommissioner ? 'league' : 'team');
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
+
+  // League Settings fields
+  const [leagueName, setLeagueName] = useState<string>(league?.name || '');
+  const [leagueSize, setLeagueSize] = useState<number>(league?.league_size || 8);
+
+  // Team Settings fields
+  const [teamName, setTeamName] = useState<string>(myMember?.team_name || '');
+
+  const canEdit = (commOnly: boolean) => commOnly ? isCommissioner : true;
+
+  async function save() {
+    setSaving(true);
+    if (section === 'league' && isCommissioner) {
+      await supabase.from('leagues')
+        .update({ name: leagueName.trim(), league_size: leagueSize })
+        .eq('id', league.id);
+    }
+    if (section === 'team' && userId && myMember) {
+      await supabase.from('league_members')
+        .update({ team_name: teamName.trim() })
+        .eq('id', myMember.id);
+    }
+    onUpdate();
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '10px 13px',
+    background: C.bg, border: '1px solid ' + C.surf3,
+    borderRadius: 8, color: C.text,
+    fontFamily: 'Inter,sans-serif', fontSize: 14,
+    outline: 'none', boxSizing: 'border-box',
+    transition: 'border-color .15s',
+  };
+  const labelStyle: React.CSSProperties = {
+    fontFamily: 'Oswald,sans-serif', fontSize: 10,
+    letterSpacing: 2, color: C.muted,
+    textTransform: 'uppercase', marginBottom: 8, display: 'block',
+  };
+
+  function OptionBtn({ value, current, onClick, children }: {
+    value: string | number; current: string | number;
+    onClick: () => void; children: React.ReactNode;
+  }) {
+    const active = value === current;
+    return (
+      <button onClick={onClick} style={{
+        flex: 1, padding: '9px 0', borderRadius: 8, cursor: 'pointer',
+        fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1,
+        background: active ? 'rgba(212,168,40,0.12)' : C.surf3,
+        border: '1px solid ' + (active ? C.gold : C.surf3),
+        color: active ? C.gold : C.sub,
+        transition: 'all .15s',
+      }}>{children}</button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 300,
+        background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          display: 'flex', width: 700, maxWidth: '96vw', height: 520, maxHeight: '90vh',
+          background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 14,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Left nav */}
+        <div style={{
+          width: 200, flexShrink: 0, background: C.surf2,
+          borderRight: '1px solid ' + C.surf3,
+          display: 'flex', flexDirection: 'column',
+        }}>
+          <div style={{ padding: '20px 18px 14px', borderBottom: '1px solid ' + C.surf3 }}>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.text, textTransform: 'uppercase' }}>Settings</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 3, letterSpacing: .5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{league?.name}</div>
+          </div>
+          <div style={{ flex: 1, paddingTop: 8 }}>
+            {SETTINGS_NAV.map(item => {
+              const active  = section === item.key;
+              const locked  = item.commOnly && !isCommissioner;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => !locked && setSection(item.key)}
+                  style={{
+                    width: '100%', textAlign: 'left', background: active ? 'rgba(212,168,40,0.08)' : 'none',
+                    border: 'none', borderLeft: active ? '3px solid ' + C.gold : '3px solid transparent',
+                    padding: '11px 18px', cursor: locked ? 'default' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  }}
+                >
+                  <span style={{
+                    fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: .5,
+                    color: locked ? C.surf3 : (active ? C.gold : C.sub),
+                  }}>{item.label}</span>
+                  {locked && <span style={{ fontSize: 10, color: C.surf3 }}>🔒</span>}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              margin: 14, padding: '8px 0', background: 'none',
+              border: '1px solid ' + C.surf3, borderRadius: 6,
+              cursor: 'pointer', fontFamily: 'Oswald,sans-serif',
+              fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: C.muted,
+            }}
+          >✕ Close</button>
+        </div>
+
+        {/* Right content */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Section header */}
+          <div style={{ padding: '20px 28px 16px', borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 2, color: C.text, textTransform: 'uppercase' }}>
+              {SETTINGS_NAV.find(s => s.key === section)?.label}
+            </div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginTop: 3 }}>
+              {section === 'league' && 'League-wide settings — commissioner only'}
+              {section === 'team'   && 'Your team profile — visible to all league members'}
+              {section === 'roster' && 'Roster configuration — commissioner only'}
+              {section === 'draft'  && 'Draft configuration — commissioner only'}
+            </div>
+          </div>
+
+          {/* Form body */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+
+            {/* ── League Settings ── */}
+            {section === 'league' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div>
+                  <label style={labelStyle}>League Name</label>
+                  <input
+                    value={leagueName}
+                    onChange={e => setLeagueName(e.target.value)}
+                    disabled={!isCommissioner}
+                    style={{ ...inputStyle, opacity: isCommissioner ? 1 : .5 }}
+                    onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.gold}
+                    onBlur={e  => (e.target as HTMLInputElement).style.borderColor = C.surf3}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Teams</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[4, 6, 8, 10, 12, 14].map(n => (
+                      <OptionBtn key={n} value={n} current={leagueSize} onClick={() => isCommissioner && setLeagueSize(n)}>
+                        {n}
+                      </OptionBtn>
+                    ))}
+                  </div>
+                  {!isCommissioner && (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 6 }}>Only the commissioner can change these settings.</div>
+                  )}
+                </div>
+                <div>
+                  <label style={labelStyle}>Waiver Type</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {['Free Agent', 'FAAB Bidding', 'Rolling'].map(type => (
+                      <OptionBtn key={type} value={type} current="FAAB Bidding" onClick={() => {}}>
+                        {type}
+                      </OptionBtn>
+                    ))}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 6 }}>Waiver wire coming soon.</div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Team Settings ── */}
+            {section === 'team' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div>
+                  <label style={labelStyle}>Team Name</label>
+                  <input
+                    value={teamName}
+                    onChange={e => setTeamName(e.target.value)}
+                    placeholder="Enter your team name..."
+                    style={inputStyle}
+                    onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.gold}
+                    onBlur={e  => (e.target as HTMLInputElement).style.borderColor = C.surf3}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Team Logo</label>
+                  <div style={{
+                    width: 80, height: 80, borderRadius: 12, background: C.surf3,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '2px dashed ' + C.muted, cursor: 'not-allowed',
+                  }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center', letterSpacing: .5 }}>Coming<br/>Soon</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Roster Settings ── */}
+            {section === 'roster' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div>
+                  <label style={labelStyle}>Starter Slots</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {[
+                      { pos: 'QB',  slots: 1 },
+                      { pos: 'RB',  slots: 2 },
+                      { pos: 'WR',  slots: 2 },
+                      { pos: 'TE',  slots: 1 },
+                      { pos: 'DEF', slots: 1 },
+                      { pos: 'K',   slots: 1 },
+                    ].map(({ pos, slots }) => (
+                      <div key={pos} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', background: C.surf2, borderRadius: 8, border: '1px solid ' + C.surf3 }}>
+                        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, letterSpacing: .5 }}>{pos}</span>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {[1, 2, 3].map(n => (
+                            <OptionBtn key={n} value={n === slots ? n : -1} current={slots} onClick={() => {}}>
+                              {n}
+                            </OptionBtn>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 8 }}>Custom roster slots coming soon.</div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Bench Spots</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[4, 5, 6, 7, 8].map(n => (
+                      <OptionBtn key={n} value={n === 7 ? n : -1} current={7} onClick={() => {}}>
+                        {n}
+                      </OptionBtn>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Draft Settings ── */}
+            {section === 'draft' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div>
+                  <label style={labelStyle}>Draft Type</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {[{ v: 'snake', l: '🐍 Snake', sub: 'Serpentine order' }, { v: 'linear', l: '→ Linear', sub: 'Same order every round' }].map(({ v, l, sub }) => (
+                      <button key={v} style={{
+                        flex: 1, padding: '12px 0', borderRadius: 8, cursor: 'pointer',
+                        background: v === 'snake' ? 'rgba(212,168,40,0.1)' : C.surf2,
+                        border: '1px solid ' + (v === 'snake' ? C.gold : C.surf3),
+                        color: v === 'snake' ? C.gold : C.sub,
+                        fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1,
+                      }}>
+                        {l}
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: v === 'snake' ? 'rgba(212,168,40,0.7)' : C.muted, marginTop: 3 }}>{sub}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Pick Timer</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[{ l: '30s', v: 30 }, { l: '60s', v: 60 }, { l: '90s', v: 90 }, { l: '2 min', v: 120 }, { l: '∞', v: 0 }].map(({ l, v }) => (
+                      <OptionBtn key={v} value={v === 60 ? v : -1} current={60} onClick={() => {}}>
+                        {l}
+                      </OptionBtn>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Draft Order</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {['Randomize', 'Manual'].map(t => (
+                      <OptionBtn key={t} value={t === 'Randomize' ? t : ''} current="Randomize" onClick={() => {}}>
+                        {t}
+                      </OptionBtn>
+                    ))}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 6 }}>Full draft settings customization coming soon.</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer save button — only for sections with saveable data */}
+          {(section === 'league' || section === 'team') && canEdit(section === 'league') && (
+            <div style={{ padding: '14px 28px', borderTop: '1px solid ' + C.surf3, flexShrink: 0 }}>
+              <button
+                onClick={save}
+                disabled={saving}
+                style={{
+                  padding: '11px 32px',
+                  background: saved ? 'rgba(46,204,113,0.15)' : 'linear-gradient(135deg,#d4a828,#f0c94a)',
+                  border: saved ? '1px solid rgba(46,204,113,0.4)' : 'none',
+                  borderRadius: 8, cursor: saving ? 'default' : 'pointer',
+                  fontFamily: 'Anton,sans-serif', fontSize: 13,
+                  letterSpacing: 2, textTransform: 'uppercase',
+                  color: saved ? C.green : C.bg,
+                  transition: 'all .2s',
+                }}
+              >
+                {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Changes'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
