@@ -71,8 +71,8 @@ export function CreateLeagueWizard() {
     });
 
     setCreatedLeague(data);
-    setStep(4);
     setLoading(false);
+    setStep(4);
   }
 
   const inviteUrl = createdLeague
