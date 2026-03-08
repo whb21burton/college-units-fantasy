@@ -99,7 +99,9 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
 
   const isCommissioner = userId === league?.commissioner_id;
   const myMember       = members.find((m: any) => m.user_id === userId);
-  const spotsLeft      = (league?.league_size || 0) - members.length;
+  const cpuTeams       = (league?.settings?.cpu_teams as string[]) ?? [];
+  const totalOccupied  = members.length + cpuTeams.length;
+  const spotsLeft      = (league?.league_size || 0) - totalOccupied;
   const isFull         = spotsLeft <= 0;
   const inviteUrl      = league ? appUrl + '/join/' + league.invite_code : '';
   const userInitial    = (userEmail || 'U').charAt(0).toUpperCase();
@@ -120,6 +122,27 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       message:   msg,
       team_name: myMember?.team_name || userEmail.split('@')[0],
     });
+  }
+
+  async function addCpu() {
+    if (!isCommissioner || isFull || !league) return;
+    const existing = (league.settings?.cpu_teams as string[]) ?? [];
+    const newName  = `CPU Bot ${existing.length + 1}`;
+    const updated  = [...existing, newName];
+    await supabase.from('leagues')
+      .update({ settings: { ...league.settings, cpu_teams: updated } })
+      .eq('id', league.id);
+    setLeague((prev: any) => ({ ...prev, settings: { ...(prev.settings ?? {}), cpu_teams: updated } }));
+  }
+
+  async function removeCpu(index: number) {
+    if (!isCommissioner || !league) return;
+    const existing = (league.settings?.cpu_teams as string[]) ?? [];
+    const updated  = existing.filter((_: string, i: number) => i !== index);
+    await supabase.from('leagues')
+      .update({ settings: { ...league.settings, cpu_teams: updated } })
+      .eq('id', league.id);
+    setLeague((prev: any) => ({ ...prev, settings: { ...(prev.settings ?? {}), cpu_teams: updated } }));
   }
 
   async function startDraft() {
@@ -243,7 +266,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
                 {(league?.status || 'FORMING').toUpperCase()}
               </span>
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isFull ? C.gold : C.sub }}>
-                {members.length}/{league?.league_size} — {isFull ? 'League full' : spotsLeft + ' spot' + (spotsLeft !== 1 ? 's' : '') + ' left'}
+                {totalOccupied}/{league?.league_size} — {isFull ? 'League full' : spotsLeft + ' spot' + (spotsLeft !== 1 ? 's' : '') + ' left'}
               </span>
             </div>
             <div style={{ display: 'flex' }}>
@@ -276,9 +299,12 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               isCommissioner={isCommissioner}
               inviteUrl={inviteUrl}
               copied={copied}
+              cpuTeams={cpuTeams}
               onCopy={copyLink}
               onStartDraft={startDraft}
               onMockDraft={() => router.push(`/league/${params.id}/mock-draft`)}
+              onAddCpu={addCpu}
+              onRemoveCpu={removeCpu}
             />
           )}
           {activeTab === 'scores' && (
@@ -359,11 +385,12 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
 }
 
 /* ── Draft Tab ──────────────────────────────────────────────── */
-function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, inviteUrl, copied, onCopy, onStartDraft, onMockDraft }: {
+function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, inviteUrl, copied, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu }: {
   league: any; members: any[]; userId: string | null;
   spotsLeft: number; isFull: boolean; isCommissioner: boolean;
-  inviteUrl: string; copied: boolean;
+  inviteUrl: string; copied: boolean; cpuTeams: string[];
   onCopy: () => void; onStartDraft: () => void; onMockDraft: () => void;
+  onAddCpu: () => void; onRemoveCpu: (i: number) => void;
 }) {
   const size = league?.league_size || 0;
 
@@ -389,7 +416,7 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
         <div>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 1.5, color: C.text, textTransform: 'uppercase' }}>Draftboard</div>
           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: isFull ? C.gold : C.sub, marginTop: 2 }}>
-            {members.length}/{size} — {isFull ? 'League full! Ready to draft.' : spotsLeft + ' spot' + (spotsLeft !== 1 ? 's' : '') + ' left'}
+            {members.length + cpuTeams.length}/{size} — {isFull ? 'League full! Ready to draft.' : spotsLeft + ' spot' + (spotsLeft !== 1 ? 's' : '') + ' left'}
           </div>
         </div>
         <button
@@ -401,16 +428,16 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
       {/* Slots */}
       <div style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 12, overflow: 'hidden', marginBottom: 20 }}>
         {Array.from({ length: size }).map((_, i) => {
-          const member  = members[i];
-          const isMe    = member?.user_id === userId;
-          const isComm  = member?.user_id === league?.commissioner_id;
-          const slotNum = i + 1;
+          const slotNum  = i + 1;
+          const member   = members[i];
+          const cpuIndex = i - members.length;
+          const isCpu    = !member && cpuIndex >= 0 && cpuIndex < cpuTeams.length;
+          const isEmpty  = !member && !isCpu;
+          const isMe     = member?.user_id === userId;
+          const isComm   = member?.user_id === league?.commissioner_id;
 
-          return member ? (
-            <div
-              key={member.id}
-              style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px', borderBottom: i < size - 1 ? '1px solid ' + C.surf3 : 'none', background: isMe ? 'rgba(212,168,40,.05)' : 'transparent' }}
-            >
+          if (member) return (
+            <div key={member.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px', borderBottom: i < size - 1 ? '1px solid ' + C.surf3 : 'none', background: isMe ? 'rgba(212,168,40,.05)' : 'transparent' }}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: isMe ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 14, color: isMe ? C.bg : C.muted }}>{slotNum}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
@@ -421,13 +448,30 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
               </div>
               <div style={{ fontFamily: 'monospace', fontSize: 10, color: C.muted, flexShrink: 0 }}>Pick #{slotNum}</div>
             </div>
-          ) : (
-            <div
-              key={'empty-' + i}
-              style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px', borderBottom: i < size - 1 ? '1px solid ' + C.surf3 : 'none', opacity: .42 }}
-            >
+          );
+
+          if (isCpu) return (
+            <div key={'cpu-' + cpuIndex} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px', borderBottom: i < size - 1 ? '1px solid ' + C.surf3 : 'none', background: 'rgba(58,130,246,.04)' }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'rgba(58,130,246,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 14, color: '#3b82f6' }}>{slotNum}</div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontWeight: 600, fontSize: 15, color: C.sub, textTransform: 'uppercase' }}>{cpuTeams[cpuIndex]}</span>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: '#3b82f6', background: 'rgba(58,130,246,.15)', padding: '2px 7px', borderRadius: 3, letterSpacing: 1, flexShrink: 0 }}>CPU</span>
+              </div>
+              {isCommissioner && league?.status === 'forming' && (
+                <button onClick={() => onRemoveCpu(cpuIndex)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 16, lineHeight: 1, padding: '2px 6px', borderRadius: 4 }} title="Remove CPU">×</button>
+              )}
+              <div style={{ fontFamily: 'monospace', fontSize: 10, color: C.muted, flexShrink: 0 }}>Pick #{slotNum}</div>
+            </div>
+          );
+
+          // Empty slot
+          return (
+            <div key={'empty-' + i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px', borderBottom: i < size - 1 ? '1px solid ' + C.surf3 : 'none' }}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', border: '2px dashed ' + C.surf3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 12 }}>{slotNum}</div>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.muted, fontStyle: 'italic' }}>Waiting for invite...</span>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.muted, fontStyle: 'italic', flex: 1 }}>Waiting for invite...</span>
+              {isCommissioner && league?.status === 'forming' && (
+                <button onClick={onAddCpu} style={{ flexShrink: 0, padding: '5px 12px', background: 'rgba(58,130,246,.1)', border: '1px solid rgba(58,130,246,.3)', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: '#3b82f6' }}>+ Add CPU</button>
+              )}
             </div>
           );
         })}
