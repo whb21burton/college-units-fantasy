@@ -153,6 +153,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       .eq('id', league.id);
     if (!error) {
       setLeague((prev: any) => ({ ...prev, status: 'drafting', draft_order: shuffled }));
+      router.push(`/league/${params.id}/mock-draft`);
     }
   }
 
