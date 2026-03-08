@@ -148,9 +148,12 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   async function startDraft() {
     if (!isCommissioner || !isFull || !league) return;
     const shuffled = [...members].sort(() => Math.random() - .5).map((m: any) => m.user_id);
-    await supabase.from('leagues')
+    const { error } = await supabase.from('leagues')
       .update({ status: 'drafting', draft_order: shuffled })
       .eq('id', league.id);
+    if (!error) {
+      setLeague((prev: any) => ({ ...prev, status: 'drafting', draft_order: shuffled }));
+    }
   }
 
   if (loading) return (
@@ -486,7 +489,7 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
           >🏈 Start Draft</button>
         ) : (
           <div style={{ padding: '13px 18px', background: 'rgba(212,168,40,.05)', border: '1px solid rgba(212,168,40,.18)', borderRadius: 10, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, textAlign: 'center' }}>
-            Waiting for <strong style={{ color: C.text }}>{spotsLeft}</strong> more manager{spotsLeft !== 1 ? 's' : ''} before you can start the draft.
+            Fill <strong style={{ color: C.text }}>{spotsLeft}</strong> more spot{spotsLeft !== 1 ? 's' : ''} (invite managers or add CPUs) to start the draft.
           </div>
         )
       )}
