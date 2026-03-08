@@ -1,0 +1,11 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/schedule/route": "app/api/schedule/route.js",
+  "/api/leagues/route": "app/api/leagues/route.js",
+  "/api/efficiency/route": "app/api/efficiency/route.js",
+  "/join/[code]/page": "app/join/[code]/page.js",
+  "/league/[id]/mock-draft/page": "app/league/[id]/mock-draft/page.js",
+  "/auth/callback/route": "app/auth/callback/route.js",
+  "/league/[id]/page": "app/league/[id]/page.js",
+  "/page": "app/page.js"
+}

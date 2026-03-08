@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { FULL_POOL, POSITION_CAPS, ROSTER_SLOTS, type DraftUnit, type UnitType } from '@/lib/playerPool';
+import type { TeamEfficiency } from '@/types';
 
 const C = {
   bg: '#05080f', surf: '#0c1220', surf2: '#131d30', surf3: '#1e2d47',
@@ -133,10 +134,22 @@ export default function MockDraftPage() {
     Array.from({ length: 12 }, emptyRoster)
   );
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [effMap, setEffMap] = useState<Record<string, TeamEfficiency>>({});
 
   useEffect(() => {
     const pool = [...FULL_POOL].sort((a, b) => a.adp - b.adp);
     setAvailable(pool);
+    // Fetch current efficiency data for badges
+    const season = new Date().getFullYear();
+    fetch(`/api/efficiency?week=1&season=${season}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!json?.data) return;
+        const map: Record<string, TeamEfficiency> = {};
+        for (const row of json.data as TeamEfficiency[]) map[row.school] = row;
+        setEffMap(map);
+      })
+      .catch(() => {});
   }, []);
 
   const currentTeam = getTeamForPick(currentPickNum, numTeams);
@@ -190,6 +203,13 @@ export default function MockDraftPage() {
     }, delay);
     return () => clearTimeout(t);
   }, [currentPickNum, isMyTurn, draftComplete, available, rosters, currentTeam, makePick]);
+
+  function effBadgeBg(mult: number) {
+    if (mult >= 1.15) return '#16a34a';
+    if (mult >= 1.10) return '#15803d';
+    if (mult >= 1.05) return '#a16207';
+    return C.muted;
+  }
 
   const filteredAvailable = available.filter(u => filter === 'ALL' || u.unitType === filter);
   const myPicks = picks.filter(p => p.teamIdx === USER_TEAM);
@@ -331,9 +351,22 @@ export default function MockDraftPage() {
                 <div style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, background: `${POS_COLORS[unit.unitType]}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, fontWeight: 700 }}>{unit.unitType}</div>
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{unit.school}{unit.playerName && <span style={{ color: C.sub, fontWeight: 400 }}> · {unit.playerName}</span>}</div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, padding: '1px 5px', background: `${POS_COLORS[unit.unitType]}18`, borderRadius: 3 }}>{unit.tier}</span>
                     <span style={{ fontSize: 9, color: C.muted }}>{unit.projectedPoints} pts</span>
+                    {effMap[unit.school] && (() => {
+                      const eff = effMap[unit.school];
+                      return (
+                        <>
+                          <span title={`OFF ${eff.off_percentile}th percentile`} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: effBadgeBg(eff.off_multiplier), color: '#fff', fontWeight: 700, letterSpacing: .5 }}>
+                            OFF {eff.off_multiplier.toFixed(2)}×
+                          </span>
+                          <span title={`DEF ${eff.def_percentile}th percentile`} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: effBadgeBg(eff.def_multiplier), color: '#fff', fontWeight: 700, letterSpacing: .5 }}>
+                            DEF {eff.def_multiplier.toFixed(2)}×
+                          </span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>ADP {unit.adp}</div>

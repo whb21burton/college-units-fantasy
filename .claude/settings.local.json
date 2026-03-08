@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"app/league/[id]/mock-draft/page.tsx\")",
+      "Bash(git push)",
+      "Bash(\"app/league/[id]/page.tsx\")",
+      "Bash(wc -l /c/Users/whb21/college-units-fantasy/app/league/[id]/mock-draft/page.tsx)"
+    ]
+  }
+}
