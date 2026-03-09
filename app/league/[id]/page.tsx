@@ -147,14 +147,8 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
 
   async function startDraft() {
     if (!isCommissioner || !isFull || !league) return;
-    const shuffled = [...members].sort(() => Math.random() - .5).map((m: any) => m.user_id);
-    const { error } = await supabase.from('leagues')
-      .update({ status: 'drafting', draft_order: shuffled })
-      .eq('id', league.id);
-    if (!error) {
-      setLeague((prev: any) => ({ ...prev, status: 'drafting', draft_order: shuffled }));
-      router.push(`/league/${params.id}/mock-draft`);
-    }
+    // Navigate to real draft room — the draft page handles slot assignment and status change
+    router.push(`/league/${params.id}/draft`);
   }
 
   if (loading) return (
@@ -481,18 +475,26 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
         })}
       </div>
 
-      {/* Commissioner controls */}
+      {/* Commissioner controls — forming */}
       {isCommissioner && league?.status === 'forming' && (
         isFull ? (
           <button
             onClick={onStartDraft}
             style={{ width: '100%', padding: 17, background: 'linear-gradient(135deg,#d4a828,#f0c94a)', border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 3, textTransform: 'uppercase', color: C.bg }}
-          >🏈 Start Draft</button>
+          >🏈 Enter Draft Room</button>
         ) : (
           <div style={{ padding: '13px 18px', background: 'rgba(212,168,40,.05)', border: '1px solid rgba(212,168,40,.18)', borderRadius: 10, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, textAlign: 'center' }}>
             Fill <strong style={{ color: C.text }}>{spotsLeft}</strong> more spot{spotsLeft !== 1 ? 's' : ''} (invite managers or add CPUs) to start the draft.
           </div>
         )
+      )}
+
+      {/* All members — join live draft when it's active */}
+      {league?.status === 'drafting' && (
+        <button
+          onClick={onStartDraft}
+          style={{ width: '100%', padding: 17, background: 'linear-gradient(135deg,#d4a828,#f0c94a)', border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 3, textTransform: 'uppercase', color: C.bg }}
+        >🏈 Join Draft Room</button>
       )}
     </div>
   );
