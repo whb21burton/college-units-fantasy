@@ -300,32 +300,42 @@ export default function DraftPage() {
   // ── pre-draft waiting room ────────────────────────────────────────────────
 
   if (!draftLive) {
+    const totalPicks2 = members.length * TOTAL_ROUNDS;
     return (
       <div style={{ background: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Oswald', sans-serif", color: C.text }}>
         <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
         <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 40, width: 440, maxWidth: '90vw' }}>
-          <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 22, letterSpacing: 2, color: C.gold, marginBottom: 4 }}>DRAFT ROOM</div>
-          <div style={{ fontSize: 12, color: C.muted, letterSpacing: 1, marginBottom: 28 }}>{league?.name}</div>
+          <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 22, letterSpacing: 2, color: C.gold, marginBottom: 6 }}>DRAFT ROOM</div>
+          <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1, marginBottom: 32 }}>{league?.name} · {members.length} teams · {totalPicks2} total picks</div>
 
-          {/* Member list */}
-          <div style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {members.map((m, i) => (
-              <div key={m.id} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '7px 12px', borderRadius: 6,
-                background: m.user_id === userId ? `${C.gold}18` : C.surf2,
-                border: `1px solid ${m.user_id === userId ? C.gold + '44' : C.surf3}`,
-              }}>
-                <div style={{ width: 20, height: 20, borderRadius: 4, background: C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: C.muted, fontWeight: 700 }}>
-                  {m.draft_slot ?? i + 1}
-                </div>
-                <div style={{ flex: 1, fontSize: 12, color: m.user_id === userId ? C.gold : C.sub }}>{m.team_name}</div>
-                {m.user_id === userId && <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1 }}>YOU</div>}
-                {m.user_id === league?.commissioner_id && m.user_id !== userId && (
-                  <div style={{ fontSize: 9, color: C.muted, letterSpacing: 1 }}>COMM</div>
-                )}
-              </div>
-            ))}
+          {/* Draft Order section */}
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 11, color: C.sub, letterSpacing: 2, marginBottom: 10, textTransform: 'uppercase' }}>Draft Order</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 280, overflowY: 'auto' }}>
+              {members.map((m, i) => {
+                const isMe   = m.user_id === userId;
+                const isComm = m.user_id === league?.commissioner_id;
+                const slot   = m.draft_slot ?? i + 1;
+                return (
+                  <div key={m.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '6px 10px', borderRadius: 6,
+                    background: isMe ? `${C.gold}18` : C.surf2,
+                    border: `1px solid ${isMe ? C.gold + '44' : C.surf3}`,
+                  }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 4, flexShrink: 0, background: isMe ? C.gold : C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: isMe ? C.bg : C.muted, fontWeight: 700 }}>
+                      {slot}
+                    </div>
+                    <div style={{ flex: 1, fontSize: 12, color: isMe ? C.gold : C.sub }}>{m.team_name}</div>
+                    {isMe   && <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1, flexShrink: 0 }}>YOU</div>}
+                    {isComm && !isMe && <div style={{ fontSize: 9, color: C.muted, letterSpacing: 1, flexShrink: 0 }}>COMM</div>}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 8, fontSize: 10, color: C.muted, letterSpacing: .5 }}>
+              🐍 Snake draft · {TOTAL_ROUNDS} rounds · slots randomized on start
+            </div>
           </div>
 
           {isCommissioner ? (
