@@ -41,7 +41,7 @@ function getTeamForPick(pickNum: number, numTeams: number): number {
 }
 
 function aiPickUnit(available: DraftUnit[], roster: RosterCount): DraftUnit | null {
-  const sorted = [...available].sort((a, b) => a.adp - b.adp);
+  const sorted = [...available].sort((a, b) => b.projectedPoints - a.projectedPoints);
   const topN = sorted.slice(0, Math.min(5, sorted.length));
   const rand = Math.random();
   const candidates = rand < 0.65 ? [topN[0]] : rand < 0.85 ? topN.slice(0, 2) : topN.slice(0, 3);
@@ -137,7 +137,7 @@ export default function MockDraftPage() {
   const [effMap, setEffMap] = useState<Record<string, TeamEfficiency>>({});
 
   useEffect(() => {
-    const pool = [...FULL_POOL].sort((a, b) => a.adp - b.adp);
+    const pool = [...FULL_POOL].sort((a, b) => b.projectedPoints - a.projectedPoints);
     setAvailable(pool);
     // Fetch current efficiency data for badges
     const season = new Date().getFullYear();
@@ -223,7 +223,7 @@ export default function MockDraftPage() {
     setTimer(PICK_TIME);
     setDraftComplete(false);
     setRosters(Array.from({ length: 12 }, emptyRoster));
-    const pool = [...FULL_POOL].sort((a, b) => a.adp - b.adp);
+    const pool = [...FULL_POOL].sort((a, b) => b.projectedPoints - a.projectedPoints);
     setAvailable(pool);
     setSetupDone(false);
   };
@@ -369,7 +369,7 @@ export default function MockDraftPage() {
                     })()}
                   </div>
                 </div>
-                <div style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>ADP {unit.adp}</div>
+                <div style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>{unit.projectedPoints} pts</div>
               </div>
             );
           })}

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import { FULL_POOL, POSITION_CAPS, ROSTER_SLOTS, type DraftUnit, type UnitType } from '@/lib/playerPool';
+import type { TeamEfficiency } from '@/types';
 
 const C = {
   bg: '#05080f', surf: '#0c1220', surf2: '#131d30', surf3: '#1e2d47',
@@ -50,7 +51,8 @@ export default function DraftPage() {
   const [loading, setLoading] = useState(true);
 
   const timerRef       = useRef<ReturnType<typeof setInterval> | null>(null);
-  const autoAttempted  = useRef<Set<number>>(new Set()); // pick_numbers where auto-pick was attempted
+  const autoAttempted  = useRef<Set<number>>(new Set());
+  const [effMap, setEffMap] = useState<Record<string, TeamEfficiency>>({});
 
   // ── derived values ────────────────────────────────────────────────────────
 
@@ -102,7 +104,20 @@ export default function DraftPage() {
       setPicks(existingPicks);
 
       const takenIds = new Set(existingPicks.map((p: any) => p.player_id));
-      setAvail([...FULL_POOL].sort((a, b) => a.adp - b.adp).filter(u => !takenIds.has(u.id)));
+      setAvail([...FULL_POOL].sort((a, b) => b.projectedPoints - a.projectedPoints).filter(u => !takenIds.has(u.id)));
+
+      // Fetch efficiency badges
+      const season = new Date().getFullYear();
+      fetch(`/api/efficiency?week=1&season=${season}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(json => {
+          if (!json?.data) return;
+          const map: Record<string, TeamEfficiency> = {};
+          for (const row of json.data as TeamEfficiency[]) map[row.school] = row;
+          setEffMap(map);
+        })
+        .catch(() => {});
+
       setLoading(false);
     }
 
@@ -228,7 +243,7 @@ export default function DraftPage() {
         setPicks(prev => prev.filter(p => p.pick_number !== pickNum));
         setAvail(prev => {
           const already = prev.some(u => u.id === unit.id);
-          return already ? prev : [unit, ...prev].sort((a, b) => a.adp - b.adp);
+          return already ? prev : [unit, ...prev].sort((a, b) => b.projectedPoints - a.projectedPoints);
         });
       } else {
         console.error('Pick insert error:', error);
@@ -261,6 +276,13 @@ export default function DraftPage() {
       .update({ status: 'drafting' })
       .eq('id', leagueId);
     if (!error) setLeague((prev: any) => ({ ...prev, status: 'drafting' }));
+  }
+
+  function effBadgeBg(mult: number) {
+    if (mult >= 1.15) return '#16a34a';
+    if (mult >= 1.10) return '#15803d';
+    if (mult >= 1.05) return '#a16207';
+    return C.muted;
   }
 
   const filtered = avail.filter(u => filter === 'ALL' || u.unitType === filter);
@@ -482,7 +504,7 @@ export default function DraftPage() {
         {/* Position filters */}
         <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.surf3}`, flexShrink: 0 }}>
           <div style={{ fontSize: 12, color: C.text, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>
-            AVAILABLE ({avail.length})
+            AVAILABLE PLAYERS
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {(['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'] as const).map(pos => (
@@ -535,14 +557,27 @@ export default function DraftPage() {
                     {unit.school}
                     {unit.playerName && <span style={{ color: C.sub, fontWeight: 400 }}> · {unit.playerName}</span>}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, padding: '1px 5px', background: `${POS_COLORS[unit.unitType]}18`, borderRadius: 3 }}>
                       {unit.tier}
                     </span>
                     <span style={{ fontSize: 9, color: C.muted }}>{unit.projectedPoints} pts</span>
+                    {effMap[unit.school] && (() => {
+                      const eff = effMap[unit.school];
+                      return (
+                        <>
+                          <span title={`OFF ${eff.off_percentile}th percentile`} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: effBadgeBg(eff.off_multiplier), color: '#fff', fontWeight: 700, letterSpacing: .5 }}>
+                            OFF {eff.off_multiplier.toFixed(2)}×
+                          </span>
+                          <span title={`DEF ${eff.def_percentile}th percentile`} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: effBadgeBg(eff.def_multiplier), color: '#fff', fontWeight: 700, letterSpacing: .5 }}>
+                            DEF {eff.def_multiplier.toFixed(2)}×
+                          </span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
-                <div style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>ADP {unit.adp}</div>
+                <div style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>{unit.projectedPoints} pts</div>
               </div>
             );
           })}
