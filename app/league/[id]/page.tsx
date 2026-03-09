@@ -12,6 +12,11 @@ const C = {
   green: '#2ecc71', red: '#e74c3c',
 };
 
+const SEASON_GAMES = 12;
+function weeklyProj(seasonPts: number): number {
+  return seasonPts / SEASON_GAMES;
+}
+
 type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'scores';
 
 const TABS: { key: Tab; label: string }[] = [
@@ -825,7 +830,7 @@ function MatchupPlayerCell({ pick, align }: { pick: any | null; align: 'left' | 
       <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
     </div>
   );
-  const pts  = (pick.player_data?.projectedPoints ?? 0).toFixed(1);
+  const pts  = weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1);
   const name = pick.player_data?.playerName || pick.player_data?.school;
   const sub  = pick.player_data?.playerName ? pick.player_data.school : pick.player_data?.conference;
   const tier = pick.player_data?.tier;
@@ -889,8 +894,8 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   const oppRoster = assignRoster(oppPicksRaw);
 
   // Total = starters only
-  const myTotal  = myRoster.starters.reduce((s, p) => s + (p?.player_data?.projectedPoints ?? 0), 0);
-  const oppTotal = oppRoster.starters.reduce((s, p) => s + (p?.player_data?.projectedPoints ?? 0), 0);
+  const myTotal  = myRoster.starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
+  const oppTotal = oppRoster.starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
@@ -1085,7 +1090,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
     bench    = r.bench;
   }
 
-  const starterTotal = starters.reduce((s, p) => s + (p?.player_data?.projectedPoints ?? 0), 0);
+  const starterTotal = starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
 
   async function doSwap(starterIdx: number) {
     if (!selectedBench) return;
@@ -1187,7 +1192,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         const pick    = starters[i];
         const color   = POS_COLORS[label] || C.muted;
         const isTarget = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
-        const pts     = (pick?.player_data?.projectedPoints ?? 0).toFixed(1);
+        const pts     = weeklyProj(pick?.player_data?.projectedPoints ?? 0).toFixed(1);
         const name    = pick?.player_data?.playerName || pick?.player_data?.school;
         const sub     = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;
         const tier    = pick?.player_data?.tier;
@@ -1254,7 +1259,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
 
           {bench.map((pick: any) => {
             const isSelected = selectedBench?.id === pick.id;
-            const pts  = (pick.player_data?.projectedPoints ?? 0).toFixed(1);
+            const pts  = weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1);
             const name = pick.player_data?.playerName || pick.player_data?.school;
             const sub  = pick.player_data?.playerName ? pick.player_data.school : pick.player_data?.conference;
             const tier = pick.player_data?.tier;
@@ -1315,7 +1320,7 @@ function PickCheckbox({ pick, checked, onToggle, accent }: { pick: any; checked:
       <div style={{ width: 4, height: 4, borderRadius: '50%', background: col, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pick.player_data?.playerName || pick.player_data?.school}</div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {(pick.player_data?.projectedPoints ?? 0).toFixed(1)} pts</div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1)} pts</div>
       </div>
     </div>
   );
@@ -1461,8 +1466,8 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
           Complete the draft first to see matchups.
         </div>
       ) : matchups.map(([teamA, teamB], i) => {
-        const totA = assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + (p?.player_data?.projectedPoints ?? 0), 0);
-        const totB = assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + (p?.player_data?.projectedPoints ?? 0), 0);
+        const totA = assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
+        const totB = assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
         const isMeA = teamA.userId === userId;
         const isMeB = teamB.userId === userId;
         return (
@@ -1551,7 +1556,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   if (view === 'roster' && selectedTeam) {
     const teamPicks  = getTeamPicks(selectedTeam);
     const roster     = assignRoster(teamPicks);
-    const starterPts = roster.starters.reduce((s, p) => s + (p?.player_data?.projectedPoints ?? 0), 0);
+    const starterPts = roster.starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
     const isMyTeam   = selectedTeam.userId === userId;
     const canTrade   = !isMyTeam && selectedTeam.type === 'human';
 
@@ -1592,7 +1597,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
             <div style={{ display: 'flex', gap: 20 }}>
               <div>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>Projected</div>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 24, color: C.gold }}>{(selectedPlayer.player_data?.projectedPoints ?? 0).toFixed(1)}</div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 24, color: C.gold }}>{weeklyProj(selectedPlayer.player_data?.projectedPoints ?? 0).toFixed(1)}</div>
               </div>
               {selectedPlayer.player_data?.adp != null && (
                 <div>
@@ -1626,7 +1631,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                   </>
                 ) : <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>}
               </div>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: pick ? C.gold : C.surf3, flexShrink: 0 }}>{pick ? (pick.player_data?.projectedPoints ?? 0).toFixed(1) : '—'}</div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: pick ? C.gold : C.surf3, flexShrink: 0 }}>{pick ? weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1) : '—'}</div>
             </div>
           );
         })}
@@ -1652,7 +1657,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pick.player_data?.playerName || pick.player_data?.school}</div>
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{pick.player_data?.school}</div>
                   </div>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{(pick.player_data?.projectedPoints ?? 0).toFixed(1)}</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1)}</div>
                 </div>
               );
             })}
