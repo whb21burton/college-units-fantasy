@@ -755,12 +755,98 @@ function ScoresTab({
 }
 
 /* ── Matchup Tab ─────────────────────────────────────────────── */
-const MATCH_POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
+const STARTER_SLOT_LABELS = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'DEF', 'K'];
+const POS_COLORS: Record<string, string> = {
+  QB: '#ef4444', RB: '#3b82f6', WR: '#d4a828', TE: '#a855f7',
+  DEF: '#10b981', K: '#f97316', FLEX: '#06b6d4',
+};
 
 function snakeIdx(pickNum: number, numTeams: number): number {
   const round = Math.floor((pickNum - 1) / numTeams);
   const pos   = (pickNum - 1) % numTeams;
   return round % 2 === 0 ? pos : numTeams - 1 - pos;
+}
+
+function assignRoster(picks: any[]): { starters: (any | null)[]; bench: any[] } {
+  const byPos: Record<string, any[]> = { QB: [], RB: [], WR: [], TE: [], DEF: [], K: [] };
+  for (const p of picks) {
+    const pos = p.player_data?.unitType as string;
+    if (pos && byPos[pos]) byPos[pos].push(p);
+  }
+  for (const pos of Object.keys(byPos)) {
+    byPos[pos].sort((a, b) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0));
+  }
+  const starters: (any | null)[] = [];
+  const usedIds = new Set<string>();
+  function take(arr: any[]) {
+    const p = arr.find(x => !usedIds.has(x.id)) ?? null;
+    if (p) usedIds.add(p.id);
+    return p;
+  }
+  starters.push(take(byPos.QB));  // QB1
+  starters.push(take(byPos.RB));  // RB1
+  starters.push(take(byPos.RB));  // RB2
+  starters.push(take(byPos.WR));  // WR1
+  starters.push(take(byPos.WR));  // WR2
+  starters.push(take(byPos.TE));  // TE1
+  // FLEX: best unused RB/WR/TE
+  const flexPool = [...byPos.RB, ...byPos.WR, ...byPos.TE]
+    .filter(p => !usedIds.has(p.id))
+    .sort((a, b) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0));
+  const flex = flexPool[0] ?? null;
+  if (flex) usedIds.add(flex.id);
+  starters.push(flex);            // FLEX
+  starters.push(take(byPos.DEF)); // DEF
+  starters.push(take(byPos.K));   // K
+  const bench = picks
+    .filter(p => !usedIds.has(p.id))
+    .sort((a, b) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0));
+  return { starters, bench };
+}
+
+function MatchupPlayerCell({ pick, align }: { pick: any | null; align: 'left' | 'right' }) {
+  const isRight = align === 'right';
+  if (!pick) return (
+    <div style={{
+      display: 'flex', alignItems: 'center', minHeight: 44,
+      justifyContent: isRight ? 'flex-end' : 'flex-start',
+      padding: '9px 14px', background: C.surf,
+      borderRadius: isRight ? '8px 0 0 8px' : '0 8px 8px 0',
+      border: '1px solid ' + C.surf3,
+      borderRight: isRight ? 'none' : undefined,
+      borderLeft: isRight ? undefined : 'none',
+    }}>
+      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
+    </div>
+  );
+  const pts  = (pick.player_data?.projectedPoints ?? 0).toFixed(1);
+  const name = pick.player_data?.playerName || pick.player_data?.school;
+  const sub  = pick.player_data?.playerName ? pick.player_data.school : pick.player_data?.conference;
+  const tier = pick.player_data?.tier;
+  const info = (
+    <div style={{ minWidth: 0, textAlign: isRight ? 'right' : 'left' }}>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{sub}{tier ? ' · ' + tier : ''}</div>
+    </div>
+  );
+  const score = (
+    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: isRight ? C.gold : C.sub, flexShrink: 0, minWidth: 46, textAlign: isRight ? 'right' : 'left' }}>
+      {pts}
+    </div>
+  );
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      justifyContent: isRight ? 'flex-end' : 'flex-start',
+      gap: 12, padding: '9px 14px', background: C.surf2,
+      borderRadius: isRight ? '8px 0 0 8px' : '0 8px 8px 0',
+      border: '1px solid ' + C.surf3,
+      borderRight: isRight ? 'none' : undefined,
+      borderLeft: isRight ? undefined : 'none',
+    }}>
+      {isRight ? <>{info}{score}</> : <>{score}{info}</>}
+    </div>
+  );
 }
 
 function MatchupTab({ league, userId }: { league: any; userId: string | null }) {
@@ -784,33 +870,21 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   const draftOrder: any[] = league?.settings?.draft_order || [];
   const numTeams = draftOrder.length;
 
-  // Find my slot (0-indexed based on slot property)
   const myEntry    = draftOrder.find((t: any) => t.userId === userId);
   const mySlotIdx  = myEntry ? myEntry.slot - 1 : -1;
-
-  // Week 1 pairing: 0↔1, 2↔3, 4↔5 …
   const oppSlotIdx = mySlotIdx < 0 ? -1
     : mySlotIdx % 2 === 0 ? mySlotIdx + 1 : mySlotIdx - 1;
-  const oppEntry   = oppSlotIdx >= 0 && oppSlotIdx < numTeams
-    ? draftOrder[oppSlotIdx] : null;
+  const oppEntry   = oppSlotIdx >= 0 && oppSlotIdx < numTeams ? draftOrder[oppSlotIdx] : null;
 
-  // Assign picks to slots via snake index
-  const myPicks  = picks.filter(p => numTeams > 0 && snakeIdx(p.pick_number, numTeams) === mySlotIdx);
-  const oppPicks = picks.filter(p => numTeams > 0 && snakeIdx(p.pick_number, numTeams) === oppSlotIdx);
+  const myPicksRaw  = picks.filter(p => numTeams > 0 && snakeIdx(p.pick_number, numTeams) === mySlotIdx);
+  const oppPicksRaw = picks.filter(p => numTeams > 0 && snakeIdx(p.pick_number, numTeams) === oppSlotIdx);
 
-  function groupByPos(ps: any[]): Record<string, any[]> {
-    const g: Record<string, any[]> = { QB: [], RB: [], WR: [], TE: [], DEF: [], K: [] };
-    for (const p of ps) {
-      const pos = p.player_data?.unitType as string;
-      if (pos && g[pos]) g[pos].push(p);
-    }
-    return g;
-  }
+  const myRoster  = assignRoster(myPicksRaw);
+  const oppRoster = assignRoster(oppPicksRaw);
 
-  const myGroups  = groupByPos(myPicks);
-  const oppGroups = groupByPos(oppPicks);
-  const myTotal   = myPicks.reduce((s, p) => s + (p.player_data?.projectedPoints ?? 0), 0);
-  const oppTotal  = oppPicks.reduce((s, p) => s + (p.player_data?.projectedPoints ?? 0), 0);
+  // Total = starters only
+  const myTotal  = myRoster.starters.reduce((s, p) => s + (p?.player_data?.projectedPoints ?? 0), 0);
+  const oppTotal = oppRoster.starters.reduce((s, p) => s + (p?.player_data?.projectedPoints ?? 0), 0);
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
@@ -827,9 +901,10 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   const myTeamName  = myEntry.teamName;
   const oppTeamName = oppEntry?.teamName ?? 'BYE';
   const iAhead      = myTotal >= oppTotal;
+  const benchLen    = Math.max(myRoster.bench.length, oppRoster.bench.length);
 
   return (
-    <div style={{ maxWidth: 800 }}>
+    <div style={{ maxWidth: 820 }}>
 
       {/* Week label */}
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.muted, textTransform: 'uppercase', marginBottom: 16, textAlign: 'center' }}>
@@ -839,123 +914,63 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
       {/* Score header card */}
       <div style={{
         background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 14,
-        padding: '22px 28px', marginBottom: 28,
+        padding: '22px 28px', marginBottom: 24,
         display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 16, alignItems: 'center',
       }}>
-        {/* My team */}
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, letterSpacing: 1, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>
-            {myTotal.toFixed(1)}
-          </div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text, fontWeight: 600, marginTop: 6, letterSpacing: .5 }}>{myTeamName}</div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 2 }}>YOUR TEAM</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, letterSpacing: 1, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>{myTotal.toFixed(1)}</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text, fontWeight: 600, marginTop: 6 }}>{myTeamName}</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 2 }}>YOUR TEAM · STARTERS</div>
         </div>
-
-        {/* VS */}
-        <div style={{ textAlign: 'center', padding: '0 8px' }}>
+        <div style={{ textAlign: 'center' }}>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 3, color: C.muted }}>VS</div>
         </div>
-
-        {/* Opponent */}
         <div style={{ textAlign: 'left' }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, letterSpacing: 1, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>
-            {oppTotal.toFixed(1)}
-          </div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text, fontWeight: 600, marginTop: 6, letterSpacing: .5 }}>{oppTeamName}</div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 2 }}>OPPONENT</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, letterSpacing: 1, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>{oppTotal.toFixed(1)}</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text, fontWeight: 600, marginTop: 6 }}>{oppTeamName}</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 2 }}>OPPONENT · STARTERS</div>
         </div>
       </div>
 
-      {/* Player comparison by position */}
-      {MATCH_POS_ORDER.map(pos => {
-        const myG  = myGroups[pos]  || [];
-        const oppG = oppGroups[pos] || [];
-        const maxN = Math.max(myG.length, oppG.length);
-        if (maxN === 0) return null;
+      {/* Starters section */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Starters</span>
+        <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+      </div>
 
-        const posColors: Record<string, string> = {
-          QB: '#ef4444', RB: '#3b82f6', WR: C.gold, TE: '#a855f7', DEF: '#10b981', K: '#f97316',
-        };
-        const posColor = posColors[pos] || C.muted;
-
+      {STARTER_SLOT_LABELS.map((label, i) => {
+        const color = POS_COLORS[label] || C.muted;
         return (
-          <div key={pos} style={{ marginBottom: 20 }}>
-            {/* Position divider */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <div style={{ flex: 1, height: 1, background: C.surf3 }} />
-              <span style={{
-                fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2,
-                color: posColor, textTransform: 'uppercase',
-                background: C.surf, padding: '2px 10px', borderRadius: 20,
-                border: '1px solid ' + C.surf3,
-              }}>{pos}</span>
-              <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
+            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: color + '22', border: '1px solid ' + color + '44', borderLeft: 'none', borderRight: 'none' }}>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color, fontWeight: 700 }}>{label}</span>
             </div>
-
-            {Array.from({ length: maxN }).map((_, i) => {
-              const myP  = myG[i];
-              const oppP = oppG[i];
-              return (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr', marginBottom: 4 }}>
-
-                  {/* My player (right-aligned) */}
-                  {myP ? (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                      gap: 12, padding: '9px 14px',
-                      background: C.surf2, borderRadius: '8px 0 0 8px',
-                      border: '1px solid ' + C.surf3, borderRight: 'none',
-                    }}>
-                      <div style={{ textAlign: 'right', minWidth: 0 }}>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                          {myP.player_data?.playerName || myP.player_data?.school}
-                        </div>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
-                          {myP.player_data?.playerName ? myP.player_data.school : myP.player_data?.conference}
-                          {myP.player_data?.tier ? ' · ' + myP.player_data.tier : ''}
-                        </div>
-                      </div>
-                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold, flexShrink: 0, minWidth: 46, textAlign: 'right' }}>
-                        {(myP.player_data?.projectedPoints ?? 0).toFixed(1)}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ background: C.surf, borderRadius: '8px 0 0 8px', border: '1px solid ' + C.surf3, borderRight: 'none' }} />
-                  )}
-
-                  {/* Divider */}
-                  <div style={{ background: C.surf3 }} />
-
-                  {/* Opp player (left-aligned) */}
-                  {oppP ? (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
-                      gap: 12, padding: '9px 14px',
-                      background: C.surf2, borderRadius: '0 8px 8px 0',
-                      border: '1px solid ' + C.surf3, borderLeft: 'none',
-                    }}>
-                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.sub, flexShrink: 0, minWidth: 46 }}>
-                        {(oppP.player_data?.projectedPoints ?? 0).toFixed(1)}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                          {oppP.player_data?.playerName || oppP.player_data?.school}
-                        </div>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
-                          {oppP.player_data?.playerName ? oppP.player_data.school : oppP.player_data?.conference}
-                          {oppP.player_data?.tier ? ' · ' + oppP.player_data.tier : ''}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ background: C.surf, borderRadius: '0 8px 8px 0', border: '1px solid ' + C.surf3, borderLeft: 'none' }} />
-                  )}
-                </div>
-              );
-            })}
+            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" />
           </div>
         );
       })}
+
+      {/* Bench section */}
+      {benchLen > 0 && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20, marginBottom: 8 }}>
+            <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Bench</span>
+            <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+          </div>
+          {Array.from({ length: benchLen }).map((_, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
+              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.muted + '22', border: '1px solid ' + C.muted + '44', borderLeft: 'none', borderRight: 'none' }}>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, fontWeight: 700 }}>BN</span>
+              </div>
+              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" />
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
