@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { TeamEfficiency, SchoolMatchup, WeeklyScore } from '@/types';
 
-type SettingsSection = 'league' | 'team' | 'roster' | 'draft';
+type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
 const C = {
   bg: '#05080f', surf: '#0c1220', surf2: '#131d30', surf3: '#1e2d47',
@@ -189,7 +189,14 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
 
         {/* My Leagues */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          <div style={{ padding: '12px 16px 6px', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>My Leagues</div>
+          <div style={{ padding: '12px 16px 6px', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            My Leagues
+            <button
+              onClick={() => router.push('/')}
+              title="Create new league"
+              style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 2px', marginRight: 2 }}
+            >+</button>
+          </div>
           {myLeagues.map((lg: any) => {
             const active = lg.id === params.id;
             return (
@@ -736,15 +743,19 @@ const SETTINGS_NAV: { key: SettingsSection; label: string; commOnly: boolean }[]
   { key: 'team',   label: 'Team Settings',   commOnly: false },
   { key: 'roster', label: 'Roster Settings', commOnly: true  },
   { key: 'draft',  label: 'Draft Settings',  commOnly: true  },
+  { key: 'danger', label: 'Delete League',   commOnly: true  },
 ];
 
 function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose, onUpdate }: {
   league: any; myMember: any; isCommissioner: boolean;
   userId: string | null; onClose: () => void; onUpdate: () => void;
 }) {
-  const [section, setSection] = useState<SettingsSection>(isCommissioner ? 'league' : 'team');
-  const [saving,  setSaving]  = useState(false);
-  const [saved,   setSaved]   = useState(false);
+  const router = useRouter();
+  const [section,       setSection]       = useState<SettingsSection>(isCommissioner ? 'league' : 'team');
+  const [saving,        setSaving]        = useState(false);
+  const [saved,         setSaved]         = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleting,      setDeleting]      = useState(false);
 
   // League Settings fields
   const [leagueName, setLeagueName] = useState<string>(league?.name || '');
@@ -754,6 +765,13 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
   const [teamName, setTeamName] = useState<string>(myMember?.team_name || '');
 
   const canEdit = (commOnly: boolean) => commOnly ? isCommissioner : true;
+
+  async function deleteLeague() {
+    if (deleteConfirm !== league?.name) return;
+    setDeleting(true);
+    await supabase.from('leagues').delete().eq('id', league.id);
+    router.push('/');
+  }
 
   async function save() {
     setSaving(true);
@@ -840,15 +858,16 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
                   key={item.key}
                   onClick={() => !locked && setSection(item.key)}
                   style={{
-                    width: '100%', textAlign: 'left', background: active ? 'rgba(212,168,40,0.08)' : 'none',
-                    border: 'none', borderLeft: active ? '3px solid ' + C.gold : '3px solid transparent',
+                    width: '100%', textAlign: 'left',
+                    background: active ? (item.key === 'danger' ? 'rgba(231,76,60,0.08)' : 'rgba(212,168,40,0.08)') : 'none',
+                    border: 'none', borderLeft: active ? ('3px solid ' + (item.key === 'danger' ? C.red : C.gold)) : '3px solid transparent',
                     padding: '11px 18px', cursor: locked ? 'default' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   }}
                 >
                   <span style={{
                     fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: .5,
-                    color: locked ? C.surf3 : (active ? C.gold : C.sub),
+                    color: locked ? C.surf3 : (item.key === 'danger' ? (active ? C.red : 'rgba(231,76,60,0.7)') : (active ? C.gold : C.sub)),
                   }}>{item.label}</span>
                   {locked && <span style={{ fontSize: 10, color: C.surf3 }}>🔒</span>}
                 </button>
@@ -878,6 +897,7 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
               {section === 'team'   && 'Your team profile — visible to all league members'}
               {section === 'roster' && 'Roster configuration — commissioner only'}
               {section === 'draft'  && 'Draft configuration — commissioner only'}
+              {section === 'danger' && 'Danger zone — this action cannot be undone'}
             </div>
           </div>
 
@@ -990,6 +1010,41 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
                     ))}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* ── Danger Zone ── */}
+            {section === 'danger' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div style={{ background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.3)', borderRadius: 10, padding: '16px 20px' }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.red, letterSpacing: 1, marginBottom: 8 }}>DELETE THIS LEAGUE</div>
+                  <div style={{ fontFamily: 'Inter,sans-serif', fontSize: 13, color: C.sub, lineHeight: 1.6 }}>
+                    This will permanently delete <strong style={{ color: C.text }}>{league?.name}</strong>, all members, picks, and scores. This cannot be undone.
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Type the league name to confirm</label>
+                  <input
+                    value={deleteConfirm}
+                    onChange={e => setDeleteConfirm(e.target.value)}
+                    placeholder={league?.name}
+                    style={{ ...inputStyle }}
+                  />
+                </div>
+                <button
+                  onClick={deleteLeague}
+                  disabled={deleteConfirm !== league?.name || deleting}
+                  style={{
+                    padding: '12px 24px', borderRadius: 8, cursor: deleteConfirm === league?.name ? 'pointer' : 'not-allowed',
+                    background: deleteConfirm === league?.name ? C.red : 'rgba(231,76,60,0.15)',
+                    border: '1px solid ' + (deleteConfirm === league?.name ? C.red : 'rgba(231,76,60,0.3)'),
+                    color: deleteConfirm === league?.name ? '#fff' : 'rgba(231,76,60,0.5)',
+                    fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, textTransform: 'uppercase',
+                    transition: 'all .2s',
+                  }}
+                >
+                  {deleting ? 'Deleting…' : 'Delete League Forever'}
+                </button>
               </div>
             )}
 
