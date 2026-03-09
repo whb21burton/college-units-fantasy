@@ -329,13 +329,16 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           {activeTab === 'matchup' && (
             <MatchupTab league={league} userId={userId} />
           )}
+          {activeTab === 'team' && (
+            <TeamTab league={league} userId={userId} />
+          )}
           {activeTab === 'scores' && (
             <ScoresTab leagueId={params.id} members={members} league={league} userId={userId} />
           )}
-          {activeTab !== 'draft' && activeTab !== 'matchup' && activeTab !== 'scores' && (
+          {activeTab !== 'draft' && activeTab !== 'matchup' && activeTab !== 'team' && activeTab !== 'scores' && (
             <PlaceholderTab
               label={computedTabs.find(t => t.key === activeTab)?.label || ''}
-              icon={activeTab === 'team' ? '🏆' : activeTab === 'league' ? '⚙️' : '🏈'}
+              icon={activeTab === 'league' ? '⚙️' : '🏈'}
             />
           )}
         </div>
@@ -762,8 +765,8 @@ const POS_COLORS: Record<string, string> = {
 };
 
 function snakeIdx(pickNum: number, numTeams: number): number {
-  const round = Math.floor((pickNum - 1) / numTeams);
-  const pos   = (pickNum - 1) % numTeams;
+  const round = Math.floor(pickNum / numTeams);
+  const pos   = pickNum % numTeams;
   return round % 2 === 0 ? pos : numTeams - 1 - pos;
 }
 
@@ -969,6 +972,330 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
               <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" />
             </div>
           ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Team Tab ────────────────────────────────────────────────── */
+const SLOT_ELIGIBLE: Record<string, string[]> = {
+  QB: ['QB'], RB: ['RB'], WR: ['WR'], TE: ['TE'],
+  FLEX: ['RB', 'WR', 'TE'], DEF: ['DEF'], K: ['K'],
+};
+
+function canFillSlot(unitType: string, slotLabel: string): boolean {
+  return (SLOT_ELIGIBLE[slotLabel] ?? []).includes(unitType);
+}
+
+function TeamTab({ league, userId }: { league: any; userId: string | null }) {
+  const [myPicks,       setMyPicks]       = useState<any[]>([]);
+  const [lineups,       setLineups]       = useState<Record<string, (string | null)[]>>({});
+  const [week,          setWeek]          = useState(1);
+  const [loading,       setLoading]       = useState(true);
+  const [saving,        setSaving]        = useState(false);
+  const [memberId,      setMemberId]      = useState<string | null>(null);
+  const [memberSlot,    setMemberSlot]    = useState<number | null>(null);
+  const [memberName,    setMemberName]    = useState<string>('');
+  const [selectedBench, setSelectedBench] = useState<any | null>(null);
+
+  const TOTAL_WEEKS = 13;
+  const isCommissioner = league?.commissioner_id === userId;
+
+  useEffect(() => {
+    if (!league?.id || !userId) return;
+    async function load() {
+      try {
+        const [{ data: memberData }, { data: allPicksData }] = await Promise.all([
+          supabase.from('league_members')
+            .select('id, roster, draft_slot, team_name')
+            .eq('league_id', league.id)
+            .eq('user_id', userId)
+            .single(),
+          // Load ALL league picks — needed to find commissioner's slot via snakeIdx
+          supabase.from('draft_picks')
+            .select('*')
+            .eq('league_id', league.id)
+            .order('pick_number', { ascending: true }),
+        ]);
+
+        let slot: number | null = null;
+        if (memberData) {
+          setMemberId(memberData.id);
+          if (memberData.draft_slot) { slot = memberData.draft_slot; setMemberSlot(slot); }
+          if (memberData.team_name) setMemberName(memberData.team_name);
+          const r = memberData.roster;
+          if (r && typeof r === 'object' && !Array.isArray(r) && r.lineups) {
+            setLineups(r.lineups);
+          }
+        }
+
+        const allPicks: any[] = allPicksData || [];
+        // For non-commissioners: each human's picks are stored with their own user_id — simple filter
+        // For commissioners: their picks AND CPU picks all share commissioner's user_id, need snakeIdx
+        let mine: any[] = [];
+        if (!isCommissioner) {
+          mine = allPicks.filter((p: any) => p.user_id === userId);
+        } else {
+          const draftOrder: any[] = league?.settings?.draft_order || [];
+          const numTeams = draftOrder.length;
+          const myEntry  = draftOrder.find((t: any) => t.userId === userId);
+          const slotIdx  = myEntry ? myEntry.slot - 1 : (slot !== null ? slot - 1 : -1);
+          if (numTeams > 0 && slotIdx >= 0) {
+            mine = allPicks.filter(p => snakeIdx(p.pick_number, numTeams) === slotIdx);
+          }
+          // Commissioner fallback: if snakeIdx found nothing, show user_id picks
+          if (mine.length === 0) {
+            mine = allPicks.filter((p: any) => p.user_id === userId);
+          }
+        }
+        setMyPicks(mine);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [league?.id, userId]);
+
+  const draftOrder: any[] = league?.settings?.draft_order || [];
+  const myEntry           = draftOrder.find((t: any) => t.userId === userId);
+  const myTeamName        = myEntry?.teamName || memberName;
+  const myPicksRaw        = myPicks;
+
+  const weekKey   = String(week);
+  const savedIds  = lineups[weekKey]; // (string | null)[] length 9
+
+  let starters: (any | null)[];
+  let bench: any[];
+
+  if (savedIds && savedIds.length === 9) {
+    const pickMap = new Map(myPicksRaw.map((p: any) => [p.id, p]));
+    starters = savedIds.map(id => (id ? pickMap.get(id) ?? null : null));
+    const starterIdSet = new Set(savedIds.filter(Boolean));
+    bench = myPicksRaw
+      .filter((p: any) => !starterIdSet.has(p.id))
+      .sort((a: any, b: any) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0));
+  } else {
+    const r = assignRoster(myPicksRaw);
+    starters = r.starters;
+    bench    = r.bench;
+  }
+
+  const starterTotal = starters.reduce((s, p) => s + (p?.player_data?.projectedPoints ?? 0), 0);
+
+  async function doSwap(starterIdx: number) {
+    if (!selectedBench) return;
+    const newStarters = [...starters];
+    const evicted = newStarters[starterIdx];
+    newStarters[starterIdx] = selectedBench;
+    const newBench = bench.filter((p: any) => p.id !== selectedBench.id);
+    if (evicted) newBench.push(evicted);
+    newBench.sort((a: any, b: any) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0));
+    const newIds: (string | null)[] = newStarters.map(p => p?.id ?? null);
+    const newLineups = { ...lineups, [weekKey]: newIds };
+    setLineups(newLineups);
+    setSelectedBench(null);
+    if (memberId) {
+      setSaving(true);
+      await supabase.from('league_members').update({ roster: { lineups: newLineups } }).eq('id', memberId);
+      setSaving(false);
+    }
+  }
+
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
+      Loading roster…
+    </div>
+  );
+
+  if (myPicksRaw.length === 0) return (
+    <div style={{ textAlign: 'center', padding: 60, fontFamily: 'Oswald,sans-serif' }}>
+      <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
+      <div style={{ fontSize: 15, color: C.text, marginBottom: 6 }}>No roster found</div>
+      <div style={{ fontSize: 11, color: C.muted }}>
+        Complete the real draft first — mock drafts don&apos;t save picks here.
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 540 }}>
+
+      {/* Week tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, flexWrap: 'wrap' }}>
+        {Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1).map(w => (
+          <button
+            key={w}
+            onClick={() => { setWeek(w); setSelectedBench(null); }}
+            style={{
+              padding: '5px 13px',
+              background: week === w ? 'rgba(212,168,40,.14)' : C.surf2,
+              border: '1px solid ' + (week === w ? C.gold : C.surf3),
+              borderRadius: 6, cursor: 'pointer',
+              fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1,
+              color: week === w ? C.gold : C.sub,
+            }}
+          >Wk {w}</button>
+        ))}
+      </div>
+
+      {/* Projected score header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10,
+        padding: '14px 18px', marginBottom: 20,
+      }}>
+        <div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Projected · Starters Only</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: C.gold, letterSpacing: 1, marginTop: 2 }}>{starterTotal.toFixed(1)}</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginTop: 2 }}>{myTeamName}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted }}>WEEK {week}</div>
+          {saving && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, marginTop: 4 }}>Saving…</div>}
+        </div>
+      </div>
+
+      {/* Swap hint */}
+      {selectedBench && (
+        <div style={{
+          padding: '9px 14px', marginBottom: 12,
+          background: 'rgba(212,168,40,.08)', border: '1px solid rgba(212,168,40,.3)',
+          borderRadius: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span>Move {selectedBench.player_data?.playerName || selectedBench.player_data?.school} — tap a highlighted slot</span>
+          <button
+            onClick={() => setSelectedBench(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gold, fontSize: 14, lineHeight: 1, padding: '0 4px' }}
+          >✕</button>
+        </div>
+      )}
+
+      {/* Starters */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Starters</span>
+        <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+      </div>
+
+      {STARTER_SLOT_LABELS.map((label, i) => {
+        const pick    = starters[i];
+        const color   = POS_COLORS[label] || C.muted;
+        const isTarget = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
+        const pts     = (pick?.player_data?.projectedPoints ?? 0).toFixed(1);
+        const name    = pick?.player_data?.playerName || pick?.player_data?.school;
+        const sub     = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;
+        const tier    = pick?.player_data?.tier;
+
+        return (
+          <div
+            key={i}
+            onClick={() => { if (isTarget) doSwap(i); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '10px 14px', marginBottom: 4,
+              background: isTarget ? color + '18' : C.surf2,
+              border: '1px solid ' + (isTarget ? color + '88' : C.surf3),
+              borderRadius: 8, cursor: isTarget ? 'pointer' : 'default',
+              transition: 'all .15s',
+            }}
+          >
+            {/* Slot badge */}
+            <div style={{
+              width: 36, flexShrink: 0, textAlign: 'center',
+              fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700,
+              letterSpacing: 1, color,
+              background: color + '22', border: '1px solid ' + color + '44',
+              borderRadius: 4, padding: '3px 0',
+            }}>{label}</div>
+
+            {/* Player info */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {pick ? (
+                <>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{sub}{tier ? ' · ' + tier : ''}</div>
+                </>
+              ) : (
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
+              )}
+            </div>
+
+            {/* Projected pts */}
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: pick ? C.gold : C.surf3, flexShrink: 0, minWidth: 42, textAlign: 'right' }}>
+              {pick ? pts : '—'}
+            </div>
+
+            {/* Swap indicator */}
+            {isTarget && (
+              <div style={{
+                flexShrink: 0, padding: '3px 9px', borderRadius: 5,
+                background: color + '33', border: '1px solid ' + color + '88',
+                fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color,
+              }}>SWAP</div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Bench */}
+      {bench.length > 0 && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20, marginBottom: 8 }}>
+            <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Bench</span>
+            <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+          </div>
+
+          {bench.map((pick: any) => {
+            const isSelected = selectedBench?.id === pick.id;
+            const pts  = (pick.player_data?.projectedPoints ?? 0).toFixed(1);
+            const name = pick.player_data?.playerName || pick.player_data?.school;
+            const sub  = pick.player_data?.playerName ? pick.player_data.school : pick.player_data?.conference;
+            const tier = pick.player_data?.tier;
+            const pos  = pick.player_data?.unitType as string;
+            const col  = POS_COLORS[pos] || C.muted;
+
+            return (
+              <div
+                key={pick.id}
+                onClick={() => setSelectedBench(isSelected ? null : pick)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 14px', marginBottom: 4,
+                  background: isSelected ? 'rgba(212,168,40,.1)' : C.surf,
+                  border: '1px solid ' + (isSelected ? 'rgba(212,168,40,.5)' : C.surf3),
+                  borderRadius: 8, cursor: 'pointer',
+                  transition: 'all .15s',
+                }}
+              >
+                {/* BN badge */}
+                <div style={{
+                  width: 36, flexShrink: 0, textAlign: 'center',
+                  fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700,
+                  letterSpacing: 1, color: C.muted,
+                  background: C.muted + '22', border: '1px solid ' + C.muted + '44',
+                  borderRadius: 4, padding: '3px 0',
+                }}>BN</div>
+
+                {/* Pos dot */}
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: col, flexShrink: 0 }} />
+
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: isSelected ? C.gold : C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{sub}{tier ? ' · ' + tier : ''}</div>
+                </div>
+
+                {/* Pts */}
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: isSelected ? C.gold : C.sub, flexShrink: 0, minWidth: 42, textAlign: 'right' }}>
+                  {pts}
+                </div>
+              </div>
+            );
+          })}
         </>
       )}
     </div>
