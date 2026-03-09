@@ -12,7 +12,7 @@ const C = {
   green: '#2ecc71', red: '#e74c3c',
 };
 
-type Tab = 'draft' | 'team' | 'league' | 'players' | 'scores';
+type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'scores';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'draft',   label: 'Draft'    },
@@ -97,12 +97,26 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
+  // Auto-switch to Matchup tab when draft completes
+  useEffect(() => {
+    if (league?.status === 'active' && activeTab === 'draft') {
+      setActiveTab('matchup');
+    }
+  }, [league?.status]);
+
   const isCommissioner = userId === league?.commissioner_id;
   const myMember       = members.find((m: any) => m.user_id === userId);
   const cpuTeams       = (league?.settings?.cpu_teams as string[]) ?? [];
   const totalOccupied  = members.length + cpuTeams.length;
   const spotsLeft      = (league?.league_size || 0) - totalOccupied;
   const isFull         = spotsLeft <= 0;
+
+  // Replace Draft tab with Matchup tab once league is active
+  const computedTabs = TABS.map(t =>
+    t.key === 'draft' && league?.status === 'active'
+      ? { key: 'matchup' as Tab, label: 'Matchup' }
+      : t
+  );
   const inviteUrl      = league ? appUrl + '/join/' + league.invite_code : '';
   const userInitial    = (userEmail || 'U').charAt(0).toUpperCase();
 
@@ -275,7 +289,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               </span>
             </div>
             <div style={{ display: 'flex' }}>
-              {TABS.map(tab => (
+              {computedTabs.map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
@@ -312,12 +326,15 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               onRemoveCpu={removeCpu}
             />
           )}
+          {activeTab === 'matchup' && (
+            <MatchupTab league={league} userId={userId} />
+          )}
           {activeTab === 'scores' && (
             <ScoresTab leagueId={params.id} members={members} league={league} userId={userId} />
           )}
-          {activeTab !== 'draft' && activeTab !== 'scores' && (
+          {activeTab !== 'draft' && activeTab !== 'matchup' && activeTab !== 'scores' && (
             <PlaceholderTab
-              label={TABS.find(t => t.key === activeTab)?.label || ''}
+              label={computedTabs.find(t => t.key === activeTab)?.label || ''}
               icon={activeTab === 'team' ? '🏆' : activeTab === 'league' ? '⚙️' : '🏈'}
             />
           )}
@@ -733,6 +750,212 @@ function ScoresTab({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Matchup Tab ─────────────────────────────────────────────── */
+const MATCH_POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
+
+function snakeIdx(pickNum: number, numTeams: number): number {
+  const round = Math.floor((pickNum - 1) / numTeams);
+  const pos   = (pickNum - 1) % numTeams;
+  return round % 2 === 0 ? pos : numTeams - 1 - pos;
+}
+
+function MatchupTab({ league, userId }: { league: any; userId: string | null }) {
+  const [picks,   setPicks]   = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!league?.id) return;
+    async function load() {
+      const { data } = await supabase
+        .from('draft_picks')
+        .select('*')
+        .eq('league_id', league.id)
+        .order('pick_number', { ascending: true });
+      setPicks(data || []);
+      setLoading(false);
+    }
+    load();
+  }, [league?.id]);
+
+  const draftOrder: any[] = league?.settings?.draft_order || [];
+  const numTeams = draftOrder.length;
+
+  // Find my slot (0-indexed based on slot property)
+  const myEntry    = draftOrder.find((t: any) => t.userId === userId);
+  const mySlotIdx  = myEntry ? myEntry.slot - 1 : -1;
+
+  // Week 1 pairing: 0↔1, 2↔3, 4↔5 …
+  const oppSlotIdx = mySlotIdx < 0 ? -1
+    : mySlotIdx % 2 === 0 ? mySlotIdx + 1 : mySlotIdx - 1;
+  const oppEntry   = oppSlotIdx >= 0 && oppSlotIdx < numTeams
+    ? draftOrder[oppSlotIdx] : null;
+
+  // Assign picks to slots via snake index
+  const myPicks  = picks.filter(p => numTeams > 0 && snakeIdx(p.pick_number, numTeams) === mySlotIdx);
+  const oppPicks = picks.filter(p => numTeams > 0 && snakeIdx(p.pick_number, numTeams) === oppSlotIdx);
+
+  function groupByPos(ps: any[]): Record<string, any[]> {
+    const g: Record<string, any[]> = { QB: [], RB: [], WR: [], TE: [], DEF: [], K: [] };
+    for (const p of ps) {
+      const pos = p.player_data?.unitType as string;
+      if (pos && g[pos]) g[pos].push(p);
+    }
+    return g;
+  }
+
+  const myGroups  = groupByPos(myPicks);
+  const oppGroups = groupByPos(oppPicks);
+  const myTotal   = myPicks.reduce((s, p) => s + (p.player_data?.projectedPoints ?? 0), 0);
+  const oppTotal  = oppPicks.reduce((s, p) => s + (p.player_data?.projectedPoints ?? 0), 0);
+
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
+      Loading matchup…
+    </div>
+  );
+
+  if (!myEntry || numTeams === 0) return (
+    <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13 }}>
+      Draft not yet complete or no matchup data available.
+    </div>
+  );
+
+  const myTeamName  = myEntry.teamName;
+  const oppTeamName = oppEntry?.teamName ?? 'BYE';
+  const iAhead      = myTotal >= oppTotal;
+
+  return (
+    <div style={{ maxWidth: 800 }}>
+
+      {/* Week label */}
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.muted, textTransform: 'uppercase', marginBottom: 16, textAlign: 'center' }}>
+        Week 1 · Projected
+      </div>
+
+      {/* Score header card */}
+      <div style={{
+        background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 14,
+        padding: '22px 28px', marginBottom: 28,
+        display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 16, alignItems: 'center',
+      }}>
+        {/* My team */}
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, letterSpacing: 1, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>
+            {myTotal.toFixed(1)}
+          </div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text, fontWeight: 600, marginTop: 6, letterSpacing: .5 }}>{myTeamName}</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 2 }}>YOUR TEAM</div>
+        </div>
+
+        {/* VS */}
+        <div style={{ textAlign: 'center', padding: '0 8px' }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 3, color: C.muted }}>VS</div>
+        </div>
+
+        {/* Opponent */}
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, letterSpacing: 1, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>
+            {oppTotal.toFixed(1)}
+          </div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text, fontWeight: 600, marginTop: 6, letterSpacing: .5 }}>{oppTeamName}</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 2 }}>OPPONENT</div>
+        </div>
+      </div>
+
+      {/* Player comparison by position */}
+      {MATCH_POS_ORDER.map(pos => {
+        const myG  = myGroups[pos]  || [];
+        const oppG = oppGroups[pos] || [];
+        const maxN = Math.max(myG.length, oppG.length);
+        if (maxN === 0) return null;
+
+        const posColors: Record<string, string> = {
+          QB: '#ef4444', RB: '#3b82f6', WR: C.gold, TE: '#a855f7', DEF: '#10b981', K: '#f97316',
+        };
+        const posColor = posColors[pos] || C.muted;
+
+        return (
+          <div key={pos} style={{ marginBottom: 20 }}>
+            {/* Position divider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+              <span style={{
+                fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2,
+                color: posColor, textTransform: 'uppercase',
+                background: C.surf, padding: '2px 10px', borderRadius: 20,
+                border: '1px solid ' + C.surf3,
+              }}>{pos}</span>
+              <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+            </div>
+
+            {Array.from({ length: maxN }).map((_, i) => {
+              const myP  = myG[i];
+              const oppP = oppG[i];
+              return (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr', marginBottom: 4 }}>
+
+                  {/* My player (right-aligned) */}
+                  {myP ? (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                      gap: 12, padding: '9px 14px',
+                      background: C.surf2, borderRadius: '8px 0 0 8px',
+                      border: '1px solid ' + C.surf3, borderRight: 'none',
+                    }}>
+                      <div style={{ textAlign: 'right', minWidth: 0 }}>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          {myP.player_data?.playerName || myP.player_data?.school}
+                        </div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                          {myP.player_data?.playerName ? myP.player_data.school : myP.player_data?.conference}
+                          {myP.player_data?.tier ? ' · ' + myP.player_data.tier : ''}
+                        </div>
+                      </div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold, flexShrink: 0, minWidth: 46, textAlign: 'right' }}>
+                        {(myP.player_data?.projectedPoints ?? 0).toFixed(1)}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ background: C.surf, borderRadius: '8px 0 0 8px', border: '1px solid ' + C.surf3, borderRight: 'none' }} />
+                  )}
+
+                  {/* Divider */}
+                  <div style={{ background: C.surf3 }} />
+
+                  {/* Opp player (left-aligned) */}
+                  {oppP ? (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
+                      gap: 12, padding: '9px 14px',
+                      background: C.surf2, borderRadius: '0 8px 8px 0',
+                      border: '1px solid ' + C.surf3, borderLeft: 'none',
+                    }}>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.sub, flexShrink: 0, minWidth: 46 }}>
+                        {(oppP.player_data?.projectedPoints ?? 0).toFixed(1)}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          {oppP.player_data?.playerName || oppP.player_data?.school}
+                        </div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                          {oppP.player_data?.playerName ? oppP.player_data.school : oppP.player_data?.conference}
+                          {oppP.player_data?.tier ? ' · ' + oppP.player_data.tier : ''}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ background: C.surf, borderRadius: '0 8px 8px 0', border: '1px solid ' + C.surf3, borderLeft: 'none' }} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
