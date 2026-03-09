@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
+import { FULL_POOL } from '@/lib/playerPool';
 import type { TeamEfficiency, SchoolMatchup, WeeklyScore } from '@/types';
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
@@ -343,7 +344,10 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           {activeTab === 'scores' && (
             <ScoresTab leagueId={params.id} members={members} league={league} userId={userId} />
           )}
-          {activeTab !== 'draft' && activeTab !== 'matchup' && activeTab !== 'team' && activeTab !== 'league' && activeTab !== 'scores' && (
+          {activeTab === 'players' && (
+            <WaiverTab league={league} userId={userId} />
+          )}
+          {activeTab !== 'draft' && activeTab !== 'matchup' && activeTab !== 'team' && activeTab !== 'league' && activeTab !== 'scores' && activeTab !== 'players' && (
             <PlaceholderTab
               label={computedTabs.find(t => t.key === activeTab)?.label || ''}
               icon="🏈"
@@ -531,6 +535,185 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
           style={{ width: '100%', padding: 17, background: 'linear-gradient(135deg,#d4a828,#f0c94a)', border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 3, textTransform: 'uppercase', color: C.bg }}
         >🏈 Join Draft Room</button>
       )}
+    </div>
+  );
+}
+
+/* ── Waiver Wire Tab ─────────────────────────────────────────── */
+function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
+  const [allPicks,    setAllPicks]    = useState<any[]>([]);
+  const [myPicks,     setMyPicks]     = useState<any[]>([]);
+  const [posFilter,   setPosFilter]   = useState<string>('ALL');
+  const [search,      setSearch]      = useState('');
+  const [adding,      setAdding]      = useState<any | null>(null);   // free agent being added
+  const [dropping,    setDropping]    = useState<any | null>(null);   // my pick to drop
+  const [busy,        setBusy]        = useState(false);
+  const [toast,       setToast]       = useState('');
+  const [loading,     setLoading]     = useState(true);
+
+  const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
+
+  useEffect(() => {
+    if (!league?.id || !userId) return;
+    async function load() {
+      const { data } = await supabase
+        .from('draft_picks').select('*').eq('league_id', league.id);
+      const all = data || [];
+      setAllPicks(all);
+      setMyPicks(all.filter((p: any) => p.user_id === userId));
+      setLoading(false);
+    }
+    load();
+  }, [league?.id, userId]);
+
+  const draftedIds = new Set(allPicks.map((p: any) => p.player_data?.id).filter(Boolean));
+
+  const freeAgents = FULL_POOL
+    .filter(p => !draftedIds.has(p.id))
+    .filter(p => posFilter === 'ALL' || p.unitType === posFilter)
+    .filter(p => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return p.school.toLowerCase().includes(q) ||
+        (p.playerName ?? '').toLowerCase().includes(q) ||
+        p.unitType.toLowerCase().includes(q);
+    })
+    .sort((a, b) => a.adp - b.adp);
+
+  async function confirmAdd() {
+    if (!adding || !dropping || !userId) return;
+    setBusy(true);
+    // Remove dropped pick
+    await supabase.from('draft_picks').delete().eq('id', dropping.id);
+    // Insert new pick with next pick_number (just use a high number so it doesn't conflict)
+    const maxPick = allPicks.reduce((m: number, p: any) => Math.max(m, p.pick_number ?? 0), 0);
+    await supabase.from('draft_picks').insert({
+      league_id: league.id,
+      user_id: userId,
+      pick_number: maxPick + 1,
+      player_data: adding,
+    });
+    // Refresh
+    const { data } = await supabase.from('draft_picks').select('*').eq('league_id', league.id);
+    const all = data || [];
+    setAllPicks(all);
+    setMyPicks(all.filter((p: any) => p.user_id === userId));
+    setAdding(null);
+    setDropping(null);
+    setBusy(false);
+    setToast(`Added ${adding.playerName || adding.school} ${adding.unitType}, dropped ${dropping.player_data?.playerName || dropping.player_data?.school} ${dropping.player_data?.unitType}`);
+    setTimeout(() => setToast(''), 4000);
+  }
+
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
+      Loading waiver wire…
+    </div>
+  );
+
+  /* ── Drop modal ── */
+  if (adding) {
+    const faName = adding.playerName || adding.school;
+    return (
+      <div style={{ maxWidth: 500, margin: '0 auto', paddingTop: 8 }}>
+        <button onClick={() => { setAdding(null); setDropping(null); }} style={{ background: 'none', border: 'none', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, cursor: 'pointer', marginBottom: 16, letterSpacing: 1 }}>
+          ← BACK
+        </button>
+        {/* Adding banner */}
+        <div style={{ background: C.surf, border: '1px solid ' + C.green, borderRadius: 10, padding: '14px 18px', marginBottom: 20 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, letterSpacing: 1, marginBottom: 4 }}>ADDING</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 15, color: C.text }}>{faName}</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>{adding.unitType} · {adding.school} · {weeklyProj(adding.projectedPoints).toFixed(1)} pts/wk</div>
+            </div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.green }}>{weeklyProj(adding.projectedPoints).toFixed(1)}</div>
+          </div>
+        </div>
+        {/* Pick a player to drop */}
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, letterSpacing: 1, marginBottom: 10 }}>SELECT A PLAYER TO DROP</div>
+        {myPicks.length === 0 && (
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted, textAlign: 'center', padding: 20 }}>You have no players on your roster yet.</div>
+        )}
+        {myPicks
+          .slice()
+          .sort((a: any, b: any) => (a.player_data?.adp ?? 999) - (b.player_data?.adp ?? 999))
+          .map((pick: any) => {
+          const pd = pick.player_data;
+          const name = pd?.playerName || pd?.school;
+          const isSelected = dropping?.id === pick.id;
+          return (
+            <div key={pick.id} onClick={() => setDropping(isSelected ? null : pick)}
+              style={{ background: isSelected ? '#3d1515' : C.surf, border: '1px solid ' + (isSelected ? C.red : C.surf3), borderRadius: 8, padding: '12px 16px', marginBottom: 8, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'border-color .15s' }}>
+              <div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text }}>{name}</div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{pd?.unitType} · {pd?.school} · {weeklyProj(pd?.projectedPoints ?? 0).toFixed(1)} pts/wk</div>
+              </div>
+              {isSelected && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red, letterSpacing: 1 }}>DROP</div>}
+            </div>
+          );
+        })}
+        {dropping && (
+          <button onClick={confirmAdd} disabled={busy} style={{ marginTop: 16, width: '100%', padding: '12px 0', background: C.green, border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 1, color: '#fff', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? .6 : 1 }}>
+            {busy ? 'PROCESSING…' : `ADD ${(adding.playerName || adding.school).toUpperCase()} / DROP ${(dropping.player_data?.playerName || dropping.player_data?.school || '').toUpperCase()}`}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  /* ── Free agent list ── */
+  return (
+    <div style={{ maxWidth: 700, margin: '0 auto' }}>
+      {toast && (
+        <div style={{ background: '#14532d', border: '1px solid ' + C.green, borderRadius: 8, padding: '10px 16px', marginBottom: 14, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.green }}>
+          {toast}
+        </div>
+      )}
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+        {POS_FILTERS.map(f => (
+          <button key={f} onClick={() => setPosFilter(f)} style={{ padding: '5px 14px', borderRadius: 20, border: '1px solid ' + (posFilter === f ? C.gold : C.surf3), background: posFilter === f ? C.gold : C.surf2, color: posFilter === f ? C.bg : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: .5 }}>
+            {f}
+          </button>
+        ))}
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search players…" style={{ flex: 1, minWidth: 140, background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '6px 12px', color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none' }} />
+      </div>
+
+      {/* Column headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px 80px', gap: 8, padding: '4px 12px', marginBottom: 4 }}>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>PLAYER</div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>PROJ</div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>ADP</div>
+        <div />
+      </div>
+
+      {freeAgents.length === 0 && (
+        <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>No free agents found.</div>
+      )}
+
+      {freeAgents.map(p => {
+        const name = p.playerName || p.school;
+        const posColor: Record<string, string> = { QB: '#ef4444', RB: '#3b82f6', WR: '#d4a828', TE: '#a855f7', DEF: '#10b981', K: '#f97316' };
+        return (
+          <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px 80px', gap: 8, alignItems: 'center', background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 6, background: posColor[p.unitType] || C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 11, color: '#fff', flexShrink: 0 }}>
+                {p.unitType}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{p.school} · {p.conference} · {p.tier}</div>
+              </div>
+            </div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold, textAlign: 'right' }}>{weeklyProj(p.projectedPoints).toFixed(1)}</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.adp.toFixed(1)}</div>
+            <button onClick={() => setAdding(p)} style={{ padding: '6px 0', background: C.surf3, border: '1px solid ' + C.surf3, borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, color: C.gold, cursor: 'pointer', letterSpacing: .5 }}>
+              + ADD
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
