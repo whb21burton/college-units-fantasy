@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
-import { FULL_POOL } from '@/lib/playerPool';
+import type { DraftUnit } from '@/lib/playerPool';
 import type { TeamEfficiency, SchoolMatchup, WeeklyScore } from '@/types';
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
@@ -543,10 +543,11 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
 function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   const [allPicks,    setAllPicks]    = useState<any[]>([]);
   const [myPicks,     setMyPicks]     = useState<any[]>([]);
+  const [pool,        setPool]        = useState<DraftUnit[]>([]);
   const [posFilter,   setPosFilter]   = useState<string>('ALL');
   const [search,      setSearch]      = useState('');
-  const [adding,      setAdding]      = useState<any | null>(null);   // free agent being added
-  const [dropping,    setDropping]    = useState<any | null>(null);   // my pick to drop
+  const [adding,      setAdding]      = useState<any | null>(null);
+  const [dropping,    setDropping]    = useState<any | null>(null);
   const [busy,        setBusy]        = useState(false);
   const [toast,       setToast]       = useState('');
   const [loading,     setLoading]     = useState(true);
@@ -556,11 +557,14 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   useEffect(() => {
     if (!league?.id || !userId) return;
     async function load() {
-      const { data } = await supabase
-        .from('draft_picks').select('*').eq('league_id', league.id);
-      const all = data || [];
+      const [picksRes, poolRes] = await Promise.all([
+        supabase.from('draft_picks').select('*').eq('league_id', league.id),
+        fetch('/api/player-pool').then(r => r.json()),
+      ]);
+      const all = picksRes.data || [];
       setAllPicks(all);
       setMyPicks(all.filter((p: any) => p.user_id === userId));
+      setPool(Array.isArray(poolRes) ? poolRes : []);
       setLoading(false);
     }
     load();
@@ -568,7 +572,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
 
   const draftedIds = new Set(allPicks.map((p: any) => p.player_data?.id).filter(Boolean));
 
-  const freeAgents = FULL_POOL
+  const freeAgents = pool
     .filter(p => !draftedIds.has(p.id))
     .filter(p => posFilter === 'ALL' || p.unitType === posFilter)
     .filter(p => {

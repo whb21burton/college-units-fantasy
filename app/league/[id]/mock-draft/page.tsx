@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { FULL_POOL, POSITION_CAPS, ROSTER_SLOTS, type DraftUnit, type UnitType } from '@/lib/playerPool';
+import { POSITION_CAPS, ROSTER_SLOTS, type DraftUnit, type UnitType } from '@/lib/playerPool';
 import type { TeamEfficiency } from '@/types';
 
 const C = {
@@ -134,11 +134,19 @@ export default function MockDraftPage() {
     Array.from({ length: 12 }, emptyRoster)
   );
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [effMap, setEffMap] = useState<Record<string, TeamEfficiency>>({});
+  const [effMap,    setEffMap]    = useState<Record<string, TeamEfficiency>>({});
+  const [poolData,  setPoolData]  = useState<DraftUnit[]>([]);
 
   useEffect(() => {
-    const pool = [...FULL_POOL].sort((a, b) => b.projectedPoints - a.projectedPoints);
-    setAvailable(pool);
+    // Fetch real player pool from CFBD API
+    fetch('/api/player-pool')
+      .then(r => r.json())
+      .then((data: DraftUnit[]) => {
+        const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => b.projectedPoints - a.projectedPoints);
+        setPoolData(sorted);
+        setAvailable(sorted);
+      })
+      .catch(() => {});
     // Fetch current efficiency data for badges
     const season = new Date().getFullYear();
     fetch(`/api/efficiency?week=1&season=${season}`)
@@ -223,8 +231,7 @@ export default function MockDraftPage() {
     setTimer(PICK_TIME);
     setDraftComplete(false);
     setRosters(Array.from({ length: 12 }, emptyRoster));
-    const pool = [...FULL_POOL].sort((a, b) => b.projectedPoints - a.projectedPoints);
-    setAvailable(pool);
+    setAvailable([...poolData].sort((a, b) => b.projectedPoints - a.projectedPoints));
     setSetupDone(false);
   };
 
