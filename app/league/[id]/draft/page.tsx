@@ -190,18 +190,50 @@ export default function DraftPage() {
 
   async function insertPick(unit: DraftUnit) {
     if (!userId) return;
-    const nt = members.length;
-    const r  = nt > 0 ? Math.floor(picks.length / nt) : 0;
+    const nt      = members.length;
+    const r       = nt > 0 ? Math.floor(picks.length / nt) : 0;
+    const pickNum = picks.length;
+
+    const newPick = {
+      id:          crypto.randomUUID(),
+      league_id:   leagueId,
+      user_id:     userId,
+      player_id:   unit.id,
+      player_data: unit,
+      round:       r,
+      pick_number: pickNum,
+      picked_at:   new Date().toISOString(),
+    };
+
+    // Optimistic update — apply immediately so the UI responds even if Realtime is slow
+    setPicks(prev => {
+      if (prev.some(p => p.pick_number === pickNum)) return prev;
+      return [...prev, newPick];
+    });
+    setAvail(prev => prev.filter(u => u.id !== unit.id));
+    setTimer(PICK_TIME);
+
     const { error } = await supabase.from('draft_picks').insert({
       league_id:   leagueId,
       user_id:     userId,
       player_id:   unit.id,
       player_data: unit,
       round:       r,
-      pick_number: picks.length,
+      pick_number: pickNum,
     });
-    // Silently ignore unique constraint violation (another client beat us)
-    if (error && error.code !== '23505') console.error('Pick insert error:', error);
+
+    if (error) {
+      if (error.code === '23505') {
+        // Another client beat us — roll back the optimistic pick
+        setPicks(prev => prev.filter(p => p.pick_number !== pickNum));
+        setAvail(prev => {
+          const already = prev.some(u => u.id === unit.id);
+          return already ? prev : [unit, ...prev].sort((a, b) => a.adp - b.adp);
+        });
+      } else {
+        console.error('Pick insert error:', error);
+      }
+    }
   }
 
   function handlePickClick(unit: DraftUnit) {
