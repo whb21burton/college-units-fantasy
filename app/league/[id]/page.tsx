@@ -20,52 +20,20 @@ function weeklyProj(seasonPts: number): number {
 
 type MatchupCtx = {
   opponentMap: Record<string, string>;
-  offPct: Record<string, number>;
-  defPct: Record<string, number>;
 } | null;
 
-function offMatchupMult(opponentDefPct: number): number {
-  if (opponentDefPct >= 85) return 0.70;
-  if (opponentDefPct >= 70) return 0.83;
-  if (opponentDefPct >= 55) return 0.93;
-  if (opponentDefPct >= 40) return 1.00;
-  if (opponentDefPct >= 25) return 1.10;
-  if (opponentDefPct >= 10) return 1.20;
-  return 1.30;
-}
-function defMatchupMult(opponentOffPct: number): number {
-  if (opponentOffPct >= 85) return 0.70;
-  if (opponentOffPct >= 70) return 0.83;
-  if (opponentOffPct >= 55) return 0.93;
-  if (opponentOffPct >= 40) return 1.00;
-  if (opponentOffPct >= 25) return 1.10;
-  if (opponentOffPct >= 10) return 1.20;
-  return 1.30;
+/** Returns weekly projection + opponent info for display. SOS multiplier is already baked into projectedPoints. */
+function matchupProj(seasonPts: number, school: string, _unitType: string, ctx: MatchupCtx): { pts: number; mult: number; opponent: string | null } {
+  const pts = weeklyProj(seasonPts);
+  const opponent = ctx?.opponentMap[school] ?? null;
+  return { pts, mult: 1.0, opponent };
 }
 
-/** Returns adjusted weekly projection + opponent info for a pick or pool unit. */
-function matchupProj(seasonPts: number, school: string, unitType: string, ctx: MatchupCtx): { pts: number; mult: number; opponent: string | null } {
-  const base = weeklyProj(seasonPts);
-  if (!ctx) return { pts: base, mult: 1.0, opponent: null };
-  const opponent = ctx.opponentMap[school] ?? null;
-  if (!opponent) return { pts: base, mult: 1.0, opponent: null };
-  const mult = unitType === 'DEF'
-    ? defMatchupMult(ctx.offPct[opponent] ?? 50)
-    : offMatchupMult(ctx.defPct[opponent] ?? 50);
-  return { pts: base * mult, mult, opponent };
-}
-
-function MatchupBadge({ mult, opponent }: { mult: number; opponent: string | null }) {
+function MatchupBadge({ opponent }: { mult: number; opponent: string | null }) {
   if (!opponent) return null;
-  let label: string; let color: string;
-  if (mult >= 1.20)      { label = 'Easy';  color = '#2ecc71'; }
-  else if (mult >= 1.08) { label = 'Good';  color = '#a3c65e'; }
-  else if (mult >= 0.93) { label = 'Avg';   color = '#4a5d7a'; }
-  else if (mult >= 0.80) { label = 'Hard';  color = '#f39c12'; }
-  else                   { label = 'Tough'; color = '#e74c3c'; }
   return (
-    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color, letterSpacing: .5 }}>
-      vs {opponent.length > 10 ? opponent.split(' ').pop() : opponent} · {label}
+    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#4a5d7a', letterSpacing: .5 }}>
+      vs {opponent.length > 10 ? opponent.split(' ').pop() : opponent}
     </span>
   );
 }

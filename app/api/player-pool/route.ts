@@ -3,7 +3,22 @@ import { initCfbdClient } from '@/lib/cfbd-client';
 import type { DraftUnit, UnitType, Tier, Conference } from '@/lib/playerPool';
 
 const pkg = require('cfbd');
-const { getPlayerSeasonStats, getTeamStats } = pkg;
+const { getPlayerSeasonStats, getTeamStats, getSp } = pkg;
+
+/** Convert SOS rank (1 = hardest) to a projection multiplier. */
+function sosMult(rank: number): number {
+  if (rank <=  5) return 1.3;
+  if (rank <= 10) return 1.2;
+  if (rank <= 15) return 1.1;
+  if (rank <= 25) return 1.0;
+  if (rank <= 35) return 0.9;
+  if (rank <= 50) return 0.8;
+  if (rank <= 80) return 0.7;
+  return 0.6;
+}
+
+/** Units that get SOS adjustment — NOT QB or K. */
+const SOS_UNITS = new Set<UnitType>(['RB', 'WR', 'TE', 'DEF']);
 
 const SEASON = 2025;
 
@@ -46,8 +61,8 @@ export async function GET() {
   try {
     initCfbdClient();
 
-    // Fetch all player + team stats per conference in parallel
-    const [playerResults, teamResults] = await Promise.all([
+    // Fetch player stats, team stats, and SP+ ratings in parallel
+    const [playerResults, teamResults, spRes] = await Promise.all([
       Promise.all(P4_CONFS.map(conf =>
         getPlayerSeasonStats({ query: { year: SEASON, conference: conf } })
           .then((r: any) => r.data || [])
@@ -56,7 +71,20 @@ export async function GET() {
         getTeamStats({ query: { year: SEASON, conference: conf } })
           .then((r: any) => r.data || [])
       )),
+      getSp({ query: { year: SEASON } }).then((r: any) => r.data || []),
     ]);
+
+    // ── Build SOS rank → multiplier map ──────────────────────
+    // SP+ includes a `sos` field (higher = harder schedule).
+    // Rank all P4 teams by SOS descending; rank 1 = hardest.
+    const spData: any[] = spRes;
+    const p4SpTeams = spData
+      .filter((t: any) => t.sos != null)
+      .sort((a: any, b: any) => (b.sos ?? 0) - (a.sos ?? 0));
+    const sosMultMap: Record<string, number> = {};
+    p4SpTeams.forEach((t: any, idx: number) => {
+      sosMultMap[t.team] = sosMult(idx + 1);
+    });
 
     const allPlayerRows: any[] = playerResults.flat();
     const allTeamRows:   any[] = teamResults.flat();
@@ -158,7 +186,7 @@ export async function GET() {
         (wr.REC || 0) * S.rec;
     }
     const wrData = Object.entries(wrTeamTotals)
-      .map(([team, d]) => ({ team, conf: d.conf, pts: d.pts }))
+      .map(([team, d]) => ({ team, conf: d.conf, pts: d.pts * (sosMultMap[team] ?? 1.0) }))
       .sort((a, b) => b.pts - a.pts);
 
     // ── TE unit: sum all TE receiving per team ────────────────
@@ -174,7 +202,7 @@ export async function GET() {
         (te.REC || 0) * S.rec;
     }
     const teData = Object.entries(teTeamTotals)
-      .map(([team, d]) => ({ team, conf: d.conf, pts: d.pts }))
+      .map(([team, d]) => ({ team, conf: d.conf, pts: d.pts * (sosMultMap[team] ?? 1.0) }))
       .sort((a, b) => b.pts - a.pts);
 
     // ── RB unit: team rushing stats ───────────────────────────
@@ -186,7 +214,7 @@ export async function GET() {
       const pts =
         (ts.rushingYards || 0) * S.rushYd +
         (ts.rushingTDs   || 0) * S.rushTd;
-      rbData.push({ team, conf, pts });
+      rbData.push({ team, conf, pts: pts * (sosMultMap[team] ?? 1.0) });
     }
     rbData.sort((a, b) => b.pts - a.pts);
 
@@ -201,7 +229,7 @@ export async function GET() {
         (ts.tacklesForLoss     || 0) * S.tfl    +
         (ts.passesIntercepted  || 0) * S.defInt +
         (ts.fumblesRecovered   || 0) * S.fumRec;
-      defData.push({ team, conf, pts });
+      defData.push({ team, conf, pts: pts * (sosMultMap[team] ?? 1.0) });
     }
     defData.sort((a, b) => b.pts - a.pts);
 
