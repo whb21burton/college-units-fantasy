@@ -226,7 +226,8 @@ export async function GET() {
         (ts.sacks             || 0) * S.sack   +
         (ts.passesIntercepted || 0) * S.defInt +
         (ts.fumblesRecovered  || 0) * S.fumRec +
-        (ts.interceptionTDs   || 0) * S.defTd;
+        (ts.interceptionTDs   || 0) * S.defTd  +
+        (ts.fumbleReturnTDs   || 0) * S.defTd;
       defData.push({ team, conf, pts: pts * (sosMultMap[team] ?? 1.0) });
     }
     defData.sort((a, b) => b.pts - a.pts);
