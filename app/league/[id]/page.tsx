@@ -72,6 +72,51 @@ function MatchupBadge({ mult, opponent }: { mult: number; opponent: string | nul
   );
 }
 
+/** Renders the 3-line player info block used in every roster/matchup row. */
+function PlayerInfoLines({
+  school, unitType, playerName, ctx, ep, align,
+}: {
+  school: string; unitType: string; playerName?: string;
+  ctx: MatchupCtx; ep: { pts: number; isActual: boolean };
+  align?: 'left' | 'right';
+}) {
+  const opponent   = ctx?.opponentMap[school] ?? null;
+  const schoolRank = ctx?.rankMap[school]     ?? null;
+  const oppRank    = opponent ? (ctx?.rankMap[opponent] ?? null) : null;
+  const isOrUnit   = OR_UNITS.has(unitType);
+  const mult       = isOrUnit && opponent ? orMult(oppRank ?? 999) : null;
+
+  let diffLabel = ''; let diffColor = C.muted;
+  if (mult != null) {
+    if (mult >= 1.20)      { diffLabel = 'Easy';  diffColor = '#2ecc71'; }
+    else if (mult >= 1.08) { diffLabel = 'Good';  diffColor = '#a3c65e'; }
+    else if (mult >= 0.93) { diffLabel = 'Avg';   diffColor = '#4a5d7a'; }
+    else if (mult >= 0.80) { diffLabel = 'Hard';  diffColor = '#f39c12'; }
+    else                   { diffLabel = 'Tough'; diffColor = '#e74c3c'; }
+  }
+
+  const name       = playerName || school;
+  const matchupLine = opponent
+    ? `${school}${schoolRank ? ` (#${schoolRank})` : ''} vs ${opponent}${oppRank ? ` (#${oppRank})` : ''}`
+    : school;
+
+  return (
+    <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{matchupLine}</div>
+      {ep.isActual ? (
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green, letterSpacing: .5 }}>
+          ACT{diffLabel ? ` · ${diffLabel}` : ''}
+        </span>
+      ) : mult != null ? (
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: diffColor, letterSpacing: .5 }}>
+          {diffLabel} · {mult.toFixed(2)}x
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 type GameStats = {
   completedSchools: string[];
   schoolPoints: Record<string, Partial<Record<string, number>>>;
@@ -1092,19 +1137,16 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats }: { pick: any | null; 
     </div>
   );
   const ep   = effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, ctx, gameStats);
-  const mp   = matchupProj(pick.player_data?.projectedPoints ?? 0, pick.player_data?.school, pick.player_data?.unitType, ctx);
   const pts  = ep.pts.toFixed(1);
-  const name = pick.player_data?.playerName || pick.player_data?.school;
-  const sub  = pick.player_data?.playerName ? pick.player_data.school : pick.player_data?.conference;
-  const badge = ep.isActual
-    ? <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green, letterSpacing: .5 }}>ACT</span>
-    : <MatchupBadge mult={mp.mult} opponent={mp.opponent} />;
   const info = (
-    <div style={{ minWidth: 0, textAlign: isRight ? 'right' : 'left' }}>
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{sub}</div>
-      {badge}
-    </div>
+    <PlayerInfoLines
+      school={pick.player_data?.school ?? ''}
+      unitType={pick.player_data?.unitType ?? ''}
+      playerName={pick.player_data?.playerName}
+      ctx={ctx}
+      ep={ep}
+      align={align}
+    />
   );
   const score = (
     <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: isRight ? C.gold : C.sub, flexShrink: 0, minWidth: 46, textAlign: isRight ? 'right' : 'left' }}>
@@ -1508,13 +1550,13 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
             {/* Player info */}
             <div style={{ flex: 1, minWidth: 0 }}>
               {pick ? (
-                <>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{sub}{tier ? ' · ' + tier : ''}</div>
-                  {ep.isActual
-                    ? <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green, letterSpacing: .5 }}>ACT</span>
-                    : <MatchupBadge mult={mp.mult} opponent={mp.opponent} />}
-                </>
+                <PlayerInfoLines
+                  school={pick?.player_data?.school ?? ''}
+                  unitType={pick?.player_data?.unitType ?? ''}
+                  playerName={pick?.player_data?.playerName}
+                  ctx={matchupCtx}
+                  ep={ep}
+                />
               ) : (
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
               )}
@@ -1583,8 +1625,13 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
 
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: isSelected ? C.gold : C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{sub}{tier ? ' · ' + tier : ''}</div>
+                  <PlayerInfoLines
+                    school={pick.player_data?.school ?? ''}
+                    unitType={pick.player_data?.unitType ?? ''}
+                    playerName={pick.player_data?.playerName}
+                    ctx={matchupCtx}
+                    ep={bep}
+                  />
                 </div>
 
                 {/* Pts */}
@@ -1925,10 +1972,13 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
               <div style={{ width: 34, flexShrink: 0, textAlign: 'center', fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1, color, background: color + '22', border: '1px solid ' + color + '44', borderRadius: 4, padding: '3px 0' }}>{label}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {pick ? (
-                  <>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pick.player_data?.playerName || pick.player_data?.school}</div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{pick.player_data?.school}</div>
-                  </>
+                  <PlayerInfoLines
+                    school={pick.player_data?.school ?? ''}
+                    unitType={pick.player_data?.unitType ?? ''}
+                    playerName={pick.player_data?.playerName}
+                    ctx={matchupCtx}
+                    ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats)}
+                  />
                 ) : <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>}
               </div>
               <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: pick ? C.gold : C.surf3, flexShrink: 0 }}>{pick ? effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts.toFixed(1) : '—'}</div>
@@ -1954,8 +2004,13 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                   <div style={{ width: 34, flexShrink: 0, textAlign: 'center', fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1, color: C.muted, background: C.muted + '22', border: '1px solid ' + C.muted + '44', borderRadius: 4, padding: '3px 0' }}>BN</div>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: col, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pick.player_data?.playerName || pick.player_data?.school}</div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{pick.player_data?.school}</div>
+                    <PlayerInfoLines
+                      school={pick.player_data?.school ?? ''}
+                      unitType={pick.player_data?.unitType ?? ''}
+                      playerName={pick.player_data?.playerName}
+                      ctx={matchupCtx}
+                      ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats)}
+                    />
                   </div>
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts.toFixed(1)}</div>
                 </div>
