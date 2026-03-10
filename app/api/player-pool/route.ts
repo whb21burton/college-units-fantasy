@@ -41,20 +41,13 @@ export async function GET() {
   try {
     initCfbdClient();
 
-    // Fetch player stats and team stats in parallel (no SOS needed)
-    const [playerResults, teamResults] = await Promise.all([
-      Promise.all(P4_CONFS.map(conf =>
-        getPlayerSeasonStats({ query: { year: SEASON, conference: conf } })
-          .then((r: any) => r.data || [])
-      )),
-      Promise.all(P4_CONFS.map(conf =>
-        getTeamStats({ query: { year: SEASON, conference: conf } })
-          .then((r: any) => r.data || [])
-      )),
+    // Fetch without conference filter — the CFBD conference param is broken for
+    // Big Ten / Big 12 / FBS Independents in 2025, returning 0 rows. Fetching
+    // all at once and filtering in JS works correctly.
+    const [allPlayerRows, allTeamRows]: [any[], any[]] = await Promise.all([
+      getPlayerSeasonStats({ query: { year: SEASON } }).then((r: any) => r.data || []),
+      getTeamStats({ query: { year: SEASON } }).then((r: any) => r.data || []),
     ]);
-
-    const allPlayerRows: any[] = playerResults.flat();
-    const allTeamRows:   any[] = teamResults.flat();
 
     // ── Build player maps per team ────────────────────────────
     // Group player rows by team+player+position+category

@@ -310,6 +310,14 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     router.push(`/league/${params.id}/draft`);
   }
 
+  async function resetDraft() {
+    if (!isCommissioner || !league) return;
+    if (!confirm('Delete all draft picks and reset the league to pre-draft? This cannot be undone.')) return;
+    await supabase.from('draft_picks').delete().eq('league_id', league.id);
+    await supabase.from('leagues').update({ status: 'forming' }).eq('id', league.id);
+    await loadData();
+  }
+
   if (loading) return (
     <div style={{ height: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 3, fontSize: 13 }}>Loading league...</div>
@@ -469,6 +477,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               onMockDraft={() => router.push(`/league/${params.id}/mock-draft`)}
               onAddCpu={addCpu}
               onRemoveCpu={removeCpu}
+              onResetDraft={resetDraft}
             />
           )}
           {activeTab === 'matchup' && (
@@ -561,12 +570,12 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
 }
 
 /* ── Draft Tab ──────────────────────────────────────────────── */
-function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, inviteUrl, copied, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu }: {
+function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, inviteUrl, copied, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu, onResetDraft }: {
   league: any; members: any[]; userId: string | null;
   spotsLeft: number; isFull: boolean; isCommissioner: boolean;
   inviteUrl: string; copied: boolean; cpuTeams: string[];
   onCopy: () => void; onStartDraft: () => void; onMockDraft: () => void;
-  onAddCpu: () => void; onRemoveCpu: (i: number) => void;
+  onAddCpu: () => void; onRemoveCpu: (i: number) => void; onResetDraft: () => void;
 }) {
   const size = league?.league_size || 0;
 
@@ -599,6 +608,12 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
           onClick={onMockDraft}
           style={{ padding: '9px 18px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: C.sub, transition: 'all .15s' }}
         >Mock Draft</button>
+        {isCommissioner && (
+          <button
+            onClick={onResetDraft}
+            style={{ padding: '9px 18px', background: 'rgba(231,76,60,.1)', border: '1px solid rgba(231,76,60,.3)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: '#e74c3c', transition: 'all .15s' }}
+          >Reset Draft</button>
+        )}
       </div>
 
       {/* Slots */}
