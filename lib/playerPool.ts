@@ -11,6 +11,7 @@ export interface DraftUnit {
   tier: Tier;
   adp: number;         // average draft position (lower = better)
   projectedPoints: number;
+  sosMultiplier?: number; // SOS multiplier (0.6–1.3); stored separately for OR adder formula
 }
 
 // ── Roster slots & caps ──────────────────────────────────────
