@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
-import { FULL_POOL, POSITION_CAPS, ROSTER_SLOTS, type DraftUnit, type UnitType } from '@/lib/playerPool';
+import { POSITION_CAPS, ROSTER_SLOTS, type DraftUnit, type UnitType } from '@/lib/playerPool';
 import type { TeamEfficiency } from '@/types';
 
 const C = {
@@ -108,12 +108,13 @@ export default function DraftPage() {
       if (!user) { router.push('/'); return; }
       if (!cancelled) setUserId(user.id);
 
-      const [{ data: lg }, { data: mbs }, { data: pks }] = await Promise.all([
+      const [{ data: lg }, { data: mbs }, { data: pks }, poolRes] = await Promise.all([
         supabase.from('leagues').select('*').eq('id', leagueId).single(),
         supabase.from('league_members').select('*').eq('league_id', leagueId)
           .order('draft_slot', { ascending: true }),
         supabase.from('draft_picks').select('*').eq('league_id', leagueId)
           .order('pick_number', { ascending: true }),
+        fetch('/api/player-pool').then(r => r.json()).catch(() => []),
       ]);
 
       if (cancelled) return;
@@ -127,8 +128,9 @@ export default function DraftPage() {
       const existingPicks = pks ?? [];
       setPicks(existingPicks);
 
+      const livePool: DraftUnit[] = Array.isArray(poolRes) ? poolRes : [];
       const takenIds = new Set(existingPicks.map((p: any) => p.player_id));
-      setAvail([...FULL_POOL].sort((a, b) => b.projectedPoints - a.projectedPoints).filter(u => !takenIds.has(u.id)));
+      setAvail([...livePool].sort((a, b) => b.projectedPoints - a.projectedPoints).filter(u => !takenIds.has(u.id)));
 
       const season = new Date().getFullYear();
       fetch(`/api/efficiency?week=1&season=${season}`)
