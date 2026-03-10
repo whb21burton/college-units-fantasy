@@ -2,17 +2,19 @@
  * GET /api/matchup-context?week=N&season=YYYY
  *
  * Returns for each school:
- *   - opponentMap: school → opponent school this week
- *   - rankMap:     school → Elo power rank (1 = best, updated weekly after each game)
+ *   - opponentMap:  school → opponent school this week
+ *   - rankMap:      school → Elo power rank (1 = best)
+ *   - defRankMap:   school → SP+ defensive rank (1 = best defense = toughest to score on)
+ *   - offRankMap:   school → SP+ offensive rank (1 = best offense)
  *
- * The rankMap is used to compute the Opponent Rank (OR) multiplier for
- * RB/WR/TE/DEF units: finalProjection = weeklyBase × orMultiplier.
+ * ODR multiplier (applied to RB/WR/TE/QB/K): based on opponent's defRankMap value
+ * OOR multiplier (applied to DEF):            based on opponent's offRankMap value
  */
 import { NextResponse } from 'next/server';
 import { initCfbdClient } from '@/lib/cfbd-client';
 
 const pkg = require('cfbd');
-const { getGames, getElo } = pkg;
+const { getGames, getElo, getSp } = pkg;
 
 const SEASON = 2025;
 
@@ -24,26 +26,40 @@ export async function GET(req: Request) {
   try {
     initCfbdClient();
 
-    // Fetch games and Elo ratings in parallel
-    const [gamesRes, eloData] = await Promise.all([
-      getGames({ query: { year: season, week } }).then((r: any) => r.data || []),
+    const [gamesRes, eloData, spRes] = await Promise.all([
+      // seasonType: 'regular' avoids bowl/postseason games bleeding into schedule
+      getGames({ query: { year: season, week, seasonType: 'regular' } }).then((r: any) => r.data || []),
       getElo({ query: { year: season, week } }).then((r: any) => r.data || []).catch(() => []),
+      getSp({ query: { year: season } }).then((r: any) => r.data || []).catch(() => []),
     ]);
 
-    // Build rank map: sort by Elo descending, rank 1 = strongest team
+    // ── Elo rank map (general team strength, used for display) ──
     const eloSorted: any[] = [...(eloData as any[])].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
     const rankMap: Record<string, number> = {};
     eloSorted.forEach((t, idx) => { rankMap[t.team] = idx + 1; });
 
-    // Build opponent map from this week's schedule
+    // ── SP+ defensive rank (1 = best defense) ─────────────────
+    // Lower SP+ defensive rank = harder for opponents to score
+    const defRankMap: Record<string, number> = {};
+    const offRankMap: Record<string, number> = {};
+    for (const t of spRes as any[]) {
+      if (t.team) {
+        if (t.defense?.rank != null) defRankMap[t.team] = t.defense.rank;
+        if (t.offense?.rank != null) offRankMap[t.team] = t.offense.rank;
+      }
+    }
+
+    // ── Opponent map from this week's regular-season schedule ──
     const opponentMap: Record<string, string> = {};
     for (const g of gamesRes as any[]) {
-      opponentMap[g.homeTeam] = g.awayTeam;
-      opponentMap[g.awayTeam] = g.homeTeam;
+      if (g.homeTeam && g.awayTeam) {
+        opponentMap[g.homeTeam] = g.awayTeam;
+        opponentMap[g.awayTeam] = g.homeTeam;
+      }
     }
 
     return NextResponse.json(
-      { week, season, opponentMap, rankMap },
+      { week, season, opponentMap, rankMap, defRankMap, offRankMap },
       { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' } }
     );
   } catch (err: any) {

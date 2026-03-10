@@ -3,22 +3,7 @@ import { initCfbdClient } from '@/lib/cfbd-client';
 import type { DraftUnit, UnitType, Tier, Conference } from '@/lib/playerPool';
 
 const pkg = require('cfbd');
-const { getPlayerSeasonStats, getTeamStats, getSp } = pkg;
-
-/** Convert SOS rank (1 = hardest) to a projection multiplier. */
-function sosMult(rank: number): number {
-  if (rank <=  5) return 1.3;
-  if (rank <= 10) return 1.2;
-  if (rank <= 15) return 1.1;
-  if (rank <= 25) return 1.0;
-  if (rank <= 35) return 0.9;
-  if (rank <= 50) return 0.8;
-  if (rank <= 80) return 0.7;
-  return 0.6;
-}
-
-/** Units that get SOS adjustment — NOT QB or K. */
-const SOS_UNITS = new Set<UnitType>(['RB', 'WR', 'TE', 'DEF']);
+const { getPlayerSeasonStats, getTeamStats } = pkg;
 
 const SEASON = 2025;
 
@@ -52,17 +37,12 @@ function tierFromRank(rank: number, total: number): Tier {
   return 'Depth';
 }
 
-function assignAdps(units: { pts: number }[]): number[] {
-  // Returns ADP positions starting from a given offset
-  return units.map((_, i) => i + 1);
-}
-
 export async function GET() {
   try {
     initCfbdClient();
 
-    // Fetch player stats, team stats, and SP+ ratings in parallel
-    const [playerResults, teamResults, spRes] = await Promise.all([
+    // Fetch player stats and team stats in parallel (no SOS needed)
+    const [playerResults, teamResults] = await Promise.all([
       Promise.all(P4_CONFS.map(conf =>
         getPlayerSeasonStats({ query: { year: SEASON, conference: conf } })
           .then((r: any) => r.data || [])
@@ -71,20 +51,7 @@ export async function GET() {
         getTeamStats({ query: { year: SEASON, conference: conf } })
           .then((r: any) => r.data || [])
       )),
-      getSp({ query: { year: SEASON } }).then((r: any) => r.data || []),
     ]);
-
-    // ── Build SOS rank → multiplier map ──────────────────────
-    // SP+ includes a `sos` field (higher = harder schedule).
-    // Rank all P4 teams by SOS descending; rank 1 = hardest.
-    const spData: any[] = spRes;
-    const p4SpTeams = spData
-      .filter((t: any) => t.sos != null)
-      .sort((a: any, b: any) => (b.sos ?? 0) - (a.sos ?? 0));
-    const sosMultMap: Record<string, number> = {};
-    p4SpTeams.forEach((t: any, idx: number) => {
-      sosMultMap[t.team] = sosMult(idx + 1);
-    });
 
     const allPlayerRows: any[] = playerResults.flat();
     const allTeamRows:   any[] = teamResults.flat();
@@ -140,8 +107,8 @@ export async function GET() {
       }
     }
 
-    // QB fantasy points (no SOS applied to QB)
-    type QBData = { team: string; conf: Conference; name: string; pts: number; sosMult: number };
+    // QB fantasy points
+    type QBData = { team: string; conf: Conference; name: string; pts: number };
     const qbData: QBData[] = [];
     for (const [team, qb] of Object.entries(topQbPerTeam)) {
       const conf = teamConf[team];
@@ -153,23 +120,23 @@ export async function GET() {
         (qb.INT || 0) * S.int    +
         rush.YDS * S.rushYd      +
         rush.TD  * S.rushTd;
-      qbData.push({ team, conf, name: qb.player, pts, sosMult: 1.0 });
+      qbData.push({ team, conf, name: qb.player, pts });
     }
     qbData.sort((a, b) => b.pts - a.pts);
 
-    // ── K: top kicker per team (no SOS applied to K) ─────────
+    // ── K: top kicker per team ────────────────────────────────
     const kickers = playerEntries.filter(e => (e.position === 'K' || e.position === 'PK') && e.category === 'kicking');
     const topKPerTeam: Record<string, any> = {};
     for (const k of kickers) {
       const curr = topKPerTeam[k.team];
       if (!curr || (k.PTS || 0) > (curr.PTS || 0)) topKPerTeam[k.team] = k;
     }
-    type KData = { team: string; conf: Conference; name: string; pts: number; sosMult: number };
+    type KData = { team: string; conf: Conference; name: string; pts: number };
     const kData: KData[] = [];
     for (const [team, k] of Object.entries(topKPerTeam)) {
       const conf = teamConf[team];
       if (!conf) continue;
-      kData.push({ team, conf, name: k.player, pts: k.PTS || 0, sosMult: 1.0 });
+      kData.push({ team, conf, name: k.player, pts: k.PTS || 0 });
     }
     kData.sort((a, b) => b.pts - a.pts);
 
@@ -184,10 +151,9 @@ export async function GET() {
         (wr.YDS || 0) * S.recYd +
         (wr.TD  || 0) * S.recTd;
     }
-    // Keep raw pts (no SOS baked in); sosMultiplier stored separately
     const wrData = Object.entries(wrTeamTotals)
-      .map(([team, d]) => ({ team, conf: d.conf, pts: d.pts, sosMult: sosMultMap[team] ?? 1.0 }))
-      .sort((a, b) => (b.pts * b.sosMult) - (a.pts * a.sosMult));
+      .map(([team, d]) => ({ team, conf: d.conf, pts: d.pts }))
+      .sort((a, b) => b.pts - a.pts);
 
     // ── TE unit: sum all TE receiving per team ────────────────
     const teReceivers = playerEntries.filter(e => e.position === 'TE' && e.category === 'receiving');
@@ -201,11 +167,11 @@ export async function GET() {
         (te.TD  || 0) * S.recTd;
     }
     const teData = Object.entries(teTeamTotals)
-      .map(([team, d]) => ({ team, conf: d.conf, pts: d.pts, sosMult: sosMultMap[team] ?? 1.0 }))
-      .sort((a, b) => (b.pts * b.sosMult) - (a.pts * a.sosMult));
+      .map(([team, d]) => ({ team, conf: d.conf, pts: d.pts }))
+      .sort((a, b) => b.pts - a.pts);
 
     // ── RB unit: team rushing stats ───────────────────────────
-    const rbData: { team: string; conf: Conference; pts: number; sosMult: number }[] = [];
+    const rbData: { team: string; conf: Conference; pts: number }[] = [];
     for (const team of allTeams) {
       const conf = teamConf[team];
       if (!conf) continue;
@@ -213,12 +179,12 @@ export async function GET() {
       const pts =
         (ts.rushingYards || 0) * S.rushYd +
         (ts.rushingTDs   || 0) * S.rushTd;
-      rbData.push({ team, conf, pts, sosMult: sosMultMap[team] ?? 1.0 });
+      rbData.push({ team, conf, pts });
     }
-    rbData.sort((a, b) => (b.pts * b.sosMult) - (a.pts * a.sosMult));
+    rbData.sort((a, b) => b.pts - a.pts);
 
     // ── DEF unit: team defensive stats ───────────────────────
-    const defData: { team: string; conf: Conference; pts: number; sosMult: number }[] = [];
+    const defData: { team: string; conf: Conference; pts: number }[] = [];
     for (const team of allTeams) {
       const conf = teamConf[team];
       if (!conf) continue;
@@ -229,13 +195,12 @@ export async function GET() {
         (ts.fumblesRecovered  || 0) * S.fumRec +
         (ts.interceptionTDs   || 0) * S.defTd  +
         (ts.fumbleReturnTDs   || 0) * S.defTd;
-      defData.push({ team, conf, pts, sosMult: sosMultMap[team] ?? 1.0 });
+      defData.push({ team, conf, pts });
     }
-    defData.sort((a, b) => (b.pts * b.sosMult) - (a.pts * a.sosMult));
+    defData.sort((a, b) => b.pts - a.pts);
 
     // ── Assign ADP globally by interleaving all units ────────
-    // ADP sort uses SOS-adjusted pts (sosMult baked in for OR units, raw for QB/K).
-    type UnitDraft = { team: string; conf: Conference; unitType: UnitType; pts: number; sosMult?: number; name?: string };
+    type UnitDraft = { team: string; conf: Conference; unitType: UnitType; pts: number; name?: string };
     const allUnits: UnitDraft[] = [
       ...qbData.map(d  => ({ ...d, unitType: 'QB'  as UnitType })),
       ...rbData.map(d  => ({ ...d, unitType: 'RB'  as UnitType })),
@@ -243,7 +208,7 @@ export async function GET() {
       ...teData.map(d  => ({ ...d, unitType: 'TE'  as UnitType })),
       ...defData.map(d => ({ ...d, unitType: 'DEF' as UnitType })),
       ...kData.map(d   => ({ ...d, unitType: 'K'   as UnitType })),
-    ].sort((a, b) => (b.pts * (b.sosMult ?? 1)) - (a.pts * (a.sosMult ?? 1)));
+    ].sort((a, b) => b.pts - a.pts);
 
     // Global ADP
     const adpMap = new Map<string, number>();
@@ -253,7 +218,7 @@ export async function GET() {
     const pool: DraftUnit[] = [];
 
     const addUnits = (
-      data: { team: string; conf: Conference; pts: number; sosMult?: number; name?: string }[],
+      data: { team: string; conf: Conference; pts: number; name?: string }[],
       unitType: UnitType
     ) => {
       data.forEach((d, rank) => {
@@ -268,7 +233,6 @@ export async function GET() {
           tier,
           adp:             parseFloat(adp.toFixed(1)),
           projectedPoints: Math.round(d.pts),
-          sosMultiplier:   d.sosMult ?? 1.0,
         });
       });
     }
