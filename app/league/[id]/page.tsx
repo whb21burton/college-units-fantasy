@@ -61,46 +61,40 @@ function matchupProj(
   const opponent = ctx?.opponentMap[school] ?? null;
   if (!opponent || !ctx) return { pts: base, mult: 1.0, opponent };
 
-  // Use SP+ specific rank maps; fall back to Elo rank if SP+ map is empty
-  let relevantRank: number;
-  if (unitType === 'DEF') {
-    relevantRank = ctx.offRankMap?.[opponent] ?? ctx.rankMap[opponent] ?? 999;
-  } else {
-    relevantRank = ctx.defRankMap?.[opponent] ?? ctx.rankMap[opponent] ?? 999;
-  }
+  // Use Elo rankMap — consistent with the #N rank displayed in the UI
+  const relevantRank = ctx.rankMap[opponent] ?? 999;
   const mult = rankMult(relevantRank);
   return { pts: base * mult, mult, opponent };
 }
 
 /** Higher multiplier = harder opponent (rank 1 defense/offense is toughest). */
 function multLabel(mult: number): { label: string; color: string } {
-  if (mult >= 1.25)      return { label: 'Toughest', color: '#e74c3c' };
-  if (mult >= 1.15)      return { label: 'Hard',     color: '#f39c12' };
-  if (mult >= 0.95)      return { label: 'Avg',      color: '#4a5d7a' };
-  if (mult >= 0.85)      return { label: 'Good',     color: '#a3c65e' };
-  return                        { label: 'Easy',     color: '#2ecc71' };
+  if (mult >= 1.25) return { label: 'Toughest',            color: '#e74c3c' };
+  if (mult >= 1.15) return { label: 'Hard',                color: '#e67e22' };
+  if (mult >= 1.05) return { label: 'Good',                color: '#f1c40f' };
+  if (mult >= 0.95) return { label: 'Average',             color: '#95a5a6' };
+  if (mult >= 0.85) return { label: 'Not Bad',             color: '#a3c65e' };
+  if (mult >= 0.75) return { label: 'Not good',            color: '#2ecc71' };
+  if (mult >= 0.65) return { label: 'Bad',                 color: '#1abc9c' };
+  if (mult >= 0.55) return { label: 'Weenie Hut Jr.',      color: '#3498db' };
+  return                   { label: 'Super Weenie Hut Jr', color: '#9b59b6' };
 }
 
 /** Renders the 3-line player info block used in every roster/matchup row. */
 function PlayerInfoLines({
-  school, unitType, playerName, ctx, ep, align,
+  school, unitType, playerName, ctx, ep, align, seasonPts,
 }: {
   school: string; unitType: string; playerName?: string;
   ctx: MatchupCtx; ep: { pts: number; isActual: boolean };
   align?: 'left' | 'right';
+  seasonPts?: number;
 }) {
   const opponent   = ctx?.opponentMap[school] ?? null;
   const schoolRank = ctx?.rankMap[school]     ?? null;
   const oppRank    = opponent ? (ctx?.rankMap[opponent] ?? null) : null;
 
-  // ODR: opponent's defensive rank (for QB/RB/WR/TE/K)
-  // OOR: opponent's offensive rank (for DEF)
-  // Fall back to Elo rank if SP+ maps are empty
-  const relevantRank = opponent
-    ? (unitType === 'DEF'
-        ? (ctx?.offRankMap?.[opponent] ?? ctx?.rankMap[opponent] ?? null)
-        : (ctx?.defRankMap?.[opponent] ?? ctx?.rankMap[opponent] ?? null))
-    : null;
+  // Use Elo rank exclusively — consistent with #N displayed in the UI
+  const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? null) : null;
 
   // Always show a multiplier — default 1.0x when no opponent/rank data
   const mult = relevantRank != null ? rankMult(relevantRank) : 1.0;
@@ -116,6 +110,14 @@ function PlayerInfoLines({
       ? `${school} · BYE`
       : school;
 
+  // Line 4: score breakdown
+  const base = seasonPts != null ? weeklyProj(seasonPts) : null;
+  const breakdownLine = ep.isActual
+    ? 'Actual box score'
+    : base != null
+      ? `${base.toFixed(1)} × ${mult.toFixed(2)} = ${ep.pts.toFixed(1)}`
+      : null;
+
   return (
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
@@ -123,6 +125,11 @@ function PlayerInfoLines({
       <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: diffColor, letterSpacing: .5 }}>
         {diffLabel} · {mult.toFixed(2)}x
       </span>
+      {breakdownLine && (
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: .3 }}>
+          {breakdownLine}
+        </div>
+      )}
     </div>
   );
 }
@@ -1156,6 +1163,7 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats }: { pick: any | null; 
       ctx={ctx}
       ep={ep}
       align={align}
+      seasonPts={pick.player_data?.projectedPoints ?? 0}
     />
   );
   const score = (
@@ -1566,6 +1574,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                   playerName={pick?.player_data?.playerName}
                   ctx={matchupCtx}
                   ep={ep}
+                  seasonPts={pick?.player_data?.projectedPoints ?? 0}
                 />
               ) : (
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
@@ -1641,6 +1650,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                     playerName={pick.player_data?.playerName}
                     ctx={matchupCtx}
                     ep={bep}
+                    seasonPts={pick.player_data?.projectedPoints ?? 0}
                                 />
                 </div>
 
@@ -1988,6 +1998,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                     playerName={pick.player_data?.playerName}
                     ctx={matchupCtx}
                     ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats)}
+                    seasonPts={pick.player_data?.projectedPoints ?? 0}
                                 />
                 ) : <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>}
               </div>
@@ -2020,6 +2031,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                       playerName={pick.player_data?.playerName}
                       ctx={matchupCtx}
                       ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats)}
+                      seasonPts={pick.player_data?.projectedPoints ?? 0}
                                     />
                   </div>
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts.toFixed(1)}</div>
