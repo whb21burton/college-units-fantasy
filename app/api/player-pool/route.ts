@@ -34,10 +34,10 @@ const P4_CONFS = Object.keys(CONF_MAP);
 
 // Fantasy scoring weights (full-season totals)
 const S = {
-  passYd: 0.04, passTd: 4, int: -2,
-  rushYd: 0.1,  rushTd: 6,
-  recYd:  0.1,  recTd:  6, rec: 0.5,
-  sack:   2,    tfl:    1, defInt: 3, fumRec: 2,
+  passYd: 0.05, passTd: 4,  int: -2,
+  rushYd: 0.05, rushTd: 6,
+  recYd:  0.05, recTd:  6,
+  sack:   1,    defInt: 2,  fumRec: 2, defTd: 6,
 };
 
 function uid(school: string, unitType: UnitType, player?: string) {
@@ -182,8 +182,7 @@ export async function GET() {
       if (!wrTeamTotals[wr.team]) wrTeamTotals[wr.team] = { pts: 0, conf };
       wrTeamTotals[wr.team].pts +=
         (wr.YDS || 0) * S.recYd +
-        (wr.TD  || 0) * S.recTd +
-        (wr.REC || 0) * S.rec;
+        (wr.TD  || 0) * S.recTd;
     }
     const wrData = Object.entries(wrTeamTotals)
       .map(([team, d]) => ({ team, conf: d.conf, pts: d.pts * (sosMultMap[team] ?? 1.0) }))
@@ -198,8 +197,7 @@ export async function GET() {
       if (!teTeamTotals[te.team]) teTeamTotals[te.team] = { pts: 0, conf };
       teTeamTotals[te.team].pts +=
         (te.YDS || 0) * S.recYd +
-        (te.TD  || 0) * S.recTd +
-        (te.REC || 0) * S.rec;
+        (te.TD  || 0) * S.recTd;
     }
     const teData = Object.entries(teTeamTotals)
       .map(([team, d]) => ({ team, conf: d.conf, pts: d.pts * (sosMultMap[team] ?? 1.0) }))
@@ -225,10 +223,10 @@ export async function GET() {
       if (!conf) continue;
       const ts = teamStat[team];
       const pts =
-        (ts.sacks              || 0) * S.sack   +
-        (ts.tacklesForLoss     || 0) * S.tfl    +
-        (ts.passesIntercepted  || 0) * S.defInt +
-        (ts.fumblesRecovered   || 0) * S.fumRec;
+        (ts.sacks             || 0) * S.sack   +
+        (ts.passesIntercepted || 0) * S.defInt +
+        (ts.fumblesRecovered  || 0) * S.fumRec +
+        (ts.interceptionTDs   || 0) * S.defTd;
       defData.push({ team, conf, pts: pts * (sosMultMap[team] ?? 1.0) });
     }
     defData.sort((a, b) => b.pts - a.pts);
