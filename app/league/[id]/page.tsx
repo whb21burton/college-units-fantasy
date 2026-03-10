@@ -111,7 +111,9 @@ function PlayerInfoLines({
       : school;
 
   // Line 4: score breakdown — same formula for both actuals and projections
-  const breakdownLine = `${ep.base.toFixed(1)} × ${mult.toFixed(2)} = ${ep.pts.toFixed(1)}`;
+  const breakdownLine = (!opponent)
+    ? 'No game this week'
+    : `${ep.base.toFixed(1)} × ${mult.toFixed(2)} = ${ep.pts.toFixed(1)}`;
 
   return (
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
@@ -142,6 +144,8 @@ function effectivePts(
   ctx: MatchupCtx, gs: GameStats
 ): { pts: number; isActual: boolean; base: number } {
   const opponent     = ctx?.opponentMap[school] ?? null;
+  // BYE week — no game, no points
+  if (ctx && !opponent) return { pts: 0, isActual: false, base: 0 };
   const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? 999) : 999;
   const mult         = rankMult(relevantRank);
 
