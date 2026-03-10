@@ -18,6 +18,58 @@ function weeklyProj(seasonPts: number): number {
   return seasonPts / SEASON_GAMES;
 }
 
+type MatchupCtx = {
+  opponentMap: Record<string, string>;
+  offPct: Record<string, number>;
+  defPct: Record<string, number>;
+} | null;
+
+function offMatchupMult(opponentDefPct: number): number {
+  if (opponentDefPct >= 85) return 0.70;
+  if (opponentDefPct >= 70) return 0.83;
+  if (opponentDefPct >= 55) return 0.93;
+  if (opponentDefPct >= 40) return 1.00;
+  if (opponentDefPct >= 25) return 1.10;
+  if (opponentDefPct >= 10) return 1.20;
+  return 1.30;
+}
+function defMatchupMult(opponentOffPct: number): number {
+  if (opponentOffPct >= 85) return 0.70;
+  if (opponentOffPct >= 70) return 0.83;
+  if (opponentOffPct >= 55) return 0.93;
+  if (opponentOffPct >= 40) return 1.00;
+  if (opponentOffPct >= 25) return 1.10;
+  if (opponentOffPct >= 10) return 1.20;
+  return 1.30;
+}
+
+/** Returns adjusted weekly projection + opponent info for a pick or pool unit. */
+function matchupProj(seasonPts: number, school: string, unitType: string, ctx: MatchupCtx): { pts: number; mult: number; opponent: string | null } {
+  const base = weeklyProj(seasonPts);
+  if (!ctx) return { pts: base, mult: 1.0, opponent: null };
+  const opponent = ctx.opponentMap[school] ?? null;
+  if (!opponent) return { pts: base, mult: 1.0, opponent: null };
+  const mult = unitType === 'DEF'
+    ? defMatchupMult(ctx.offPct[opponent] ?? 50)
+    : offMatchupMult(ctx.defPct[opponent] ?? 50);
+  return { pts: base * mult, mult, opponent };
+}
+
+function MatchupBadge({ mult, opponent }: { mult: number; opponent: string | null }) {
+  if (!opponent) return null;
+  let label: string; let color: string;
+  if (mult >= 1.20)      { label = 'Easy';  color = '#2ecc71'; }
+  else if (mult >= 1.08) { label = 'Good';  color = '#a3c65e'; }
+  else if (mult >= 0.93) { label = 'Avg';   color = '#4a5d7a'; }
+  else if (mult >= 0.80) { label = 'Hard';  color = '#f39c12'; }
+  else                   { label = 'Tough'; color = '#e74c3c'; }
+  return (
+    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color, letterSpacing: .5 }}>
+      vs {opponent.length > 10 ? opponent.split(' ').pop() : opponent} · {label}
+    </span>
+  );
+}
+
 type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'scores';
 
 const TABS: { key: Tab; label: string }[] = [
@@ -1002,7 +1054,7 @@ function assignRoster(picks: any[]): { starters: (any | null)[]; bench: any[] } 
   return { starters, bench };
 }
 
-function MatchupPlayerCell({ pick, align }: { pick: any | null; align: 'left' | 'right' }) {
+function MatchupPlayerCell({ pick, align, ctx }: { pick: any | null; align: 'left' | 'right'; ctx: MatchupCtx }) {
   const isRight = align === 'right';
   if (!pick) return (
     <div style={{
@@ -1017,14 +1069,15 @@ function MatchupPlayerCell({ pick, align }: { pick: any | null; align: 'left' | 
       <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
     </div>
   );
-  const pts  = weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1);
+  const mp   = matchupProj(pick.player_data?.projectedPoints ?? 0, pick.player_data?.school, pick.player_data?.unitType, ctx);
+  const pts  = mp.pts.toFixed(1);
   const name = pick.player_data?.playerName || pick.player_data?.school;
   const sub  = pick.player_data?.playerName ? pick.player_data.school : pick.player_data?.conference;
-  const tier = pick.player_data?.tier;
   const info = (
     <div style={{ minWidth: 0, textAlign: isRight ? 'right' : 'left' }}>
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{sub}{tier ? ' · ' + tier : ''}</div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{sub}</div>
+      <MatchupBadge mult={mp.mult} opponent={mp.opponent} />
     </div>
   );
   const score = (
@@ -1048,22 +1101,22 @@ function MatchupPlayerCell({ pick, align }: { pick: any | null; align: 'left' | 
 }
 
 function MatchupTab({ league, userId }: { league: any; userId: string | null }) {
-  const [picks,   setPicks]   = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [picks,      setPicks]      = useState<any[]>([]);
+  const [week,       setWeek]       = useState(1);
+  const [matchupCtx, setMatchupCtx] = useState<MatchupCtx>(null);
+  const [loading,    setLoading]    = useState(true);
 
   useEffect(() => {
     if (!league?.id) return;
-    async function load() {
-      const { data } = await supabase
-        .from('draft_picks')
-        .select('*')
-        .eq('league_id', league.id)
-        .order('pick_number', { ascending: true });
-      setPicks(data || []);
-      setLoading(false);
-    }
-    load();
+    supabase.from('draft_picks').select('*').eq('league_id', league.id)
+      .order('pick_number', { ascending: true })
+      .then(({ data }) => { setPicks(data || []); setLoading(false); });
   }, [league?.id]);
+
+  useEffect(() => {
+    fetch(`/api/matchup-context?week=${week}&season=2025`)
+      .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
+  }, [week]);
 
   const draftOrder: any[] = league?.settings?.draft_order || [];
   const numTeams = draftOrder.length;
@@ -1080,9 +1133,9 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   const myRoster  = assignRoster(myPicksRaw);
   const oppRoster = assignRoster(oppPicksRaw);
 
-  // Total = starters only
-  const myTotal  = myRoster.starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
-  const oppTotal = oppRoster.starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
+  // Total = starters only, matchup-adjusted
+  const myTotal  = myRoster.starters.reduce((s, p) => s + matchupProj(p?.player_data?.projectedPoints ?? 0, p?.player_data?.school, p?.player_data?.unitType, matchupCtx).pts, 0);
+  const oppTotal = oppRoster.starters.reduce((s, p) => s + matchupProj(p?.player_data?.projectedPoints ?? 0, p?.player_data?.school, p?.player_data?.unitType, matchupCtx).pts, 0);
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
@@ -1104,9 +1157,13 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   return (
     <div style={{ maxWidth: 820 }}>
 
-      {/* Week label */}
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.muted, textTransform: 'uppercase', marginBottom: 16, textAlign: 'center' }}>
-        Week 1 · Projected
+      {/* Week selector + label */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 16 }}>
+        <button onClick={() => setWeek(w => Math.max(1, w - 1))} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>‹</button>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.muted, textTransform: 'uppercase' }}>
+          Week {week} · Projected{matchupCtx ? ' (matchup-adjusted)' : ''}
+        </div>
+        <button onClick={() => setWeek(w => Math.min(15, w + 1))} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>›</button>
       </div>
 
       {/* Score header card */}
@@ -1141,11 +1198,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
         const color = POS_COLORS[label] || C.muted;
         return (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
-            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" />
+            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" ctx={matchupCtx} />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: color + '22', border: '1px solid ' + color + '44', borderLeft: 'none', borderRight: 'none' }}>
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color, fontWeight: 700 }}>{label}</span>
             </div>
-            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" />
+            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" ctx={matchupCtx} />
           </div>
         );
       })}
@@ -1160,11 +1217,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
           </div>
           {Array.from({ length: benchLen }).map((_, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
-              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" />
+              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" ctx={matchupCtx} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.muted + '22', border: '1px solid ' + C.muted + '44', borderLeft: 'none', borderRight: 'none' }}>
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, fontWeight: 700 }}>BN</span>
               </div>
-              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" />
+              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" ctx={matchupCtx} />
             </div>
           ))}
         </>
@@ -1187,6 +1244,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const [myPicks,       setMyPicks]       = useState<any[]>([]);
   const [lineups,       setLineups]       = useState<Record<string, (string | null)[]>>({});
   const [week,          setWeek]          = useState(1);
+  const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [memberId,      setMemberId]      = useState<string | null>(null);
@@ -1196,6 +1254,11 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
 
   const TOTAL_WEEKS = 13;
   const isCommissioner = league?.commissioner_id === userId;
+
+  useEffect(() => {
+    fetch(`/api/matchup-context?week=${week}&season=2025`)
+      .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
+  }, [week]);
 
   useEffect(() => {
     if (!league?.id || !userId) return;
@@ -1277,7 +1340,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
     bench    = r.bench;
   }
 
-  const starterTotal = starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
+  const starterTotal = starters.reduce((s, p) => s + matchupProj(p?.player_data?.projectedPoints ?? 0, p?.player_data?.school, p?.player_data?.unitType, matchupCtx).pts, 0);
 
   async function doSwap(starterIdx: number) {
     if (!selectedBench) return;
@@ -1379,7 +1442,8 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         const pick    = starters[i];
         const color   = POS_COLORS[label] || C.muted;
         const isTarget = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
-        const pts     = weeklyProj(pick?.player_data?.projectedPoints ?? 0).toFixed(1);
+        const mp      = matchupProj(pick?.player_data?.projectedPoints ?? 0, pick?.player_data?.school, pick?.player_data?.unitType, matchupCtx);
+        const pts     = mp.pts.toFixed(1);
         const name    = pick?.player_data?.playerName || pick?.player_data?.school;
         const sub     = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;
         const tier    = pick?.player_data?.tier;
@@ -1412,6 +1476,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                 <>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{sub}{tier ? ' · ' + tier : ''}</div>
+                  <MatchupBadge mult={mp.mult} opponent={mp.opponent} />
                 </>
               ) : (
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
@@ -1446,7 +1511,8 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
 
           {bench.map((pick: any) => {
             const isSelected = selectedBench?.id === pick.id;
-            const pts  = weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1);
+            const bmp  = matchupProj(pick.player_data?.projectedPoints ?? 0, pick.player_data?.school, pick.player_data?.unitType, matchupCtx);
+            const pts  = bmp.pts.toFixed(1);
             const name = pick.player_data?.playerName || pick.player_data?.school;
             const sub  = pick.player_data?.playerName ? pick.player_data.school : pick.player_data?.conference;
             const tier = pick.player_data?.tier;
@@ -1531,6 +1597,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   const [selectedTeam,  setSelectedTeam]  = useState<any>(null);
   const [selectedPlayer,setSelectedPlayer]= useState<any>(null);
   const [week,          setWeek]          = useState(1);
+  const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
   const [allPicks,      setAllPicks]      = useState<any[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [tradeOffer,    setTradeOffer]    = useState<Set<string>>(new Set());
@@ -1544,6 +1611,11 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   const isCommissioner     = league?.commissioner_id === userId;
   const myEntry            = draftOrder.find((t: any) => t.userId === userId);
   const mySlotIdx          = myEntry ? myEntry.slot - 1 : -1;
+
+  useEffect(() => {
+    fetch(`/api/matchup-context?week=${week}&season=2025`)
+      .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
+  }, [week]);
 
   useEffect(() => {
     if (!league?.id || !userId) return;
@@ -1653,8 +1725,8 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
           Complete the draft first to see matchups.
         </div>
       ) : matchups.map(([teamA, teamB], i) => {
-        const totA = assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
-        const totB = assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
+        const totA = assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + matchupProj(p?.player_data?.projectedPoints ?? 0, p?.player_data?.school, p?.player_data?.unitType, matchupCtx).pts, 0);
+        const totB = assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + matchupProj(p?.player_data?.projectedPoints ?? 0, p?.player_data?.school, p?.player_data?.unitType, matchupCtx).pts, 0);
         const isMeA = teamA.userId === userId;
         const isMeB = teamB.userId === userId;
         return (
@@ -1743,7 +1815,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   if (view === 'roster' && selectedTeam) {
     const teamPicks  = getTeamPicks(selectedTeam);
     const roster     = assignRoster(teamPicks);
-    const starterPts = roster.starters.reduce((s, p) => s + weeklyProj(p?.player_data?.projectedPoints ?? 0), 0);
+    const starterPts = roster.starters.reduce((s, p) => s + matchupProj(p?.player_data?.projectedPoints ?? 0, p?.player_data?.school, p?.player_data?.unitType, matchupCtx).pts, 0);
     const isMyTeam   = selectedTeam.userId === userId;
     const canTrade   = !isMyTeam && selectedTeam.type === 'human';
 
@@ -1784,7 +1856,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
             <div style={{ display: 'flex', gap: 20 }}>
               <div>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>Projected</div>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 24, color: C.gold }}>{weeklyProj(selectedPlayer.player_data?.projectedPoints ?? 0).toFixed(1)}</div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 24, color: C.gold }}>{matchupProj(selectedPlayer.player_data?.projectedPoints ?? 0, selectedPlayer.player_data?.school, selectedPlayer.player_data?.unitType, matchupCtx).pts.toFixed(1)}</div>
               </div>
               {selectedPlayer.player_data?.adp != null && (
                 <div>
@@ -1818,7 +1890,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                   </>
                 ) : <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>}
               </div>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: pick ? C.gold : C.surf3, flexShrink: 0 }}>{pick ? weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1) : '—'}</div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: pick ? C.gold : C.surf3, flexShrink: 0 }}>{pick ? matchupProj(pick.player_data?.projectedPoints ?? 0, pick.player_data?.school, pick.player_data?.unitType, matchupCtx).pts.toFixed(1) : '—'}</div>
             </div>
           );
         })}
@@ -1844,7 +1916,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pick.player_data?.playerName || pick.player_data?.school}</div>
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{pick.player_data?.school}</div>
                   </div>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1)}</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{matchupProj(pick.player_data?.projectedPoints ?? 0, pick.player_data?.school, pick.player_data?.unitType, matchupCtx).pts.toFixed(1)}</div>
                 </div>
               );
             })}
