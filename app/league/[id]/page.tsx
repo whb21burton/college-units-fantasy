@@ -93,10 +93,10 @@ function PlayerInfoLines({
   const schoolRank = ctx?.rankMap[school]     ?? null;
   const oppRank    = opponent ? (ctx?.rankMap[opponent] ?? null) : null;
 
-  // Use Elo rank exclusively — consistent with #N displayed in the UI
-  const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? null) : null;
+  // Use Elo rank — unranked opponents (FCS/non-FBS) treated as rank 999 → 0.5x
+  const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? 999) : null;
 
-  // Always show a multiplier — default 1.0x when no opponent/rank data
+  // No opponent (BYE) = 1.0x display; has opponent = use rank
   const mult = relevantRank != null ? rankMult(relevantRank) : 1.0;
   const { label: diffLabel, color: diffColor } = multLabel(mult);
 
