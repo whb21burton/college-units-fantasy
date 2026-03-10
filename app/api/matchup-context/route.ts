@@ -38,15 +38,43 @@ export async function GET(req: Request) {
     const rankMap: Record<string, number> = {};
     eloSorted.forEach((t, idx) => { rankMap[t.team] = idx + 1; });
 
-    // ── SP+ defensive rank (1 = best defense) ─────────────────
-    // Lower SP+ defensive rank = harder for opponents to score
+    // ── SP+ rank maps (1 = best offense/defense) ──────────────
+    // Strategy:
+    //   1. Try pre-computed .rank fields from SP+ response
+    //   2. If empty, derive ranks by sorting on .rating values
+    //      (higher SP+ rating = better unit = rank 1)
+    //   3. If SP+ has no data at all, fall back to Elo rankMap
+    const spList: any[] = spRes as any[];
     const defRankMap: Record<string, number> = {};
     const offRankMap: Record<string, number> = {};
-    for (const t of spRes as any[]) {
-      if (t.team) {
-        if (t.defense?.rank != null) defRankMap[t.team] = t.defense.rank;
-        if (t.offense?.rank != null) offRankMap[t.team] = t.offense.rank;
-      }
+
+    // Try pre-computed rank fields first
+    for (const t of spList) {
+      if (!t.team) continue;
+      if (t.defense?.rank  != null) defRankMap[t.team] = t.defense.rank;
+      if (t.offense?.rank  != null) offRankMap[t.team] = t.offense.rank;
+    }
+
+    // Fall back: derive from rating values if ranks weren't populated
+    if (Object.keys(defRankMap).length === 0) {
+      [...spList]
+        .filter(t => t.team && t.defense?.rating != null)
+        .sort((a, b) => (b.defense.rating ?? 0) - (a.defense.rating ?? 0))
+        .forEach((t, i) => { defRankMap[t.team] = i + 1; });
+    }
+    if (Object.keys(offRankMap).length === 0) {
+      [...spList]
+        .filter(t => t.team && t.offense?.rating != null)
+        .sort((a, b) => (b.offense.rating ?? 0) - (a.offense.rating ?? 0))
+        .forEach((t, i) => { offRankMap[t.team] = i + 1; });
+    }
+
+    // Final fallback: use Elo rank for both if SP+ returned nothing
+    if (Object.keys(defRankMap).length === 0) {
+      Object.assign(defRankMap, rankMap);
+    }
+    if (Object.keys(offRankMap).length === 0) {
+      Object.assign(offRankMap, rankMap);
     }
 
     // ── Opponent map from this week's regular-season schedule ──

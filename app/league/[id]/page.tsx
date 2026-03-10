@@ -61,16 +61,14 @@ function matchupProj(
   const opponent = ctx?.opponentMap[school] ?? null;
   if (!opponent || !ctx) return { pts: base, mult: 1.0, opponent };
 
-  let mult = 1.0;
+  // Use SP+ specific rank maps; fall back to Elo rank if SP+ map is empty
+  let relevantRank: number;
   if (unitType === 'DEF') {
-    // DEF faces opponent's offense — use opponent's offensive rank
-    const offRank = ctx.offRankMap[opponent] ?? 999;
-    mult = rankMult(offRank);
+    relevantRank = ctx.offRankMap?.[opponent] ?? ctx.rankMap[opponent] ?? 999;
   } else {
-    // All offensive units face opponent's defense — use opponent's defensive rank
-    const defRank = ctx.defRankMap[opponent] ?? 999;
-    mult = rankMult(defRank);
+    relevantRank = ctx.defRankMap?.[opponent] ?? ctx.rankMap[opponent] ?? 999;
   }
+  const mult = rankMult(relevantRank);
   return { pts: base * mult, mult, opponent };
 }
 
@@ -97,10 +95,11 @@ function PlayerInfoLines({
 
   // ODR: opponent's defensive rank (for QB/RB/WR/TE/K)
   // OOR: opponent's offensive rank (for DEF)
+  // Fall back to Elo rank if SP+ maps are empty
   const relevantRank = opponent
     ? (unitType === 'DEF'
-        ? (ctx?.offRankMap?.[opponent] ?? null)
-        : (ctx?.defRankMap?.[opponent] ?? null))
+        ? (ctx?.offRankMap?.[opponent] ?? ctx?.rankMap[opponent] ?? null)
+        : (ctx?.defRankMap?.[opponent] ?? ctx?.rankMap[opponent] ?? null))
     : null;
 
   // Always show a multiplier — default 1.0x when no opponent/rank data
