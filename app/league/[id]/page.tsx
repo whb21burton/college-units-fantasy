@@ -80,10 +80,11 @@ function MatchupBadge({ adder, opponent }: { adder: number; opponent: string | n
 
 /** Renders the 3-line player info block used in every roster/matchup row. */
 function PlayerInfoLines({
-  school, unitType, playerName, ctx, ep, align,
+  school, unitType, playerName, ctx, ep, sosMult, align,
 }: {
   school: string; unitType: string; playerName?: string;
   ctx: MatchupCtx; ep: { pts: number; isActual: boolean };
+  sosMult?: number;
   align?: 'left' | 'right';
 }) {
   const opponent   = ctx?.opponentMap[school] ?? null;
@@ -101,26 +102,22 @@ function PlayerInfoLines({
     else                     { diffLabel = 'Tough'; diffColor = '#e74c3c'; }
   }
 
-  const name        = playerName || school;
+  // Team units show "School UnitType Unit"; QB/K show player name
+  const name        = playerName ? playerName : `${school} ${unitType} Unit`;
   const matchupLine = opponent
     ? `${school}${schoolRank ? ` (#${schoolRank})` : ''} vs ${opponent}${oppRank ? ` (#${oppRank})` : ''}`
     : school;
 
-  const adderStr = adder != null
-    ? `${adder >= 0 ? '+' : ''}${adder.toFixed(2)}`
-    : null;
+  // Combined multiplier = sosMultiplier + orAdder (what gets applied to base pts)
+  const combinedMult = adder != null ? ((sosMult ?? 1.0) + adder) : null;
 
   return (
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{matchupLine}</div>
-      {ep.isActual ? (
-        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green, letterSpacing: .5 }}>
-          ACT
-        </span>
-      ) : adder != null ? (
-        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: diffColor, letterSpacing: .5 }}>
-          {diffLabel} · {adderStr}
+      {combinedMult != null ? (
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: ep.isActual ? C.green : diffColor, letterSpacing: .5 }}>
+          {ep.isActual ? 'Final' : diffLabel} · {combinedMult.toFixed(2)}x
         </span>
       ) : null}
     </div>
@@ -1155,6 +1152,7 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats }: { pick: any | null; 
       playerName={pick.player_data?.playerName}
       ctx={ctx}
       ep={ep}
+      sosMult={pick.player_data?.sosMultiplier ?? 1.0}
       align={align}
     />
   );
@@ -1566,6 +1564,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                   playerName={pick?.player_data?.playerName}
                   ctx={matchupCtx}
                   ep={ep}
+                  sosMult={pick?.player_data?.sosMultiplier ?? 1.0}
                 />
               ) : (
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
@@ -1641,6 +1640,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                     playerName={pick.player_data?.playerName}
                     ctx={matchupCtx}
                     ep={bep}
+                    sosMult={pick.player_data?.sosMultiplier ?? 1.0}
                   />
                 </div>
 
@@ -1988,6 +1988,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                     playerName={pick.player_data?.playerName}
                     ctx={matchupCtx}
                     ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick.player_data?.sosMultiplier ?? 1.0)}
+                    sosMult={pick.player_data?.sosMultiplier ?? 1.0}
                   />
                 ) : <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>}
               </div>
@@ -2020,6 +2021,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                       playerName={pick.player_data?.playerName}
                       ctx={matchupCtx}
                       ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick.player_data?.sosMultiplier ?? 1.0)}
+                      sosMult={pick.player_data?.sosMultiplier ?? 1.0}
                     />
                   </div>
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick.player_data?.sosMultiplier ?? 1.0).pts.toFixed(1)}</div>
