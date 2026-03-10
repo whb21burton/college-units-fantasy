@@ -25,7 +25,7 @@ function percentileRank(sorted: number[], target: number): number {
 }
 
 /** Multiplier for offensive units based on opponent's defensive strength. */
-export function offMatchupMult(opponentDefPct: number): number {
+function offMatchupMult(opponentDefPct: number): number {
   if (opponentDefPct >= 85) return 0.70;
   if (opponentDefPct >= 70) return 0.83;
   if (opponentDefPct >= 55) return 0.93;
@@ -36,7 +36,7 @@ export function offMatchupMult(opponentDefPct: number): number {
 }
 
 /** Multiplier for DEF units based on opponent's offensive strength. */
-export function defMatchupMult(opponentOffPct: number): number {
+function defMatchupMult(opponentOffPct: number): number {
   if (opponentOffPct >= 85) return 0.70;
   if (opponentOffPct >= 70) return 0.83;
   if (opponentOffPct >= 55) return 0.93;
