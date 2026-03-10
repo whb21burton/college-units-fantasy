@@ -85,7 +85,7 @@ function PlayerInfoLines({
   school, unitType, playerName, ctx, ep, align, seasonPts,
 }: {
   school: string; unitType: string; playerName?: string;
-  ctx: MatchupCtx; ep: { pts: number; isActual: boolean };
+  ctx: MatchupCtx; ep: { pts: number; isActual: boolean; base: number };
   align?: 'left' | 'right';
   seasonPts?: number;
 }) {
@@ -110,13 +110,8 @@ function PlayerInfoLines({
       ? `${school} · BYE`
       : school;
 
-  // Line 4: score breakdown
-  const base = seasonPts != null ? weeklyProj(seasonPts) : null;
-  const breakdownLine = ep.isActual
-    ? 'Actual box score'
-    : base != null
-      ? `${base.toFixed(1)} × ${mult.toFixed(2)} = ${ep.pts.toFixed(1)}`
-      : null;
+  // Line 4: score breakdown — same formula for both actuals and projections
+  const breakdownLine = `${ep.base.toFixed(1)} × ${mult.toFixed(2)} = ${ep.pts.toFixed(1)}`;
 
   return (
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
@@ -125,11 +120,9 @@ function PlayerInfoLines({
       <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: diffColor, letterSpacing: .5 }}>
         {diffLabel} · {mult.toFixed(2)}x
       </span>
-      {breakdownLine && (
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: .3 }}>
-          {breakdownLine}
-        </div>
-      )}
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: .3 }}>
+        {breakdownLine}
+      </div>
     </div>
   );
 }
@@ -140,18 +133,24 @@ type GameStats = {
 } | null;
 
 /**
- * Returns actual pts if the school's game is complete this week,
- * otherwise returns the ODR/OOR-adjusted weekly projection.
+ * Returns pts for the unit this week.
+ * For completed games: base = raw box score, pts = base × multiplier.
+ * For future games:    base = seasonPts/12,  pts = base × multiplier.
  */
 function effectivePts(
   school: string, unitType: string, seasonPts: number,
   ctx: MatchupCtx, gs: GameStats
-): { pts: number; isActual: boolean } {
+): { pts: number; isActual: boolean; base: number } {
+  const opponent     = ctx?.opponentMap[school] ?? null;
+  const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? 999) : 999;
+  const mult         = rankMult(relevantRank);
+
   if (gs?.completedSchools.includes(school)) {
-    const actual = gs.schoolPoints[school]?.[unitType];
-    if (actual != null) return { pts: actual, isActual: true };
+    const rawActual = gs.schoolPoints[school]?.[unitType];
+    if (rawActual != null) return { pts: rawActual * mult, isActual: true, base: rawActual };
   }
-  return { pts: matchupProj(seasonPts, school, unitType, ctx).pts, isActual: false };
+  const base = weeklyProj(seasonPts);
+  return { pts: base * mult, isActual: false, base };
 }
 
 type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'scores';
