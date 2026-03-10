@@ -74,12 +74,13 @@ function matchupProj(
   return { pts: base * mult, mult, opponent };
 }
 
+/** Higher multiplier = harder opponent (rank 1 defense/offense is toughest). */
 function multLabel(mult: number): { label: string; color: string } {
-  if (mult >= 1.25)      return { label: 'Easy',  color: '#2ecc71' };
-  if (mult >= 1.15)      return { label: 'Good',  color: '#a3c65e' };
-  if (mult >= 0.95)      return { label: 'Avg',   color: '#4a5d7a' };
-  if (mult >= 0.85)      return { label: 'Hard',  color: '#f39c12' };
-  return                        { label: 'Tough', color: '#e74c3c' };
+  if (mult >= 1.25)      return { label: 'Toughest', color: '#e74c3c' };
+  if (mult >= 1.15)      return { label: 'Hard',     color: '#f39c12' };
+  if (mult >= 0.95)      return { label: 'Avg',      color: '#4a5d7a' };
+  if (mult >= 0.85)      return { label: 'Good',     color: '#a3c65e' };
+  return                        { label: 'Easy',     color: '#2ecc71' };
 }
 
 /** Renders the 3-line player info block used in every roster/matchup row. */
@@ -98,28 +99,31 @@ function PlayerInfoLines({
   // OOR: opponent's offensive rank (for DEF)
   const relevantRank = opponent
     ? (unitType === 'DEF'
-        ? (ctx?.offRankMap[opponent] ?? null)
-        : (ctx?.defRankMap[opponent] ?? null))
+        ? (ctx?.offRankMap?.[opponent] ?? null)
+        : (ctx?.defRankMap?.[opponent] ?? null))
     : null;
 
-  const mult = relevantRank != null ? rankMult(relevantRank) : null;
-  const { label: diffLabel, color: diffColor } = mult != null ? multLabel(mult) : { label: '', color: C.muted };
+  // Always show a multiplier — default 1.0x when no opponent/rank data
+  const mult = relevantRank != null ? rankMult(relevantRank) : 1.0;
+  const { label: diffLabel, color: diffColor } = multLabel(mult);
 
   // Team units show "School UnitType Unit"; QB/K show player name
-  const name        = playerName ? playerName : `${school} ${unitType} Unit`;
+  const name = playerName ? playerName : `${school} ${unitType} Unit`;
+
+  // Line 2: show matchup if opponent found, BYE if no game this week, or just school
   const matchupLine = opponent
     ? `${school}${schoolRank ? ` (#${schoolRank})` : ''} vs ${opponent}${oppRank ? ` (#${oppRank})` : ''}`
-    : school;
+    : ctx && !opponent
+      ? `${school} · BYE`
+      : school;
 
   return (
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{matchupLine}</div>
-      {mult != null ? (
-        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: diffColor, letterSpacing: .5 }}>
-          {diffLabel} · {mult.toFixed(2)}x
-        </span>
-      ) : null}
+      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: diffColor, letterSpacing: .5 }}>
+        {diffLabel} · {mult.toFixed(2)}x
+      </span>
     </div>
   );
 }
