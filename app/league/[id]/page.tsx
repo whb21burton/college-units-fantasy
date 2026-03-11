@@ -888,12 +888,17 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     })
     .sort((a, b) => a.adp - b.adp);
 
+  const ROSTER_MIN    = 9;
+  const emptySlots    = Math.max(0, ROSTER_MIN - myPicks.length);
+  const canAddNoDrop  = emptySlots > 0;
+
   async function confirmAdd() {
-    if (!adding || !dropping || !userId) return;
+    if (!adding || !userId) return;
+    if (!dropping && !canAddNoDrop) return;
     setBusy(true);
-    // Remove dropped pick
-    await supabase.from('draft_picks').delete().eq('id', dropping.id);
-    // Insert new pick with next pick_number (just use a high number so it doesn't conflict)
+    if (dropping) {
+      await supabase.from('draft_picks').delete().eq('id', dropping.id);
+    }
     const maxPick = allPicks.reduce((m: number, p: any) => Math.max(m, p.pick_number ?? 0), 0);
     await supabase.from('draft_picks').insert({
       league_id: league.id,
@@ -901,7 +906,6 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
       pick_number: maxPick + 1,
       player_data: adding,
     });
-    // Refresh
     const { data } = await supabase.from('draft_picks').select('*').eq('league_id', league.id);
     const all = data || [];
     setAllPicks(all);
@@ -909,7 +913,8 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     setAdding(null);
     setDropping(null);
     setBusy(false);
-    setToast(`Added ${adding.playerName || adding.school} ${adding.unitType}, dropped ${dropping.player_data?.playerName || dropping.player_data?.school} ${dropping.player_data?.unitType}`);
+    const dropMsg = dropping ? `, dropped ${dropping.player_data?.playerName || dropping.player_data?.school}` : '';
+    setToast(`Added ${adding.playerName || adding.school} ${adding.unitType}${dropMsg}`);
     setTimeout(() => setToast(''), 4000);
   }
 
@@ -931,53 +936,93 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     );
   }
 
-  /* ── Drop modal ── */
+  /* ── Add Player screen ── */
   if (adding) {
     const faName = adding.playerName || adding.school;
+    const addPosColor = UNIT_COLORS[adding.unitType] ?? C.sub;
+    const canConfirm  = dropping != null || canAddNoDrop;
+    const sorted = myPicks.slice().sort((a: any, b: any) => {
+      const order = ['QB','RB','WR','TE','DEF','K'];
+      return order.indexOf(a.player_data?.unitType) - order.indexOf(b.player_data?.unitType);
+    });
     return (
       <div style={{ maxWidth: 500, margin: '0 auto', paddingTop: 8 }}>
-        <button onClick={() => { setAdding(null); setDropping(null); }} style={{ background: 'none', border: 'none', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, cursor: 'pointer', marginBottom: 16, letterSpacing: 1 }}>
+        {/* Header */}
+        <button onClick={() => { setAdding(null); setDropping(null); }} style={{ background: 'none', border: 'none', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, cursor: 'pointer', marginBottom: 12, letterSpacing: 1, padding: 0 }}>
           ← BACK
         </button>
-        {/* Adding banner */}
-        <div style={{ background: C.surf, border: '1px solid ' + C.green, borderRadius: 10, padding: '14px 18px', marginBottom: 20 }}>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, letterSpacing: 1, marginBottom: 4 }}>ADDING</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 15, color: C.text }}>{faName}</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>{adding.unitType} · {adding.school} · {weeklyProj(adding.projectedPoints).toFixed(1)} pts/wk</div>
-            </div>
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.green }}>{weeklyProj(adding.projectedPoints).toFixed(1)}</div>
-          </div>
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.text, letterSpacing: 1, marginBottom: 2 }}>Add Player</div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, letterSpacing: .5, marginBottom: 18 }}>
+          Add <span style={{ color: C.text }}>{faName}</span> to your roster
         </div>
-        {/* Pick a player to drop */}
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, letterSpacing: 1, marginBottom: 10 }}>SELECT A PLAYER TO DROP</div>
-        {myPicks.length === 0 && (
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted, textAlign: 'center', padding: 20 }}>You have no players on your roster yet.</div>
+
+        {/* Player being added */}
+        <div style={{ background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ background: addPosColor, color: '#fff', fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, borderRadius: 4, padding: '3px 7px', minWidth: 36, textAlign: 'center' }}>
+            {adding.unitType}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text }}>{faName}</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{adding.school}</div>
+          </div>
+          <div style={{ background: C.surf3, color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, borderRadius: 4, padding: '3px 7px' }}>BN</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.green, minWidth: 40, textAlign: 'right' }}>{weeklyProj(adding.projectedPoints ?? 0).toFixed(1)}</div>
+        </div>
+
+        {/* Empty slot warning */}
+        {canAddNoDrop && (
+          <div style={{ background: '#2d2200', border: '1px solid #a07800', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: '#f5c542', letterSpacing: .3 }}>
+            You have {emptySlots} empty slot{emptySlots !== 1 ? 's' : ''}. You can add this player without dropping anyone.
+          </div>
         )}
-        {myPicks
-          .slice()
-          .sort((a: any, b: any) => (a.player_data?.adp ?? 999) - (b.player_data?.adp ?? 999))
-          .map((pick: any) => {
-          const pd = pick.player_data;
-          const name = pd?.playerName || pd?.school;
-          const isSelected = dropping?.id === pick.id;
-          return (
-            <div key={pick.id} onClick={() => setDropping(isSelected ? null : pick)}
-              style={{ background: isSelected ? '#3d1515' : C.surf, border: '1px solid ' + (isSelected ? C.red : C.surf3), borderRadius: 8, padding: '12px 16px', marginBottom: 8, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'border-color .15s' }}>
-              <div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text }}>{name}</div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{pd?.unitType} · {pd?.school} · {weeklyProj(pd?.projectedPoints ?? 0).toFixed(1)} pts/wk</div>
-              </div>
-              {isSelected && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red, letterSpacing: 1 }}>DROP</div>}
+
+        {/* Roster table */}
+        {myPicks.length > 0 && (
+          <>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 6 }}>
+              {canAddNoDrop ? 'YOUR ROSTER (optional: select a player to drop)' : 'SELECT A PLAYER TO DROP'}
             </div>
-          );
-        })}
-        {dropping && (
-          <button onClick={confirmAdd} disabled={busy} style={{ marginTop: 16, width: '100%', padding: '12px 0', background: C.green, border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 1, color: '#fff', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? .6 : 1 }}>
-            {busy ? 'PROCESSING…' : `ADD ${(adding.playerName || adding.school).toUpperCase()} / DROP ${(dropping.player_data?.playerName || dropping.player_data?.school || '').toUpperCase()}`}
-          </button>
+            {/* Column headers */}
+            <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr 52px 36px', gap: 8, padding: '4px 14px', marginBottom: 4 }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>POS</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>PLAYER</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>PTS</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>BYE</div>
+            </div>
+            {sorted.map((pick: any) => {
+              const pd = pick.player_data;
+              const name = pd?.playerName || pd?.school;
+              const posColor = UNIT_COLORS[pd?.unitType] ?? C.sub;
+              const isSelected = dropping?.id === pick.id;
+              return (
+                <div key={pick.id} onClick={() => setDropping(isSelected ? null : pick)}
+                  style={{ display: 'grid', gridTemplateColumns: '48px 1fr 52px 36px', gap: 8, alignItems: 'center', padding: '10px 14px', marginBottom: 4, background: isSelected ? '#2a0d0d' : C.surf, border: '1px solid ' + (isSelected ? C.red : C.surf3), borderRadius: 8, cursor: 'pointer', transition: 'border-color .15s' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ background: posColor, color: '#fff', fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, borderRadius: 4, padding: '2px 6px', textAlign: 'center' }}>
+                      {pd?.unitType}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: isSelected ? C.red : C.text }}>{name}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{pd?.school}</div>
+                  </div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.sub, textAlign: 'right' }}>
+                    {weeklyProj(pd?.projectedPoints ?? 0).toFixed(1)}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isSelected ? C.red : C.muted, textAlign: 'right', letterSpacing: .5 }}>
+                    {isSelected ? 'DROP' : '—'}
+                  </div>
+                </div>
+              );
+            })}
+          </>
         )}
+
+        {/* Confirm button */}
+        <button onClick={confirmAdd} disabled={!canConfirm || busy}
+          style={{ marginTop: 20, width: '100%', padding: '14px 0', background: canConfirm ? C.green : C.surf3, border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 1.5, color: canConfirm ? '#fff' : C.muted, cursor: canConfirm && !busy ? 'pointer' : 'not-allowed', opacity: busy ? .6 : 1, transition: 'background .2s' }}>
+          {busy ? 'PROCESSING…' : 'ADD PLAYER'}
+        </button>
       </div>
     );
   }
