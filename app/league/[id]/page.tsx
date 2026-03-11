@@ -966,28 +966,54 @@ function LeagueRanksTab({
 }: {
   league: any; members: any[]; userId: string | null;
 }) {
-  const [allScores, setAllScores] = useState<Record<string, Record<number, number>>>({});
-  const [loading,   setLoading]   = useState(true);
+  const [allScores,    setAllScores]    = useState<Record<string, Record<number, number>>>({});
+  const [loading,      setLoading]      = useState(true);
+  const [calculating,  setCalculating]  = useState(false);
+  const [calcMsg,      setCalcMsg]      = useState('');
 
-  const currentWeek = league?.current_week ?? 1;
+  const currentWeek    = league?.current_week ?? 1;
+  const isCommissioner = league?.commissioner_id === userId;
+
+  async function loadScores() {
+    setLoading(true);
+    const { data } = await supabase
+      .from('weekly_scores')
+      .select('user_id, week, score')
+      .eq('league_id', league?.id ?? '');
+    const map: Record<string, Record<number, number>> = {};
+    for (const row of (data ?? []) as any[]) {
+      if (!map[row.user_id]) map[row.user_id] = {};
+      map[row.user_id][row.week] = parseFloat(row.score) || 0;
+    }
+    setAllScores(map);
+    setLoading(false);
+  }
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const { data } = await supabase
-        .from('weekly_scores')
-        .select('user_id, week, score')
-        .eq('league_id', league?.id ?? '');
-      const map: Record<string, Record<number, number>> = {};
-      for (const row of (data ?? []) as any[]) {
-        if (!map[row.user_id]) map[row.user_id] = {};
-        map[row.user_id][row.week] = parseFloat(row.score) || 0;
-      }
-      setAllScores(map);
-      setLoading(false);
-    }
-    if (league?.id) load();
+    if (league?.id) loadScores();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league?.id]);
+
+  async function recalculate() {
+    if (!league?.id) return;
+    setCalculating(true);
+    setCalcMsg('Fetching all 11 weeks from CFBD…');
+    try {
+      const res = await fetch('/api/calculate-scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ league_id: league.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed');
+      setCalcMsg(`Done — ${json.rowsUpserted} scores saved.`);
+      await loadScores();
+    } catch (e: any) {
+      setCalcMsg(`Error: ${e.message}`);
+    } finally {
+      setCalculating(false);
+    }
+  }
 
   // Build W-L standings over completed regular-season weeks (1–11)
   const record: Record<string, { wins: number; losses: number; pf: number }> = {};
@@ -1058,9 +1084,31 @@ function LeagueRanksTab({
   return (
     <div style={{ padding: 24, maxWidth: 760 }}>
 
-      {/* Header */}
-      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 20 }}>
-        League Standings
+      {/* Header + recalculate button */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase' }}>
+          League Standings
+        </div>
+        {isCommissioner && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+            <button
+              onClick={recalculate}
+              disabled={calculating}
+              style={{
+                padding: '6px 14px', borderRadius: 6, cursor: calculating ? 'default' : 'pointer',
+                background: calculating ? C.surf3 : 'rgba(212,168,40,.14)',
+                border: '1px solid ' + (calculating ? C.surf3 : C.gold),
+                fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1,
+                color: calculating ? C.muted : C.gold,
+              }}
+            >
+              {calculating ? 'Calculating…' : 'Recalculate Standings'}
+            </button>
+            {calcMsg && (
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: .5 }}>{calcMsg}</div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Standings table */}
