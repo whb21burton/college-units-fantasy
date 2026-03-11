@@ -1241,30 +1241,32 @@ function LeagueRanksTab({
             </div>
 
             {/* Arrow */}
-            <div style={{ width: ARROW_W, flexShrink: 0, textAlign: 'center', color: C.muted, fontSize: 14 }}>→</div>
+            <div style={{ width: ARROW_W, flexShrink: 0, textAlign: 'center', color: C.muted, fontSize: 14, paddingTop: 160 }}>→</div>
 
             {/* ── Wk 13 Semis ── */}
             <div style={{ width: COL_W, flexShrink: 0 }}>
               <RoundHdr label="Semifinals" sub="Week 13" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', paddingTop: 40, gap: 93 }}>
                 <BkMatchup teamA={s(1)} seedA={1} teamB={semi1Opp} week={SEMI} allScores={allScores} winner={semi1} />
                 <BkMatchup teamA={s(2)} seedA={2} teamB={semi2Opp} week={SEMI} allScores={allScores} winner={semi2} />
               </div>
             </div>
 
             {/* Arrow */}
-            <div style={{ width: ARROW_W, flexShrink: 0, textAlign: 'center', color: C.muted, fontSize: 14 }}>→</div>
+            <div style={{ width: ARROW_W, flexShrink: 0, textAlign: 'center', color: C.muted, fontSize: 14, paddingTop: 160 }}>→</div>
 
             {/* ── Wk 14 Championship ── */}
             <div style={{ width: COL_W, flexShrink: 0 }}>
               <RoundHdr label="Championship" sub="Week 14" />
-              <BkMatchup teamA={champA} teamB={champB} week={CHAMP} allScores={allScores} winner={champRes} />
-              {champion && (
-                <div style={{ marginTop: 14, padding: '10px 14px', background: C.surf, borderRadius: 8, border: `1px solid ${C.gold}33`, textAlign: 'center' }}>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 10, letterSpacing: 1.5, color: C.gold, textTransform: 'uppercase' }}>Champion</div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.gold, marginTop: 4, fontWeight: 600 }}>{champion.team_name}</div>
-                </div>
-              )}
+              <div style={{ paddingTop: 125 }}>
+                <BkMatchup teamA={champA} teamB={champB} week={CHAMP} allScores={allScores} winner={champRes} />
+                {champion && (
+                  <div style={{ marginTop: 14, padding: '10px 14px', background: C.surf, borderRadius: 8, border: `1px solid ${C.gold}33`, textAlign: 'center' }}>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 10, letterSpacing: 1.5, color: C.gold, textTransform: 'uppercase' }}>Champion</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.gold, marginTop: 4, fontWeight: 600 }}>{champion.team_name}</div>
+                  </div>
+                )}
+              </div>
               {standings.length >= 6 && (
                 <>
                   <div style={{ marginTop: 18, marginBottom: 4, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>3rd Place</div>
