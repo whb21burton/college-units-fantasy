@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
-import type { TeamEfficiency, SchoolMatchup, WeeklyScore } from '@/types';
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
@@ -157,14 +156,14 @@ function effectivePts(
   return { pts: base * mult, isActual: false, base };
 }
 
-type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'scores';
+type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'ranks';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'draft',   label: 'Draft'    },
   { key: 'team',    label: 'Team'     },
   { key: 'league',  label: 'League'   },
   { key: 'players', label: 'Players'  },
-  { key: 'scores',  label: 'Scores'   },
+  { key: 'ranks',   label: 'Ranks'    },
 ];
 
 export default function LeaguePage({ params }: { params: { id: string } }) {
@@ -489,13 +488,13 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           {activeTab === 'league' && (
             <LeagueTab league={league} userId={userId} />
           )}
-          {activeTab === 'scores' && (
-            <ScoresTab leagueId={params.id} members={members} league={league} userId={userId} />
+          {activeTab === 'ranks' && (
+            <LeagueRanksTab league={league} members={members} userId={userId} />
           )}
           {activeTab === 'players' && (
             <WaiverTab league={league} userId={userId} />
           )}
-          {activeTab !== 'draft' && activeTab !== 'matchup' && activeTab !== 'team' && activeTab !== 'league' && activeTab !== 'scores' && activeTab !== 'players' && (
+          {activeTab !== 'draft' && activeTab !== 'matchup' && activeTab !== 'team' && activeTab !== 'league' && activeTab !== 'ranks' && activeTab !== 'players' && (
             <PlaceholderTab
               label={computedTabs.find(t => t.key === activeTab)?.label || ''}
               icon="🏈"
@@ -887,160 +886,184 @@ function PlaceholderTab({ label, icon }: { label: string; icon: string }) {
   );
 }
 
-/* ── Scores Tab ─────────────────────────────────────────────── */
-function multiplierColor(m: number) {
-  if (m >= 1.15) return '#16a34a';
-  if (m >= 1.10) return '#15803d';
-  if (m >= 1.05) return '#a16207';
-  return C.muted;
+/* ── League Ranks Tab ────────────────────────────────────────── */
+const SEED_COLORS: Record<number, string> = {
+  1: '#f1c40f', 2: '#c0c0c0', 3: '#cd7f32',
+};
+
+function buildRoundRobin(members: any[], weekNum: number): [any, any][] {
+  const n = members.length;
+  if (n < 2) return [];
+  const isOdd = n % 2 !== 0;
+  const t: (any | null)[] = isOdd ? [...members, null] : [...members];
+  const total = t.length;
+  const r = (weekNum - 1) % (total - 1);
+  const rotating = t.slice(1);
+  const rotated = [...rotating.slice(r), ...rotating.slice(0, r)];
+  const round = [t[0], ...rotated];
+  const pairs: [any, any][] = [];
+  for (let i = 0; i < total / 2; i++) {
+    const a = round[i];
+    const b = round[total - 1 - i];
+    if (a && b) pairs.push([a, b]);
+  }
+  return pairs;
 }
 
-function ScoresTab({
-  leagueId, members, league, userId,
-}: {
-  leagueId: string; members: any[]; league: any; userId: string | null;
-}) {
-  const [efficiency,  setEfficiency]  = useState<Record<string, TeamEfficiency>>({});
-  const [matchups,    setMatchups]    = useState<SchoolMatchup[]>([]);
-  const [weeklyScore, setWeeklyScore] = useState<WeeklyScore[]>([]);
-  const [loadingEff,  setLoadingEff]  = useState(true);
+function BkTeam({ team, seed, highlight }: { team: any | undefined | null; seed?: number; highlight?: boolean }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '5px 10px', minWidth: 140,
+      background: highlight ? C.surf3 : C.surf2,
+      borderRadius: 4,
+      border: `1px solid ${highlight ? C.gold : C.surf3}`,
+    }}>
+      {seed != null && (
+        <span style={{
+          fontFamily: 'Anton,sans-serif', fontSize: 11,
+          color: SEED_COLORS[seed] ?? C.muted, minWidth: 14,
+        }}>{seed}</span>
+      )}
+      <span style={{
+        fontFamily: 'Oswald,sans-serif', fontSize: 11,
+        color: team ? C.text : C.muted,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {team?.team_name ?? 'TBD'}
+      </span>
+    </div>
+  );
+}
 
-  const season      = new Date().getFullYear();
+function LeagueRanksTab({
+  league, members, userId,
+}: {
+  league: any; members: any[]; userId: string | null;
+}) {
+  const [allScores, setAllScores] = useState<Record<string, Record<number, number>>>({});
+  const [loading,   setLoading]   = useState(true);
+
   const currentWeek = league?.current_week ?? 1;
 
   useEffect(() => {
     async function load() {
-      setLoadingEff(true);
-      try {
-        const [effRes, schedRes, scoresRes] = await Promise.all([
-          fetch(`/api/efficiency?week=${currentWeek}&season=${season}`),
-          fetch(`/api/schedule?week=${currentWeek}&season=${season}`),
-          supabase
-            .from('weekly_scores')
-            .select('*')
-            .eq('league_id', leagueId)
-            .eq('week', currentWeek),
-        ]);
-
-        if (effRes.ok) {
-          const json = await effRes.json();
-          const map: Record<string, TeamEfficiency> = {};
-          for (const row of (json.data ?? []) as TeamEfficiency[]) map[row.school] = row;
-          setEfficiency(map);
-        }
-        if (schedRes.ok) {
-          const json = await schedRes.json();
-          setMatchups(json.data ?? []);
-        }
-        const { data: scores } = scoresRes;
-        setWeeklyScore(scores ?? []);
-      } finally {
-        setLoadingEff(false);
+      setLoading(true);
+      const { data } = await supabase
+        .from('weekly_scores')
+        .select('user_id, week, score')
+        .eq('league_id', league?.id ?? '');
+      const map: Record<string, Record<number, number>> = {};
+      for (const row of (data ?? []) as any[]) {
+        if (!map[row.user_id]) map[row.user_id] = {};
+        map[row.user_id][row.week] = parseFloat(row.score) || 0;
       }
+      setAllScores(map);
+      setLoading(false);
     }
-    load();
-  }, [leagueId, currentWeek, season]);
+    if (league?.id) load();
+  }, [league?.id]);
 
-  // Build schedule lookup: school → opponent
-  const scheduleMap = new Map<string, string>();
-  for (const m of matchups) {
-    scheduleMap.set(m.home_school, m.away_school);
-    scheduleMap.set(m.away_school, m.home_school);
+  // Build W-L standings over completed regular-season weeks (1–10)
+  const record: Record<string, { wins: number; losses: number; pf: number }> = {};
+  for (const m of members) record[m.user_id] = { wins: 0, losses: 0, pf: 0 };
+
+  const regWeeks = Math.min(currentWeek - 1, 10);
+  for (let w = 1; w <= regWeeks; w++) {
+    const pairs = buildRoundRobin(members, w);
+    for (const [a, b] of pairs) {
+      const sa = allScores[a.user_id]?.[w] ?? 0;
+      const sb = allScores[b.user_id]?.[w] ?? 0;
+      record[a.user_id].pf += sa;
+      record[b.user_id].pf += sb;
+      if (sa > sb)      { record[a.user_id].wins++;  record[b.user_id].losses++; }
+      else if (sb > sa) { record[b.user_id].wins++;  record[a.user_id].losses++; }
+    }
   }
 
-  // Build standings from weekly_scores adjusted_score
-  const standings = [...members].map(member => {
-    const score = weeklyScore.find(s => s.user_id === member.user_id);
-    return {
-      ...member,
-      baseScore:     (score as any)?.base_score     ?? 0,
-      adjustedScore: (score as any)?.adjusted_score ?? (score?.score ?? 0),
-      multiplierUsed:(score as any)?.multiplier_used ?? 1.00,
-    };
-  }).sort((a, b) => b.adjustedScore - a.adjustedScore);
+  const standings = [...members]
+    .filter(m => record[m.user_id])
+    .map(m => ({ ...m, ...record[m.user_id] }))
+    .sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.pf - a.pf);
 
-  const noEffData = Object.keys(efficiency).length === 0;
+  // Bracket helpers
+  const PLAY_IN = 11, SEMI = 12, CHAMP = 13;
+  const s = (seed: number) => standings[seed - 1] as any | undefined;
+
+  function matchResult(a: any, b: any, week: number): 'a' | 'b' | null {
+    if (!a || !b || week >= currentWeek) return null;
+    const sa = allScores[a.user_id]?.[week] ?? 0;
+    const sb = allScores[b.user_id]?.[week] ?? 0;
+    if (sa > sb) return 'a';
+    if (sb > sa) return 'b';
+    return null;
+  }
+
+  const pi36 = matchResult(s(3), s(6), PLAY_IN);
+  const pi45 = matchResult(s(4), s(5), PLAY_IN);
+  const semi1Opp = pi45 === 'a' ? s(4) : pi45 === 'b' ? s(5) : null;
+  const semi2Opp = pi36 === 'a' ? s(3) : pi36 === 'b' ? s(6) : null;
+  const semi1    = matchResult(s(1), semi1Opp, SEMI);
+  const semi2    = matchResult(s(2), semi2Opp, SEMI);
+  const champA   = semi1 === 'a' ? s(1) : semi1 === 'b' ? semi1Opp : null;
+  const champB   = semi2 === 'a' ? s(2) : semi2 === 'b' ? semi2Opp : null;
+  const champRes = matchResult(champA, champB, CHAMP);
+  const champion = champRes === 'a' ? champA : champRes === 'b' ? champB : null;
+
+  const showBracket = standings.length >= 4;
+
+  if (loading) return (
+    <div style={{ padding: 32, textAlign: 'center', fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted }}>
+      Loading…
+    </div>
+  );
 
   return (
     <div style={{ padding: 24, maxWidth: 700 }}>
 
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase' }}>
-          Week {currentWeek} Scores
-        </div>
-        {noEffData && !loadingEff && (
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginTop: 4 }}>
-            No efficiency data for this week yet. Commissioner can trigger calculation via the admin API.
-          </div>
-        )}
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 20 }}>
+        League Standings
       </div>
 
-      {/* Efficiency legend */}
-      {!noEffData && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-          {([['≥95th', '1.20×', '#16a34a'], ['≥80th', '1.10×', '#15803d'], ['≥60th', '1.05×', '#a16207'], ['<60th', '1.00×', C.muted]] as const).map(([pct, mult, color]) => (
-            <div key={pct} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: .5 }}>
-                {pct} → {mult}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Standings table */}
-      <div style={{ background: C.surf, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.surf3}` }}>
-        {/* Column headers */}
+      <div style={{ background: C.surf, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.surf3}`, marginBottom: 32 }}>
         <div style={{
-          display: 'grid', gridTemplateColumns: '24px 1fr 80px 80px 60px',
-          gap: 8, padding: '8px 16px',
-          borderBottom: `1px solid ${C.surf3}`,
+          display: 'grid', gridTemplateColumns: '28px 1fr 60px 60px 90px',
+          gap: 8, padding: '8px 16px', borderBottom: `1px solid ${C.surf3}`,
           fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1,
           color: C.muted, textTransform: 'uppercase',
         }}>
-          <div>#</div>
-          <div>Team</div>
-          <div style={{ textAlign: 'right' }}>Base Pts</div>
-          <div style={{ textAlign: 'right' }}>Adj Pts</div>
-          <div style={{ textAlign: 'right' }}>Bonus</div>
+          <div>#</div><div>Team</div>
+          <div style={{ textAlign: 'right' }}>W</div>
+          <div style={{ textAlign: 'right' }}>L</div>
+          <div style={{ textAlign: 'right' }}>PF</div>
         </div>
 
         {standings.map((member, idx) => {
-          const bonus = member.adjustedScore - member.baseScore;
+          const seed      = idx + 1;
+          const isUser    = member.user_id === userId;
+          const hasBye    = seed <= 2 && standings.length >= 6;
+          const hasPlayIn = seed >= 3 && seed <= 6 && standings.length >= 6;
           return (
-            <div
-              key={member.id}
-              style={{
-                display: 'grid', gridTemplateColumns: '24px 1fr 80px 80px 60px',
-                gap: 8, padding: '10px 16px',
-                borderBottom: idx < standings.length - 1 ? `1px solid ${C.surf3}` : 'none',
-                background: member.user_id === userId ? `${C.surf2}` : 'transparent',
-              }}
-            >
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.muted, paddingTop: 2 }}>
-                {idx + 1}
+            <div key={member.id} style={{
+              display: 'grid', gridTemplateColumns: '28px 1fr 60px 60px 90px',
+              gap: 8, padding: '10px 16px',
+              borderBottom: idx < standings.length - 1 ? `1px solid ${C.surf3}` : 'none',
+              background: isUser ? C.surf2 : 'transparent',
+            }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: SEED_COLORS[seed] ?? C.muted, paddingTop: 1 }}>
+                {seed}
               </div>
               <div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text }}>
-                  {member.team_name}
-                </div>
-                {!noEffData && (
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 1 }}>
-                    Multiplier: {(member.multiplierUsed as number).toFixed(2)}×
-                  </div>
-                )}
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text }}>{member.team_name}</div>
+                {hasBye    && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#2ecc71', marginTop: 1 }}>BYE · Wk 11</div>}
+                {hasPlayIn && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold,    marginTop: 1 }}>Play-in · Wk 11</div>}
               </div>
-              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.sub, paddingTop: 2 }}>
-                {member.baseScore > 0 ? member.baseScore.toFixed(1) : '—'}
-              </div>
-              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.text, paddingTop: 1 }}>
-                {member.adjustedScore > 0 ? member.adjustedScore.toFixed(1) : '—'}
-              </div>
-              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 12, paddingTop: 2,
-                color: bonus > 0 ? '#16a34a' : C.muted }}>
-                {bonus > 0 ? `+${bonus.toFixed(1)}` : '—'}
+              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 14, color: '#2ecc71', paddingTop: 1 }}>{member.wins}</div>
+              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.muted,   paddingTop: 1 }}>{member.losses}</div>
+              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.sub,     paddingTop: 1 }}>
+                {member.pf > 0 ? member.pf.toFixed(1) : '—'}
               </div>
             </div>
           );
@@ -1053,54 +1076,77 @@ function ScoresTab({
         )}
       </div>
 
-      {/* School efficiency reference */}
-      {!noEffData && (
-        <div style={{ marginTop: 28 }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 12 }}>
-            School Efficiency — Week {currentWeek}
+      {/* Playoff Bracket */}
+      {showBracket && (
+        <>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 16 }}>
+            Playoff Bracket
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
-            {Object.values(efficiency)
-              .sort((a, b) => b.def_percentile - a.def_percentile)
-              .slice(0, 20)
-              .map(eff => {
-                const opponent = scheduleMap.get(eff.school);
-                return (
-                  <div key={eff.school} style={{
-                    background: C.surf2, borderRadius: 8, padding: '10px 14px',
-                    border: `1px solid ${C.surf3}`,
-                  }}>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, fontWeight: 600 }}>
-                      {eff.school}
-                    </div>
-                    {opponent && (
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 4 }}>
-                        vs {opponent}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                      <span style={{
-                        fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
-                        background: multiplierColor(eff.off_multiplier), color: '#fff',
-                      }}>
-                        OFF {eff.off_multiplier.toFixed(2)}×
-                      </span>
-                      <span style={{
-                        fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
-                        background: multiplierColor(eff.def_multiplier), color: '#fff',
-                      }}>
-                        DEF {eff.def_multiplier.toFixed(2)}×
-                      </span>
-                    </div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 4 }}>
-                      OFF {eff.off_percentile}th · DEF {eff.def_percentile}th percentile
-                    </div>
-                  </div>
-                );
-              })
-            }
+          <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start', overflowX: 'auto', paddingBottom: 8 }}>
+
+            {/* Wk 11 Play-in */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 160 }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}>
+                Wk 11 · Play-in
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 20 }}>
+                <BkTeam team={s(3)} seed={3} highlight={pi36 === 'a'} />
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, textAlign: 'center' }}>vs</div>
+                <BkTeam team={s(6)} seed={6} highlight={pi36 === 'b'} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <BkTeam team={s(4)} seed={4} highlight={pi45 === 'a'} />
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, textAlign: 'center' }}>vs</div>
+                <BkTeam team={s(5)} seed={5} highlight={pi45 === 'b'} />
+              </div>
+            </div>
+
+            <div style={{ color: C.muted, fontSize: 16, padding: '32px 6px 0', alignSelf: 'flex-start' }}>→</div>
+
+            {/* Wk 12 Semis */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 160 }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}>
+                Wk 12 · Semis
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 20 }}>
+                <BkTeam team={s(1)} seed={1} highlight={semi1 === 'a'} />
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, textAlign: 'center' }}>vs</div>
+                <BkTeam team={semi1Opp} highlight={semi1 === 'b'} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <BkTeam team={s(2)} seed={2} highlight={semi2 === 'a'} />
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, textAlign: 'center' }}>vs</div>
+                <BkTeam team={semi2Opp} highlight={semi2 === 'b'} />
+              </div>
+            </div>
+
+            <div style={{ color: C.muted, fontSize: 16, padding: '32px 6px 0', alignSelf: 'flex-start' }}>→</div>
+
+            {/* Wk 13 Championship */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 160 }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}>
+                Wk 13 · Championship
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <BkTeam team={champA} highlight={champRes === 'a'} />
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, textAlign: 'center' }}>vs</div>
+                <BkTeam team={champB} highlight={champRes === 'b'} />
+              </div>
+              {champion && (
+                <div style={{ marginTop: 12, textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 1, color: C.gold, textTransform: 'uppercase' }}>Champion</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.gold, marginTop: 2 }}>{champion.team_name}</div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+
+          <div style={{ marginTop: 16, padding: '8px 14px', background: C.surf, borderRadius: 8, border: `1px solid ${C.surf3}` }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+              Seeds 1 & 2 receive a first-round bye and advance directly to Week 12 Semifinals.
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
