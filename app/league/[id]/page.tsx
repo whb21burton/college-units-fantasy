@@ -1226,7 +1226,7 @@ function LeagueRanksTab({
             Playoff Bracket
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', paddingBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', overflowX: 'auto', paddingBottom: 12 }}>
 
             {/* ── Wk 12 Play-in ── */}
             <div style={{ width: COL_W, flexShrink: 0 }}>
@@ -1311,12 +1311,12 @@ function LeagueRanksTab({
                         )}
                       </div>
                     </div>
-                    <div style={{ width: ARROW_W, flexShrink: 0, textAlign: 'center', color: C.muted, fontSize: 14, paddingTop: 30 }}>→</div>
+                    <div style={{ width: ARROW_W, flexShrink: 0, textAlign: 'center', color: C.muted, fontSize: 14, paddingTop: 60 }}>→</div>
                   </>
                 )}
 
                 {/* ── Finals (Wk 13) ── */}
-                <div style={{ width: COL_W, flexShrink: 0 }}>
+                <div style={{ width: COL_W, flexShrink: 0, paddingTop: cTeams.length >= 3 ? 32 : 0 }}>
                   <RoundHdr label="Finals" sub="Week 13" />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div>
