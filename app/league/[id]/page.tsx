@@ -1050,7 +1050,7 @@ function LeagueRanksTab({
   for (const t of allTeams) record[t.id] = { wins: 0, losses: 0, pf: 0 };
 
   // Build round-robin schedule using the allTeams array (preserves draft_order)
-  const regWeeks = Math.min(currentWeek - 1, 11);
+  const regWeeks = 11; // 2025 season complete — always count all regular-season weeks
   for (let w = 1; w <= regWeeks; w++) {
     const pairs = buildRoundRobin(allTeams, w);
     for (const [a, b] of pairs) {
