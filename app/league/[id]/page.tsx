@@ -1093,6 +1093,29 @@ function LeagueRanksTab({
   const champRes = matchResult(champA, champB, CHAMP);
   const champion = champRes === 'a' ? champA : champRes === 'b' ? champB : null;
 
+  // 3rd / 5th place
+  const loser36   = pi36  === 'a' ? s(6) : pi36  === 'b' ? s(3) : null;
+  const loser45   = pi45  === 'a' ? s(5) : pi45  === 'b' ? s(4) : null;
+  const loserS1   = semi1 === 'a' ? semi1Opp : semi1 === 'b' ? s(1) : null;
+  const loserS2   = semi2 === 'a' ? semi2Opp : semi2 === 'b' ? s(2) : null;
+  const place5Res = matchResult(loser36, loser45, CHAMP);
+  const place3Res = matchResult(loserS1, loserS2, CHAMP);
+
+  // Consolation bracket (seeds 7+)
+  const cTeams  = standings.slice(6);
+  const cr1A    = cTeams[0]  ?? null;
+  const cr1B    = cTeams.length >= 2 ? cTeams[cTeams.length - 1] : null;
+  const cr2A    = cTeams.length >= 3 ? cTeams[1] : null;
+  const cr2B    = cTeams.length >= 4 ? cTeams[cTeams.length - 2] : null;
+  const cR1Res1 = matchResult(cr1A, cr1B, PLAY_IN);
+  const cR1Res2 = matchResult(cr2A, cr2B, PLAY_IN);
+  const c7A     = cR1Res1 === 'a' ? cr1A : cR1Res1 === 'b' ? cr1B : null;
+  const c7B     = cR1Res2 === 'a' ? cr2A : cR1Res2 === 'b' ? cr2B : null;
+  const c9A     = cR1Res1 === 'a' ? cr1B : cR1Res1 === 'b' ? cr1A : null;
+  const c9B     = cR1Res2 === 'a' ? cr2B : cR1Res2 === 'b' ? cr2A : null;
+  const cFin7   = matchResult(c7A, c7B, SEMI);
+  const cFin9   = matchResult(c9A, c9B, SEMI);
+
   const showBracket = standings.length >= 1;
 
   if (loading) return (
@@ -1242,6 +1265,14 @@ function LeagueRanksTab({
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.gold, marginTop: 4, fontWeight: 600 }}>{champion.team_name}</div>
                 </div>
               )}
+              {standings.length >= 6 && (
+                <>
+                  <div style={{ marginTop: 18, marginBottom: 4, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>3rd Place</div>
+                  <BkMatchup teamA={loserS1} teamB={loserS2} week={CHAMP} allScores={allScores} winner={place3Res} />
+                  <div style={{ marginTop: 10, marginBottom: 4, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>5th Place</div>
+                  <BkMatchup teamA={loser36} teamB={loser45} week={CHAMP} allScores={allScores} winner={place5Res} />
+                </>
+              )}
             </div>
 
           </div>
@@ -1251,6 +1282,62 @@ function LeagueRanksTab({
               Seeds 1 & 2 receive a first-round bye and advance directly to Week 13 Semifinals.
             </div>
           </div>
+
+          {/* ── Consolation Bracket (seeds 7+) ── */}
+          {cTeams.length >= 2 && (
+            <>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 20, marginTop: 40 }}>
+                Consolation Bracket
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', overflowX: 'auto', paddingBottom: 12 }}>
+
+                {/* ── Wk 12 Round 1 (only when 3+ consolation teams) ── */}
+                {cTeams.length >= 3 && (
+                  <>
+                    <div style={{ width: COL_W, flexShrink: 0 }}>
+                      <RoundHdr label="Round 1" sub="Week 12" />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <BkMatchup
+                          teamA={cr1A} seedA={7}
+                          teamB={cr1B} seedB={6 + cTeams.length}
+                          week={PLAY_IN} allScores={allScores} winner={cR1Res1}
+                        />
+                        {cr2A && cr2B && (
+                          <BkMatchup
+                            teamA={cr2A} seedA={8}
+                            teamB={cr2B} seedB={6 + cTeams.length - 1}
+                            week={PLAY_IN} allScores={allScores} winner={cR1Res2}
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ width: ARROW_W, flexShrink: 0, textAlign: 'center', color: C.muted, fontSize: 14, paddingTop: 30 }}>→</div>
+                  </>
+                )}
+
+                {/* ── Finals (Wk 13) ── */}
+                <div style={{ width: COL_W, flexShrink: 0 }}>
+                  <RoundHdr label="Finals" sub="Week 13" />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div>
+                      <div style={{ marginBottom: 4, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>7th Place</div>
+                      {cTeams.length >= 3
+                        ? <BkMatchup teamA={c7A} teamB={c7B} week={SEMI} allScores={allScores} winner={cFin7} />
+                        : <BkMatchup teamA={cTeams[0]} seedA={7} teamB={cTeams[1]} seedB={8} week={SEMI} allScores={allScores} winner={matchResult(cTeams[0], cTeams[1], SEMI)} />
+                      }
+                    </div>
+                    {(c9A || c9B) && (
+                      <div>
+                        <div style={{ marginBottom: 4, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>9th Place</div>
+                        <BkMatchup teamA={c9A} teamB={c9B} week={SEMI} allScores={allScores} winner={cFin9} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
