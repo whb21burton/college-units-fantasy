@@ -1035,7 +1035,7 @@ function LeagueRanksTab({
   const champRes = matchResult(champA, champB, CHAMP);
   const champion = champRes === 'a' ? champA : champRes === 'b' ? champB : null;
 
-  const showBracket = standings.length >= 4;
+  const showBracket = standings.length >= 1;
 
   if (loading) return (
     <div style={{ padding: 32, textAlign: 'center', fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted }}>
@@ -1429,7 +1429,8 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const [memberName,    setMemberName]    = useState<string>('');
   const [selectedBench, setSelectedBench] = useState<any | null>(null);
 
-  const TOTAL_WEEKS = 13;
+  const TOTAL_WEEKS    = 14;
+  const PLAYOFF_START  = 12;
   const isCommissioner = league?.commissioner_id === userId;
 
   useEffect(() => {
@@ -1562,20 +1563,35 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
 
       {/* Week tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, flexWrap: 'wrap' }}>
-        {Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1).map(w => (
-          <button
-            key={w}
-            onClick={() => { setWeek(w); setSelectedBench(null); }}
-            style={{
-              padding: '5px 13px',
-              background: week === w ? 'rgba(212,168,40,.14)' : C.surf2,
-              border: '1px solid ' + (week === w ? C.gold : C.surf3),
-              borderRadius: 6, cursor: 'pointer',
-              fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1,
-              color: week === w ? C.gold : C.sub,
-            }}
-          >Wk {w}</button>
-        ))}
+        {Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1).map(w => {
+          const isPlayoff  = w >= PLAYOFF_START;
+          const isSelected = week === w;
+          const poLabel    = w === 12 ? 'Play-in' : w === 13 ? 'Semis' : 'Champ';
+          return (
+            <button
+              key={w}
+              onClick={() => { setWeek(w); setSelectedBench(null); }}
+              style={{
+                padding: isPlayoff ? '4px 11px 5px' : '5px 13px',
+                background: isSelected
+                  ? (isPlayoff ? 'rgba(168,85,247,.20)' : 'rgba(212,168,40,.14)')
+                  : (isPlayoff ? 'rgba(168,85,247,.07)' : C.surf2),
+                border: '1px solid ' + (isSelected
+                  ? (isPlayoff ? '#a855f7' : C.gold)
+                  : (isPlayoff ? 'rgba(168,85,247,.45)' : C.surf3)),
+                borderRadius: 6, cursor: 'pointer',
+                fontFamily: 'Oswald,sans-serif', letterSpacing: 1,
+                color: isSelected
+                  ? (isPlayoff ? '#c084fc' : C.gold)
+                  : (isPlayoff ? '#a855f7' : C.sub),
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0,
+              }}
+            >
+              <span style={{ fontSize: 11 }}>Wk {w}</span>
+              {isPlayoff && <span style={{ fontSize: 7, letterSpacing: .5, opacity: .85 }}>{poLabel}</span>}
+            </button>
+          );
+        })}
       </div>
 
       {/* Projected score header */}
