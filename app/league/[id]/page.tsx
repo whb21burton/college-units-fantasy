@@ -1073,9 +1073,10 @@ function LeagueRanksTab({
   const s = (seed: number) => standings[seed - 1] as any | undefined;
 
   function matchResult(a: any, b: any, week: number): 'a' | 'b' | null {
-    if (!a || !b || week >= currentWeek) return null;
+    if (!a || !b) return null;
     const sa = allScores[a.id]?.[week] ?? 0;
     const sb = allScores[b.id]?.[week] ?? 0;
+    if (sa === 0 && sb === 0) return null; // no scores yet → TBD
     if (sa > sb) return 'a';
     if (sb > sa) return 'b';
     return null;

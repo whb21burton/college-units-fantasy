@@ -12,7 +12,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-server';
 
-const REG_SEASON_WEEKS = 11;
+const TOTAL_WEEKS = 14; // 11 regular season + 3 playoff weeks
 
 function snakeIndex(pickNum: number, numTeams: number): number {
   const round = Math.floor(pickNum / numTeams);
@@ -184,7 +184,7 @@ export async function POST(req: Request) {
 
     // Fetch all 11 weeks in parallel
     const weekData = await Promise.all(
-      Array.from({ length: REG_SEASON_WEEKS }, (_, i) => i + 1).map(async (week) => {
+      Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1).map(async (week) => {
         const [gsRes, ctxRes] = await Promise.all([
           fetch(`${base}/api/game-stats?week=${week}&season=2025`),
           fetch(`${base}/api/matchup-context?week=${week}&season=2025`),
@@ -256,7 +256,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success:          true,
-      weeksCalculated:  REG_SEASON_WEEKS,
+      weeksCalculated:  TOTAL_WEEKS,
       humanRows:        humanUpserts.length,
       cpuTeams:         Object.keys(cpuScores).length,
     });
