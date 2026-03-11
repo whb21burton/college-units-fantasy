@@ -910,28 +910,53 @@ function buildRoundRobin(members: any[], weekNum: number): [any, any][] {
   return pairs;
 }
 
-function BkTeam({ team, seed, highlight }: { team: any | undefined | null; seed?: number; highlight?: boolean }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 6,
-      padding: '5px 10px', minWidth: 140,
-      background: highlight ? C.surf3 : C.surf2,
-      borderRadius: 4,
-      border: `1px solid ${highlight ? C.gold : C.surf3}`,
-    }}>
-      {seed != null && (
-        <span style={{
-          fontFamily: 'Anton,sans-serif', fontSize: 11,
-          color: SEED_COLORS[seed] ?? C.muted, minWidth: 14,
-        }}>{seed}</span>
-      )}
-      <span style={{
-        fontFamily: 'Oswald,sans-serif', fontSize: 11,
-        color: team ? C.text : C.muted,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+function BkMatchup({
+  teamA, seedA, teamB, seedB, week, allScores, winner, isBye,
+}: {
+  teamA: any | null; seedA?: number;
+  teamB: any | null; seedB?: number;
+  week: number; allScores: Record<string, Record<number, number>>;
+  winner: 'a' | 'b' | null; isBye?: boolean;
+}) {
+  const scoreA = teamA ? (allScores[teamA.user_id]?.[week] ?? null) : null;
+  const scoreB = (!isBye && teamB) ? (allScores[teamB.user_id]?.[week] ?? null) : null;
+
+  function TeamRow({ team, seed, isWinner, score }: {
+    team: any | null; seed?: number; isWinner: boolean; score: number | null;
+  }) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px',
+        background: isWinner ? C.surf3 : 'transparent',
       }}>
-        {team?.team_name ?? 'TBD'}
-      </span>
+        {seed != null && (
+          <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 10, color: SEED_COLORS[seed] ?? C.muted, minWidth: 12, flexShrink: 0 }}>{seed}</span>
+        )}
+        <span style={{
+          flex: 1, fontFamily: 'Oswald,sans-serif', fontSize: 11,
+          color: team ? (isWinner ? C.text : C.sub) : C.muted,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {team?.team_name ?? 'TBD'}
+        </span>
+        {score != null && (
+          <span style={{ fontFamily: 'Anton,sans-serif', fontSize: isWinner ? 14 : 11, color: isWinner ? C.gold : C.muted, flexShrink: 0 }}>
+            {score.toFixed(1)}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: C.surf2, borderRadius: 8, border: `1px solid ${C.surf3}`, overflow: 'hidden', minWidth: 190 }}>
+      <TeamRow team={teamA} seed={seedA} isWinner={winner === 'a'} score={scoreA} />
+      <div style={{ height: 1, background: C.surf3 }} />
+      {isBye ? (
+        <div style={{ padding: '6px 12px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: .5 }}>BYE</div>
+      ) : (
+        <TeamRow team={teamB} seed={seedB} isWinner={winner === 'b'} score={scoreB} />
+      )}
     </div>
   );
 }
@@ -964,11 +989,11 @@ function LeagueRanksTab({
     if (league?.id) load();
   }, [league?.id]);
 
-  // Build W-L standings over completed regular-season weeks (1–10)
+  // Build W-L standings over completed regular-season weeks (1–11)
   const record: Record<string, { wins: number; losses: number; pf: number }> = {};
   for (const m of members) record[m.user_id] = { wins: 0, losses: 0, pf: 0 };
 
-  const regWeeks = Math.min(currentWeek - 1, 10);
+  const regWeeks = Math.min(currentWeek - 1, 11);
   for (let w = 1; w <= regWeeks; w++) {
     const pairs = buildRoundRobin(members, w);
     for (const [a, b] of pairs) {
@@ -986,8 +1011,8 @@ function LeagueRanksTab({
     .map(m => ({ ...m, ...record[m.user_id] }))
     .sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.pf - a.pf);
 
-  // Bracket helpers
-  const PLAY_IN = 11, SEMI = 12, CHAMP = 13;
+  // Bracket
+  const PLAY_IN = 12, SEMI = 13, CHAMP = 14;
   const s = (seed: number) => standings[seed - 1] as any | undefined;
 
   function matchResult(a: any, b: any, week: number): 'a' | 'b' | null {
@@ -999,8 +1024,8 @@ function LeagueRanksTab({
     return null;
   }
 
-  const pi36 = matchResult(s(3), s(6), PLAY_IN);
-  const pi45 = matchResult(s(4), s(5), PLAY_IN);
+  const pi36     = matchResult(s(3), s(6), PLAY_IN);
+  const pi45     = matchResult(s(4), s(5), PLAY_IN);
   const semi1Opp = pi45 === 'a' ? s(4) : pi45 === 'b' ? s(5) : null;
   const semi2Opp = pi36 === 'a' ? s(3) : pi36 === 'b' ? s(6) : null;
   const semi1    = matchResult(s(1), semi1Opp, SEMI);
@@ -1018,8 +1043,20 @@ function LeagueRanksTab({
     </div>
   );
 
+  function RoundHdr({ label, sub }: { label: string; sub: string }) {
+    return (
+      <div style={{ marginBottom: 12, textAlign: 'center' }}>
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: C.text, textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 2 }}>({sub})</div>
+      </div>
+    );
+  }
+
+  const COL_W = 200;
+  const ARROW_W = 28;
+
   return (
-    <div style={{ padding: 24, maxWidth: 700 }}>
+    <div style={{ padding: 24, maxWidth: 760 }}>
 
       {/* Header */}
       <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 20 }}>
@@ -1027,7 +1064,7 @@ function LeagueRanksTab({
       </div>
 
       {/* Standings table */}
-      <div style={{ background: C.surf, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.surf3}`, marginBottom: 32 }}>
+      <div style={{ background: C.surf, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.surf3}`, marginBottom: 36 }}>
         <div style={{
           display: 'grid', gridTemplateColumns: '28px 1fr 60px 60px 90px',
           gap: 8, padding: '8px 16px', borderBottom: `1px solid ${C.surf3}`,
@@ -1057,8 +1094,8 @@ function LeagueRanksTab({
               </div>
               <div>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text }}>{member.team_name}</div>
-                {hasBye    && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#2ecc71', marginTop: 1 }}>BYE · Wk 11</div>}
-                {hasPlayIn && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold,    marginTop: 1 }}>Play-in · Wk 11</div>}
+                {hasBye    && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#2ecc71', marginTop: 1 }}>BYE · Wk 12</div>}
+                {hasPlayIn && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold,    marginTop: 1 }}>Play-in · Wk 12</div>}
               </div>
               <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 14, color: '#2ecc71', paddingTop: 1 }}>{member.wins}</div>
               <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.muted,   paddingTop: 1 }}>{member.losses}</div>
@@ -1079,71 +1116,56 @@ function LeagueRanksTab({
       {/* Playoff Bracket */}
       {showBracket && (
         <>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 16 }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 20 }}>
             Playoff Bracket
           </div>
-          <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start', overflowX: 'auto', paddingBottom: 8 }}>
 
-            {/* Wk 11 Play-in */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 160 }}>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}>
-                Wk 11 · Play-in
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 20 }}>
-                <BkTeam team={s(3)} seed={3} highlight={pi36 === 'a'} />
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, textAlign: 'center' }}>vs</div>
-                <BkTeam team={s(6)} seed={6} highlight={pi36 === 'b'} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <BkTeam team={s(4)} seed={4} highlight={pi45 === 'a'} />
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, textAlign: 'center' }}>vs</div>
-                <BkTeam team={s(5)} seed={5} highlight={pi45 === 'b'} />
+          <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', paddingBottom: 12 }}>
+
+            {/* ── Wk 12 Play-in ── */}
+            <div style={{ width: COL_W, flexShrink: 0 }}>
+              <RoundHdr label="Round 1" sub="Week 12" />
+              {/* Seeds 1 & 2 with BYE */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <BkMatchup teamA={s(1)} seedA={1} teamB={null} week={PLAY_IN} allScores={allScores} winner={null} isBye />
+                <BkMatchup teamA={s(3)} seedA={3} teamB={s(6)} seedB={6} week={PLAY_IN} allScores={allScores} winner={pi36} />
+                <BkMatchup teamA={s(4)} seedA={4} teamB={s(5)} seedB={5} week={PLAY_IN} allScores={allScores} winner={pi45} />
+                <BkMatchup teamA={s(2)} seedA={2} teamB={null} week={PLAY_IN} allScores={allScores} winner={null} isBye />
               </div>
             </div>
 
-            <div style={{ color: C.muted, fontSize: 16, padding: '32px 6px 0', alignSelf: 'flex-start' }}>→</div>
+            {/* Arrow */}
+            <div style={{ width: ARROW_W, flexShrink: 0, textAlign: 'center', color: C.muted, fontSize: 14 }}>→</div>
 
-            {/* Wk 12 Semis */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 160 }}>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}>
-                Wk 12 · Semis
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 20 }}>
-                <BkTeam team={s(1)} seed={1} highlight={semi1 === 'a'} />
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, textAlign: 'center' }}>vs</div>
-                <BkTeam team={semi1Opp} highlight={semi1 === 'b'} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <BkTeam team={s(2)} seed={2} highlight={semi2 === 'a'} />
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, textAlign: 'center' }}>vs</div>
-                <BkTeam team={semi2Opp} highlight={semi2 === 'b'} />
+            {/* ── Wk 13 Semis ── */}
+            <div style={{ width: COL_W, flexShrink: 0 }}>
+              <RoundHdr label="Semifinals" sub="Week 13" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <BkMatchup teamA={s(1)} seedA={1} teamB={semi1Opp} week={SEMI} allScores={allScores} winner={semi1} />
+                <BkMatchup teamA={s(2)} seedA={2} teamB={semi2Opp} week={SEMI} allScores={allScores} winner={semi2} />
               </div>
             </div>
 
-            <div style={{ color: C.muted, fontSize: 16, padding: '32px 6px 0', alignSelf: 'flex-start' }}>→</div>
+            {/* Arrow */}
+            <div style={{ width: ARROW_W, flexShrink: 0, textAlign: 'center', color: C.muted, fontSize: 14 }}>→</div>
 
-            {/* Wk 13 Championship */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 160 }}>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', marginBottom: 8, textAlign: 'center' }}>
-                Wk 13 · Championship
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <BkTeam team={champA} highlight={champRes === 'a'} />
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, textAlign: 'center' }}>vs</div>
-                <BkTeam team={champB} highlight={champRes === 'b'} />
-              </div>
+            {/* ── Wk 14 Championship ── */}
+            <div style={{ width: COL_W, flexShrink: 0 }}>
+              <RoundHdr label="Championship" sub="Week 14" />
+              <BkMatchup teamA={champA} teamB={champB} week={CHAMP} allScores={allScores} winner={champRes} />
               {champion && (
-                <div style={{ marginTop: 12, textAlign: 'center' }}>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 1, color: C.gold, textTransform: 'uppercase' }}>Champion</div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.gold, marginTop: 2 }}>{champion.team_name}</div>
+                <div style={{ marginTop: 14, padding: '10px 14px', background: C.surf, borderRadius: 8, border: `1px solid ${C.gold}33`, textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 10, letterSpacing: 1.5, color: C.gold, textTransform: 'uppercase' }}>Champion</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.gold, marginTop: 4, fontWeight: 600 }}>{champion.team_name}</div>
                 </div>
               )}
             </div>
+
           </div>
 
-          <div style={{ marginTop: 16, padding: '8px 14px', background: C.surf, borderRadius: 8, border: `1px solid ${C.surf3}` }}>
+          <div style={{ marginTop: 12, padding: '8px 14px', background: C.surf, borderRadius: 8, border: `1px solid ${C.surf3}` }}>
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
-              Seeds 1 & 2 receive a first-round bye and advance directly to Week 12 Semifinals.
+              Seeds 1 & 2 receive a first-round bye and advance directly to Week 13 Semifinals.
             </div>
           </div>
         </>
