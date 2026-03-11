@@ -918,8 +918,8 @@ function BkMatchup({
   week: number; allScores: Record<string, Record<number, number>>;
   winner: 'a' | 'b' | null; isBye?: boolean;
 }) {
-  const scoreA = teamA ? (allScores[teamA.user_id]?.[week] ?? null) : null;
-  const scoreB = (!isBye && teamB) ? (allScores[teamB.user_id]?.[week] ?? null) : null;
+  const scoreA = teamA ? (allScores[teamA.id]?.[week] ?? null) : null;
+  const scoreB = (!isBye && teamB) ? (allScores[teamB.id]?.[week] ?? null) : null;
 
   function TeamRow({ team, seed, isWinner, score }: {
     team: any | null; seed?: number; isWinner: boolean; score: number | null;
@@ -974,6 +974,27 @@ function LeagueRanksTab({
   const currentWeek    = league?.current_week ?? 1;
   const isCommissioner = league?.commissioner_id === userId;
 
+  // Build combined team list: human members + CPU teams (from draft_order order)
+  // Use draft_order to preserve draft-slot ordering for the round-robin schedule.
+  const draftOrder: any[] = league?.settings?.draft_order ?? [];
+  const cpuWeeklyScores: Record<string, Record<number, number>> =
+    league?.settings?.cpu_weekly_scores ?? {};
+
+  // Unified team objects — id is user_id for humans, 'cpu:Name' for CPUs
+  const allTeams: { id: string; team_name: string; isCpu: boolean }[] = draftOrder.length > 0
+    ? draftOrder.map((dt: any) => {
+        if (dt.type === 'human') {
+          const m = members.find((x: any) => x.user_id === dt.userId);
+          return { id: dt.userId, team_name: m?.team_name ?? dt.teamName, isCpu: false };
+        }
+        return { id: `cpu:${dt.teamName}`, team_name: dt.teamName, isCpu: true };
+      })
+    : [
+        ...members.map((m: any) => ({ id: m.user_id, team_name: m.team_name, isCpu: false })),
+        ...(league?.settings?.cpu_teams ?? []).map((n: string) => ({ id: `cpu:${n}`, team_name: n, isCpu: true })),
+      ];
+
+  // Merge human scores (weekly_scores table) + CPU scores (league.settings)
   async function loadScores() {
     setLoading(true);
     const { data } = await supabase
@@ -984,6 +1005,14 @@ function LeagueRanksTab({
     for (const row of (data ?? []) as any[]) {
       if (!map[row.user_id]) map[row.user_id] = {};
       map[row.user_id][row.week] = parseFloat(row.score) || 0;
+    }
+    // Merge CPU scores
+    for (const [teamName, weekMap] of Object.entries(cpuWeeklyScores)) {
+      const key = `cpu:${teamName}`;
+      map[key] = {};
+      for (const [w, sc] of Object.entries(weekMap as Record<string, number>)) {
+        map[key][Number(w)] = sc;
+      }
     }
     setAllScores(map);
     setLoading(false);
@@ -1006,8 +1035,9 @@ function LeagueRanksTab({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed');
-      setCalcMsg(`Done — ${json.rowsUpserted} scores saved.`);
-      await loadScores();
+      setCalcMsg(`Done — ${json.humanRows + (json.cpuTeams ?? 0) * 11} scores saved.`);
+      // Reload page data so league.settings has fresh cpu_weekly_scores
+      window.location.reload();
     } catch (e: any) {
       setCalcMsg(`Error: ${e.message}`);
     } finally {
@@ -1015,26 +1045,27 @@ function LeagueRanksTab({
     }
   }
 
-  // Build W-L standings over completed regular-season weeks (1–11)
+  // Build W-L standings using allTeams + combined allScores
   const record: Record<string, { wins: number; losses: number; pf: number }> = {};
-  for (const m of members) record[m.user_id] = { wins: 0, losses: 0, pf: 0 };
+  for (const t of allTeams) record[t.id] = { wins: 0, losses: 0, pf: 0 };
 
+  // Build round-robin schedule using the allTeams array (preserves draft_order)
   const regWeeks = Math.min(currentWeek - 1, 11);
   for (let w = 1; w <= regWeeks; w++) {
-    const pairs = buildRoundRobin(members, w);
+    const pairs = buildRoundRobin(allTeams, w);
     for (const [a, b] of pairs) {
-      const sa = allScores[a.user_id]?.[w] ?? 0;
-      const sb = allScores[b.user_id]?.[w] ?? 0;
-      record[a.user_id].pf += sa;
-      record[b.user_id].pf += sb;
-      if (sa > sb)      { record[a.user_id].wins++;  record[b.user_id].losses++; }
-      else if (sb > sa) { record[b.user_id].wins++;  record[a.user_id].losses++; }
+      const sa = allScores[a.id]?.[w] ?? 0;
+      const sb = allScores[b.id]?.[w] ?? 0;
+      record[a.id].pf += sa;
+      record[b.id].pf += sb;
+      if (sa > sb)      { record[a.id].wins++;  record[b.id].losses++; }
+      else if (sb > sa) { record[b.id].wins++;  record[a.id].losses++; }
     }
   }
 
-  const standings = [...members]
-    .filter(m => record[m.user_id])
-    .map(m => ({ ...m, ...record[m.user_id] }))
+  const standings = [...allTeams]
+    .filter(t => record[t.id])
+    .map(t => ({ ...t, ...record[t.id] }))
     .sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.pf - a.pf);
 
   // Bracket
@@ -1043,8 +1074,8 @@ function LeagueRanksTab({
 
   function matchResult(a: any, b: any, week: number): 'a' | 'b' | null {
     if (!a || !b || week >= currentWeek) return null;
-    const sa = allScores[a.user_id]?.[week] ?? 0;
-    const sb = allScores[b.user_id]?.[week] ?? 0;
+    const sa = allScores[a.id]?.[week] ?? 0;
+    const sb = allScores[b.id]?.[week] ?? 0;
     if (sa > sb) return 'a';
     if (sb > sa) return 'b';
     return null;
@@ -1125,13 +1156,13 @@ function LeagueRanksTab({
           <div style={{ textAlign: 'right' }}>PF</div>
         </div>
 
-        {standings.map((member, idx) => {
+        {standings.map((team, idx) => {
           const seed      = idx + 1;
-          const isUser    = member.user_id === userId;
+          const isUser    = !team.isCpu && team.id === userId;
           const hasBye    = seed <= 2 && standings.length >= 6;
           const hasPlayIn = seed >= 3 && seed <= 6 && standings.length >= 6;
           return (
-            <div key={member.id} style={{
+            <div key={team.id} style={{
               display: 'grid', gridTemplateColumns: '28px 1fr 60px 60px 90px',
               gap: 8, padding: '10px 16px',
               borderBottom: idx < standings.length - 1 ? `1px solid ${C.surf3}` : 'none',
@@ -1141,14 +1172,17 @@ function LeagueRanksTab({
                 {seed}
               </div>
               <div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text }}>{member.team_name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text }}>{team.team_name}</span>
+                  {team.isCpu && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: .5, color: C.muted, background: C.surf3, borderRadius: 3, padding: '1px 4px' }}>CPU</span>}
+                </div>
                 {hasBye    && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#2ecc71', marginTop: 1 }}>BYE · Wk 12</div>}
                 {hasPlayIn && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold,    marginTop: 1 }}>Play-in · Wk 12</div>}
               </div>
-              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 14, color: '#2ecc71', paddingTop: 1 }}>{member.wins}</div>
-              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.muted,   paddingTop: 1 }}>{member.losses}</div>
+              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 14, color: '#2ecc71', paddingTop: 1 }}>{team.wins}</div>
+              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.muted,   paddingTop: 1 }}>{team.losses}</div>
               <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.sub,     paddingTop: 1 }}>
-                {member.pf > 0 ? member.pf.toFixed(1) : '—'}
+                {team.pf > 0 ? team.pf.toFixed(1) : '—'}
               </div>
             </div>
           );
