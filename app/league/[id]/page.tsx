@@ -1559,7 +1559,7 @@ function assignRoster(picks: any[]): { starters: (any | null)[]; bench: any[] } 
   return { starters, bench };
 }
 
-function MatchupPlayerCell({ pick, align, ctx, gameStats }: { pick: any | null; align: 'left' | 'right'; ctx: MatchupCtx; gameStats: GameStats }) {
+function MatchupPlayerCell({ pick, align, ctx, gameStats, onView }: { pick: any | null; align: 'left' | 'right'; ctx: MatchupCtx; gameStats: GameStats; onView?: () => void }) {
   const isRight = align === 'right';
   if (!pick) return (
     <div style={{
@@ -1593,7 +1593,7 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats }: { pick: any | null; 
     </div>
   );
   return (
-    <div style={{
+    <div onClick={onView} style={{
       display: 'flex', alignItems: 'center',
       justifyContent: isRight ? 'flex-end' : 'flex-start',
       gap: 12, padding: '9px 14px', background: C.surf2,
@@ -1601,6 +1601,7 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats }: { pick: any | null; 
       border: '1px solid ' + C.surf3,
       borderRight: isRight ? 'none' : undefined,
       borderLeft: isRight ? undefined : 'none',
+      cursor: onView ? 'pointer' : 'default',
     }}>
       {isRight ? <>{info}{score}</> : <>{score}{info}</>}
     </div>
@@ -1608,11 +1609,12 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats }: { pick: any | null; 
 }
 
 function MatchupTab({ league, userId }: { league: any; userId: string | null }) {
-  const [picks,      setPicks]      = useState<any[]>([]);
-  const [week,       setWeek]       = useState(1);
-  const [matchupCtx, setMatchupCtx] = useState<MatchupCtx>(null);
-  const [gameStats,  setGameStats]  = useState<GameStats>(null);
-  const [loading,    setLoading]    = useState(true);
+  const [picks,         setPicks]         = useState<any[]>([]);
+  const [week,          setWeek]          = useState(1);
+  const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
+  const [gameStats,     setGameStats]     = useState<GameStats>(null);
+  const [loading,       setLoading]       = useState(true);
+  const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
 
   useEffect(() => {
     if (!league?.id) return;
@@ -1652,6 +1654,10 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
     <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
       Loading matchup…
     </div>
+  );
+
+  if (viewingPlayer) return (
+    <PlayerDetailView player={viewingPlayer} onBack={() => setViewingPlayer(null)} onAdd={() => {}} canAdd={false} />
   );
 
   if (!myEntry || numTeams === 0) return (
@@ -1709,11 +1715,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
         const color = POS_COLORS[label] || C.muted;
         return (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
-            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} />
+            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} onView={myRoster.starters[i] ? () => setViewingPlayer(myRoster.starters[i]!.player_data) : undefined} />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: color + '22', border: '1px solid ' + color + '44', borderLeft: 'none', borderRight: 'none' }}>
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color, fontWeight: 700 }}>{label}</span>
             </div>
-            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} />
+            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} onView={oppRoster.starters[i] ? () => setViewingPlayer(oppRoster.starters[i]!.player_data) : undefined} />
           </div>
         );
       })}
@@ -1728,11 +1734,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
           </div>
           {Array.from({ length: benchLen }).map((_, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
-              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} />
+              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} onView={myRoster.bench[i] ? () => setViewingPlayer(myRoster.bench[i]!.player_data) : undefined} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.muted + '22', border: '1px solid ' + C.muted + '44', borderLeft: 'none', borderRight: 'none' }}>
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, fontWeight: 700 }}>BN</span>
               </div>
-              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} />
+              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} onView={oppRoster.bench[i] ? () => setViewingPlayer(oppRoster.bench[i]!.player_data) : undefined} />
             </div>
           ))}
         </>
@@ -1763,6 +1769,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const [memberSlot,    setMemberSlot]    = useState<number | null>(null);
   const [memberName,    setMemberName]    = useState<string>('');
   const [selectedBench, setSelectedBench] = useState<any | null>(null);
+  const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
 
   const TOTAL_WEEKS    = 14;
   const PLAYOFF_START  = 12;
@@ -1881,6 +1888,10 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
     <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
       Loading roster…
     </div>
+  );
+
+  if (viewingPlayer) return (
+    <PlayerDetailView player={viewingPlayer} onBack={() => setViewingPlayer(null)} onAdd={() => {}} canAdd={false} />
   );
 
   if (myPicksRaw.length === 0) return (
@@ -2003,7 +2014,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
             }}>{label}</div>
 
             {/* Player info */}
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: 1, minWidth: 0 }} onClick={pick ? (e) => { e.stopPropagation(); setViewingPlayer(pick.player_data); } : undefined}>
               {pick ? (
                 <PlayerInfoLines
                   school={pick?.player_data?.school ?? ''}
@@ -2080,7 +2091,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: col, flexShrink: 0 }} />
 
                 {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0 }} onClick={e => { e.stopPropagation(); setViewingPlayer(pick.player_data); }}>
                   <PlayerInfoLines
                     school={pick.player_data?.school ?? ''}
                     unitType={pick.player_data?.unitType ?? ''}
@@ -2088,7 +2099,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                     ctx={matchupCtx}
                     ep={bep}
                     seasonPts={pick.player_data?.projectedPoints ?? 0}
-                                />
+                  />
                 </div>
 
                 {/* Pts */}
