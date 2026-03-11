@@ -692,6 +692,156 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
   );
 }
 
+/* ── Player Detail View ──────────────────────────────────────── */
+const UNIT_COLORS: Record<string, string> = {
+  QB: '#ef4444', RB: '#3b82f6', WR: '#d4a828', TE: '#a855f7', DEF: '#10b981', K: '#f97316',
+};
+
+const STAT_COLS: Record<string, { key: string; label: string }[]> = {
+  QB:  [{ key: 'passYd', label: 'PASS YDS' }, { key: 'passTd', label: 'TD' }, { key: 'int', label: 'INT' }, { key: 'rushYd', label: 'RUSH YDS' }],
+  RB:  [{ key: 'rushAtt', label: 'ATT' }, { key: 'rushYd', label: 'YDS' }, { key: 'rushTd', label: 'TD' }, { key: 'rec', label: 'REC' }, { key: 'recYd', label: 'REC YDS' }],
+  WR:  [{ key: 'rec', label: 'REC' }, { key: 'recYd', label: 'YDS' }, { key: 'recTd', label: 'TD' }],
+  TE:  [{ key: 'rec', label: 'REC' }, { key: 'recYd', label: 'YDS' }, { key: 'recTd', label: 'TD' }],
+  DEF: [{ key: 'sacks', label: 'SACK' }, { key: 'ints', label: 'INT' }, { key: 'fumRec', label: 'FUM' }, { key: 'defTd', label: 'TD' }],
+  K:   [{ key: 'pts', label: 'PTS' }],
+};
+
+function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
+  player: any; onBack: () => void; onAdd: () => void; canAdd: boolean;
+}) {
+  const [stats,   setStats]   = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/unit-stats?school=${encodeURIComponent(player.school)}&unitType=${player.unitType}&season=2025`)
+      .then(r => r.json())
+      .then(d => { setStats(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [player.school, player.unitType]);
+
+  const cols    = STAT_COLS[player.unitType] ?? [];
+  const weeks   = stats?.weeks ?? [];
+  const posColor = UNIT_COLORS[player.unitType] ?? C.muted;
+
+  // Aggregate individual player season totals (for RB/WR/TE)
+  const playerTotals: Record<string, any> = {};
+  if (['RB', 'WR', 'TE'].includes(player.unitType)) {
+    for (const wk of weeks) {
+      for (const p of (wk.players ?? [])) {
+        if (!p.name) continue;
+        if (!playerTotals[p.name]) playerTotals[p.name] = { name: p.name };
+        for (const k of Object.keys(p)) {
+          if (k !== 'name' && typeof p[k] === 'number') {
+            playerTotals[p.name][k] = (playerTotals[p.name][k] || 0) + p[k];
+          }
+        }
+      }
+    }
+  }
+  const sortedPlayers = Object.values(playerTotals).sort(
+    (a: any, b: any) => (b.recYd || b.rushYd || 0) - (a.recYd || a.rushYd || 0)
+  );
+
+  const colTemplate = `32px 1fr 64px${cols.map(() => ' 64px').join('')}`;
+
+  return (
+    <div style={{ maxWidth: 700, margin: '0 auto' }}>
+      <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, cursor: 'pointer', marginBottom: 16, letterSpacing: 1, padding: 0 }}>
+        ← BACK
+      </button>
+
+      {/* Header */}
+      <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '16px 20px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 8, background: posColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, color: '#fff', flexShrink: 0 }}>
+            {player.unitType}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 17, color: C.text, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {player.playerName || player.school}
+            </div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{player.school} · {player.conference} · {player.tier}</div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.gold }}>{weeklyProj(player.projectedPoints).toFixed(1)}</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 6 }}>pts/wk proj</div>
+          {canAdd && (
+            <button onClick={onAdd} style={{ padding: '6px 16px', background: 'rgba(46,204,113,.12)', border: `1px solid ${C.green}`, borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, color: C.green, cursor: 'pointer', letterSpacing: .5 }}>
+              + ADD
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Game Logs */}
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>Game Logs</div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>Loading stats…</div>
+      ) : (
+        <div style={{ background: C.surf, borderRadius: 10, border: `1px solid ${C.surf3}`, overflowX: 'auto' }}>
+          {/* Header row */}
+          <div style={{ display: 'grid', gridTemplateColumns: colTemplate, gap: 4, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2, minWidth: 380 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: .5 }}>WK</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: .5 }}>OPP</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>FPTS</div>
+            {cols.map(col => (
+              <div key={col.key} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>{col.label}</div>
+            ))}
+          </div>
+          {weeks.map((wk: any) => {
+            const p0 = wk.players?.[0] ?? {};
+            const isPlayoff = wk.week > 11;
+            return (
+              <div key={wk.week} style={{ display: 'grid', gridTemplateColumns: colTemplate, gap: 4, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22`, minWidth: 380, background: isPlayoff ? 'rgba(139,92,246,.04)' : 'transparent' }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isPlayoff ? '#a855f7' : C.muted }}>{wk.week}</div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {wk.opponent
+                    ? `vs ${wk.opponent.length > 12 ? wk.opponent.slice(0, 12) + '…' : wk.opponent}`
+                    : (isPlayoff ? 'PLAYOFF' : '—')}
+                </div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: wk.fantasyPoints != null ? C.gold : C.muted, textAlign: 'right' }}>
+                  {wk.fantasyPoints != null ? wk.fantasyPoints.toFixed(1) : '—'}
+                </div>
+                {cols.map(col => (
+                  <div key={col.key} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textAlign: 'right' }}>
+                    {wk.completed && p0[col.key] != null ? p0[col.key] : '—'}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Unit Players (season totals) — RB/WR/TE only */}
+      {!loading && sortedPlayers.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>Unit Players (Season)</div>
+          <div style={{ background: C.surf, borderRadius: 10, border: `1px solid ${C.surf3}`, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 50px 64px 44px', gap: 4, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2 }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: .5 }}>PLAYER</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>{player.unitType === 'RB' ? 'ATT' : 'REC'}</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>YDS</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>TD</div>
+            </div>
+            {sortedPlayers.map((p: any) => (
+              <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '1fr 50px 64px 44px', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22` }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{player.unitType === 'RB' ? (p.rushAtt || 0) : (p.rec || 0)}</div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{player.unitType === 'RB' ? (p.rushYd || 0) : (p.recYd || 0)}</div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.gold, textAlign: 'right' }}>{player.unitType === 'RB' ? (p.rushTd || 0) : (p.recTd || 0)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Waiver Wire Tab ─────────────────────────────────────────── */
 function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   const [allPicks,    setAllPicks]    = useState<any[]>([]);
@@ -699,6 +849,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   const [pool,        setPool]        = useState<DraftUnit[]>([]);
   const [posFilter,   setPosFilter]   = useState<string>('ALL');
   const [search,      setSearch]      = useState('');
+  const [viewing,     setViewing]     = useState<any | null>(null);
   const [adding,      setAdding]      = useState<any | null>(null);
   const [dropping,    setDropping]    = useState<any | null>(null);
   const [busy,        setBusy]        = useState(false);
@@ -767,6 +918,18 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
       Loading waiver wire…
     </div>
   );
+
+  /* ── Player detail view ── */
+  if (viewing) {
+    return (
+      <PlayerDetailView
+        player={viewing}
+        onBack={() => setViewing(null)}
+        onAdd={() => { setViewing(null); setAdding(viewing); }}
+        canAdd={!!userId && !draftedIds.has(viewing.id)}
+      />
+    );
+  }
 
   /* ── Drop modal ── */
   if (adding) {
@@ -853,7 +1016,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         const name = p.playerName || p.school;
         const posColor: Record<string, string> = { QB: '#ef4444', RB: '#3b82f6', WR: '#d4a828', TE: '#a855f7', DEF: '#10b981', K: '#f97316' };
         return (
-          <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px 80px', gap: 8, alignItems: 'center', background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
+          <div key={p.id} onClick={() => setViewing(p)} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px 80px', gap: 8, alignItems: 'center', background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '10px 12px', marginBottom: 6, cursor: 'pointer' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
               <div style={{ width: 32, height: 32, borderRadius: 6, background: posColor[p.unitType] || C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 11, color: '#fff', flexShrink: 0 }}>
                 {p.unitType}
@@ -865,7 +1028,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
             </div>
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold, textAlign: 'right' }}>{weeklyProj(p.projectedPoints).toFixed(1)}</div>
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.adp.toFixed(1)}</div>
-            <button onClick={() => setAdding(p)} style={{ padding: '6px 0', background: C.surf3, border: '1px solid ' + C.surf3, borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, color: C.gold, cursor: 'pointer', letterSpacing: .5 }}>
+            <button onClick={e => { e.stopPropagation(); setAdding(p); }} style={{ padding: '6px 0', background: C.surf3, border: '1px solid ' + C.surf3, borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, color: C.gold, cursor: 'pointer', letterSpacing: .5 }}>
               + ADD
             </button>
           </div>
