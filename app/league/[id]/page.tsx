@@ -698,7 +698,7 @@ const UNIT_COLORS: Record<string, string> = {
 };
 
 const STAT_COLS: Record<string, { key: string; label: string }[]> = {
-  QB:  [{ key: 'passYd', label: 'PASS YDS' }, { key: 'passTd', label: 'TD' }, { key: 'int', label: 'INT' }, { key: 'rushYd', label: 'RUSH YDS' }],
+  QB:  [{ key: 'passYd', label: 'PASS YDS' }, { key: 'passTd', label: 'PASS TD' }, { key: 'int', label: 'INT' }, { key: 'rushYd', label: 'RUSH YDS' }, { key: 'rushTd', label: 'RUSH TD' }],
   RB:  [{ key: 'rushAtt', label: 'ATT' }, { key: 'rushYd', label: 'YDS' }, { key: 'rushTd', label: 'TD' }, { key: 'rec', label: 'REC' }, { key: 'recYd', label: 'REC YDS' }],
   WR:  [{ key: 'rec', label: 'REC' }, { key: 'recYd', label: 'YDS' }, { key: 'recTd', label: 'TD' }],
   TE:  [{ key: 'rec', label: 'REC' }, { key: 'recYd', label: 'YDS' }, { key: 'recTd', label: 'TD' }],
@@ -743,7 +743,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
     (a: any, b: any) => (b.recYd || b.rushYd || 0) - (a.recYd || a.rushYd || 0)
   );
 
-  const colTemplate = `32px 1fr 64px${cols.map(() => ' 64px').join('')}`;
+  const colTemplate = `32px 1fr 64px 44px${cols.map(() => ' 64px').join('')}`;
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
@@ -787,6 +787,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: .5 }}>WK</div>
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: .5 }}>OPP</div>
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>FPTS</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>ODR</div>
             {cols.map(col => (
               <div key={col.key} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>{col.label}</div>
             ))}
@@ -804,6 +805,9 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                 </div>
                 <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: wk.fantasyPoints != null ? C.gold : C.muted, textAlign: 'right' }}>
                   {wk.fantasyPoints != null ? wk.fantasyPoints.toFixed(1) : '—'}
+                </div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right', color: wk.multiplier == null ? C.muted : wk.multiplier > 1 ? C.green : wk.multiplier < 1 ? C.red : C.sub }}>
+                  {wk.multiplier != null ? `×${wk.multiplier.toFixed(1)}` : '—'}
                 </div>
                 {cols.map(col => (
                   <div key={col.key} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textAlign: 'right' }}>
