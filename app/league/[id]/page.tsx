@@ -1727,7 +1727,7 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 16 }}>
         <button onClick={() => setWeek(w => Math.max(1, w - 1))} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>‹</button>
         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.muted, textTransform: 'uppercase' }}>
-          Week {week} · {gameStats?.completedSchools.length ? 'Actual / Proj' : 'Projected'}
+          Week {week} · {gameStats?.completedSchools.length ? 'Actual' : 'Projected'}
         </div>
         <button onClick={() => setWeek(w => Math.min(15, w + 1))} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>›</button>
       </div>
@@ -1996,7 +1996,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         padding: '14px 18px', marginBottom: 20,
       }}>
         <div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{gameStats?.completedSchools.length ? 'Actual / Proj' : 'Projected'} · Starters Only</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{gameStats?.completedSchools.length ? 'Actual' : 'Projected'} · Starters Only</div>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: C.gold, letterSpacing: 1, marginTop: 2 }}>{starterTotal.toFixed(1)}</div>
           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginTop: 2 }}>{myTeamName}</div>
         </div>
@@ -2433,7 +2433,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
         <div style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10, padding: '14px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 1, color: isMyTeam ? C.gold : C.text }}>{selectedTeam.teamName}</div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginTop: 2 }}>{gameStats?.completedSchools.length ? 'Act/Proj' : 'Proj.'} {starterPts.toFixed(1)} pts · starters only</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginTop: 2 }}>{gameStats?.completedSchools.length ? 'Actual' : 'Proj.'} {starterPts.toFixed(1)} pts · starters only</div>
             {tradeMsg && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, marginTop: 4 }}>{tradeMsg}</div>}
           </div>
           {canTrade && (
