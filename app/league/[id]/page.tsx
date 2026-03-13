@@ -235,7 +235,15 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(membersCh); supabase.removeChannel(chatCh); };
+    // Refresh member list when user switches back to this tab (handles realtime lag)
+    const handleVisibility = () => { if (!document.hidden) loadData(); };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      supabase.removeChannel(membersCh);
+      supabase.removeChannel(chatCh);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 

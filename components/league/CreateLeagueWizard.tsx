@@ -63,12 +63,27 @@ export function CreateLeagueWizard() {
     }
 
     // Add commissioner as first member
-    await supabase.from('league_members').insert({
+    const { error: memberError } = await supabase.from('league_members').insert({
       league_id: data.id,
       user_id:   user.id,
       team_name: form.team_name.trim() || 'My Team',
       draft_slot: 1,
     });
+
+    if (memberError) {
+      // Retry once — can fail on first attempt due to RLS timing
+      const { error: retryError } = await supabase.from('league_members').insert({
+        league_id: data.id,
+        user_id:   user.id,
+        team_name: form.team_name.trim() || 'My Team',
+        draft_slot: 1,
+      });
+      if (retryError) {
+        setError('League created but could not add you as a member. Please refresh and try joining via the invite link.');
+        setLoading(false);
+        return;
+      }
+    }
 
     setCreatedLeague(data);
     setLoading(false);
