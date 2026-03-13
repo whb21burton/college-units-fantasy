@@ -1,0 +1,47 @@
+/* ── Base reset ─────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* ── Font rendering ─────────────────────────────────────────── */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+}
+
+/* ── Custom scrollbar ───────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e2f46;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #263d58;
+}
+
+/* ── Text selection ─────────────────────────────────────────── */
+::selection {
+  background: rgba(245, 166, 35, 0.22);
+  color: inherit;
+}
+
+/* ── Button base reset ──────────────────────────────────────── */
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Table reset ────────────────────────────────────────────── */
+table {
+  border-collapse: collapse;
+}

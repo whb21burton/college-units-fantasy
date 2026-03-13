@@ -7,9 +7,16 @@ import type { DraftUnit } from '@/lib/playerPool';
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
 const C = {
-  bg: '#05080f', surf: '#0c1220', surf2: '#131d30', surf3: '#1e2d47',
-  gold: '#d4a828', muted: '#4a5d7a', text: '#e8edf5', sub: '#7a90b0',
-  green: '#2ecc71', red: '#e74c3c',
+  bg:    '#070a12',   // deep navy-black
+  surf:  '#0c1422',   // card surface
+  surf2: '#111d30',   // elevated card
+  surf3: '#1a2b40',   // border / divider
+  gold:  '#f5a623',   // vibrant amber gold
+  text:  '#e4edf7',   // crisp blue-white
+  sub:   '#7a92aa',   // steel secondary
+  muted: '#3e5470',   // placeholder / muted
+  green: '#15c678',   // emerald green
+  red:   '#f03a5a',   // rose red
 };
 
 const SEASON_GAMES = 12;
@@ -116,13 +123,10 @@ function PlayerInfoLines({
 
   return (
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{matchupLine}</div>
-      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: diffColor, letterSpacing: .5 }}>
-        {diffLabel} · {mult.toFixed(2)}x
-      </span>
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: .3 }}>
-        {breakdownLine}
+      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
+      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', marginTop: 1 }}>{matchupLine}</div>
+      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, color: diffColor, letterSpacing: .3, marginTop: 1 }}>
+        {diffLabel} · {mult.toFixed(2)}x · {breakdownLine}
       </div>
     </div>
   );
@@ -341,16 +345,25 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           LEFT SIDEBAR
       ══════════════════════════════════════════════ */}
       <aside style={{
-        width: 220, flexShrink: 0, background: C.surf,
+        width: 220, flexShrink: 0,
+        background: 'linear-gradient(180deg, #0b1628 0%, #090e1c 100%)',
         borderRight: '1px solid ' + C.surf3,
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
-        {/* Logo */}
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
+        {/* Brand mark */}
+        <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
           <button
             onClick={() => router.push('/')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.gold }}
-          >🏈 CUF</button>
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            <div style={{
+              width: 28, height: 28, borderRadius: 6,
+              background: 'linear-gradient(135deg, #f5a623 0%, #e8841a 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Anton,sans-serif', fontSize: 12, color: '#07090e', letterSpacing: 0.5, flexShrink: 0,
+            }}>CUF</div>
+            <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: 0.3 }}>College Units</span>
+          </button>
         </div>
 
         {/* My Leagues */}
@@ -429,28 +442,33 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
 
         {/* League header + tabs */}
-        <div style={{ background: C.surf, borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
-          <div style={{ padding: '14px 24px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-              <h1 style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, letterSpacing: 1.5, color: C.text, textTransform: 'uppercase', margin: 0 }}>{league?.name}</h1>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, background: 'rgba(212,168,40,.1)', border: '1px solid rgba(212,168,40,.3)', padding: '2px 8px', borderRadius: 4 }}>
-                {(league?.status || 'FORMING').toUpperCase()}
+        <div style={{ background: 'linear-gradient(180deg, #0d1827 0%, #0c1422 100%)', borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
+          <div style={{ padding: '16px 24px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+              <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 0.3, color: C.text, textTransform: 'uppercase', margin: 0 }}>{league?.name}</h1>
+              <span style={{
+                fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 600, letterSpacing: 1.5,
+                color: C.gold, background: 'rgba(245,166,35,.12)', border: '1px solid rgba(245,166,35,.28)',
+                padding: '3px 8px', borderRadius: 20, textTransform: 'uppercase',
+              }}>
+                {(league?.status || 'FORMING')}
               </span>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isFull ? C.gold : C.sub }}>
-                {totalOccupied}/{league?.league_size} — {isFull ? 'League full' : spotsLeft + ' spot' + (spotsLeft !== 1 ? 's' : '') + ' left'}
+              <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: isFull ? C.gold : C.sub }}>
+                {totalOccupied}/{league?.league_size} · {isFull ? 'Full' : spotsLeft + ' open'}
               </span>
             </div>
-            <div style={{ display: 'flex' }}>
+            <div style={{ display: 'flex', gap: 2 }}>
               {computedTabs.map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
                   style={{
-                    padding: '8px 18px', background: 'none', border: 'none', cursor: 'pointer',
-                    fontFamily: 'Oswald,sans-serif', fontSize: 13, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase',
+                    padding: '7px 16px', border: 'none', cursor: 'pointer', borderRadius: '6px 6px 0 0',
+                    fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase',
                     color: activeTab === tab.key ? C.gold : C.sub,
+                    background: activeTab === tab.key ? 'rgba(245,166,35,.1)' : 'transparent',
                     borderBottom: activeTab === tab.key ? '2px solid ' + C.gold : '2px solid transparent',
-                    marginBottom: -1, transition: 'color .15s',
+                    marginBottom: -1, transition: 'color .15s, background .15s',
                   }}
                 >{tab.label}</button>
               ))}
@@ -694,7 +712,12 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
 
 /* ── Player Detail View ──────────────────────────────────────── */
 const UNIT_COLORS: Record<string, string> = {
-  QB: '#ef4444', RB: '#3b82f6', WR: '#d4a828', TE: '#a855f7', DEF: '#10b981', K: '#f97316',
+  QB:  '#e84545',   // vivid red
+  RB:  '#2d7fe0',   // clear royal blue
+  WR:  '#d4a020',   // warm amber
+  TE:  '#9b56e0',   // violet
+  DEF: '#0db874',   // emerald
+  K:   '#f07820',   // orange
 };
 
 const STAT_COLS: Record<string, { key: string; label: string }[]> = {
@@ -747,36 +770,50 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
-      <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, cursor: 'pointer', marginBottom: 16, letterSpacing: 1, padding: 0 }}>
-        ← BACK
+      <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.sub, fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 500, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
+        ← Back
       </button>
 
       {/* Header */}
-      <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '16px 20px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+      <div style={{
+        background: 'linear-gradient(135deg, #0e1f35 0%, #0b1624 100%)',
+        border: `1px solid ${C.surf3}`, borderRadius: 14,
+        padding: '18px 20px', marginBottom: 20,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 8, background: posColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, color: '#fff', flexShrink: 0 }}>
-            {player.unitType}
-          </div>
+          {/* Large pill badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            height: 40, minWidth: 56, padding: '0 12px', borderRadius: 24, flexShrink: 0,
+            background: posColor + '22', border: '1px solid ' + posColor + '60',
+            fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 700,
+            color: posColor, letterSpacing: 0.5,
+          }}>{player.unitType}</div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 17, color: C.text, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 18, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {player.playerName || player.school}
             </div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{player.school} · {player.conference} · {player.tier}</div>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub, marginTop: 2 }}>{player.school} · {player.conference} · {player.tier}</div>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.gold }}>{weeklyProj(player.projectedPoints).toFixed(1)}</div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 6 }}>pts/wk proj</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.gold, lineHeight: 1 }}>{weeklyProj(player.projectedPoints).toFixed(1)}</div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, marginBottom: 8, marginTop: 2, letterSpacing: 1, textTransform: 'uppercase' }}>pts/wk proj</div>
           {canAdd && (
-            <button onClick={onAdd} style={{ padding: '6px 16px', background: 'rgba(46,204,113,.12)', border: `1px solid ${C.green}`, borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, color: C.green, cursor: 'pointer', letterSpacing: .5 }}>
-              + ADD
-            </button>
+            <button onClick={onAdd} style={{
+              padding: '6px 16px', background: 'rgba(21,198,120,.12)',
+              border: `1px solid rgba(21,198,120,.4)`, borderRadius: 8,
+              fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700,
+              color: C.green, cursor: 'pointer', letterSpacing: .3,
+            }}>+ ADD</button>
           )}
         </div>
       </div>
 
       {/* Game Logs */}
-      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>Game Logs</div>
+      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>Game Logs</div>
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>Loading stats…</div>
@@ -1091,24 +1128,37 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
       )}
 
       {freeAgents.map(p => {
-        const name = p.playerName || p.school;
-        const posColor: Record<string, string> = { QB: '#ef4444', RB: '#3b82f6', WR: '#d4a828', TE: '#a855f7', DEF: '#10b981', K: '#f97316' };
+        const name     = p.playerName || p.school;
+        const posColor = UNIT_COLORS[p.unitType] || C.muted;
         return (
-          <div key={p.id} onClick={() => setViewing(p)} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px 80px', gap: 8, alignItems: 'center', background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '10px 12px', marginBottom: 6, cursor: 'pointer' }}>
+          <div key={p.id} onClick={() => setViewing(p)} style={{
+            display: 'grid', gridTemplateColumns: '1fr 60px 60px 80px', gap: 8, alignItems: 'center',
+            background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10,
+            padding: '10px 14px', marginBottom: 5, cursor: 'pointer',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.25)', transition: 'border-color .15s',
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 6, background: posColor[p.unitType] || C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 11, color: '#fff', flexShrink: 0 }}>
-                {p.unitType}
-              </div>
+              {/* Pill badge */}
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                height: 22, minWidth: 38, padding: '0 8px', borderRadius: 20,
+                background: posColor + '22', border: '1px solid ' + posColor + '60',
+                fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700,
+                color: posColor, flexShrink: 0, letterSpacing: 0.3,
+              }}>{p.unitType}</div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{p.school} · {p.conference} · {p.tier}</div>
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, marginTop: 1 }}>{p.school} · {p.conference} · {p.tier}</div>
               </div>
             </div>
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold, textAlign: 'right' }}>{weeklyProj(p.projectedPoints).toFixed(1)}</div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.adp.toFixed(1)}</div>
-            <button onClick={e => { e.stopPropagation(); setAdding(p); }} style={{ padding: '6px 0', background: C.surf3, border: '1px solid ' + C.surf3, borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, color: C.gold, cursor: 'pointer', letterSpacing: .5 }}>
-              + ADD
-            </button>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.gold, textAlign: 'right' }}>{weeklyProj(p.projectedPoints).toFixed(1)}</div>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.adp.toFixed(1)}</div>
+            <button onClick={e => { e.stopPropagation(); setAdding(p); }} style={{
+              padding: '6px 0', background: 'rgba(21,198,120,.12)',
+              border: '1px solid rgba(21,198,120,.35)', borderRadius: 8,
+              fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700,
+              color: C.green, cursor: 'pointer', letterSpacing: .3,
+            }}>+ ADD</button>
           </div>
         );
       })}
@@ -1590,8 +1640,8 @@ function LeagueRanksTab({
 /* ── Matchup Tab ─────────────────────────────────────────────── */
 const STARTER_SLOT_LABELS = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'DEF', 'K'];
 const POS_COLORS: Record<string, string> = {
-  QB: '#ef4444', RB: '#3b82f6', WR: '#d4a828', TE: '#a855f7',
-  DEF: '#10b981', K: '#f97316', FLEX: '#06b6d4',
+  QB: '#e84545', RB: '#2d7fe0', WR: '#d4a020', TE: '#9b56e0',
+  DEF: '#0db874', K: '#f07820', FLEX: '#0ea5c9',
 };
 
 function snakeIdx(pickNum: number, numTeams: number): number {
@@ -1763,29 +1813,40 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
 
       {/* Score header card */}
       <div style={{
-        background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 14,
-        padding: '22px 28px', marginBottom: 24,
-        display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 16, alignItems: 'center',
+        background: 'linear-gradient(135deg, #0e1f35 0%, #0b1624 50%, #0e1f35 100%)',
+        border: '1px solid ' + C.surf3,
+        borderRadius: 16, padding: '24px 28px', marginBottom: 24,
+        display: 'grid', gridTemplateColumns: '1fr 48px 1fr', gap: 8, alignItems: 'center',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
       }}>
+        {/* My team */}
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, letterSpacing: 1, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>{myTotal.toFixed(1)}</div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text, fontWeight: 600, marginTop: 6 }}>{myTeamName}</div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 2 }}>YOUR TEAM · STARTERS</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>{myTotal.toFixed(1)}</div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 8 }}>{myTeamName}</div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, letterSpacing: 1.5, marginTop: 3, textTransform: 'uppercase' }}>Your Team</div>
         </div>
+        {/* VS divider */}
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 3, color: C.muted }}>VS</div>
+          <div style={{
+            display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+          }}>
+            <div style={{ width: 1, height: 18, background: C.surf3 }} />
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.muted }}>VS</div>
+            <div style={{ width: 1, height: 18, background: C.surf3 }} />
+          </div>
         </div>
+        {/* Opponent */}
         <div style={{ textAlign: 'left' }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, letterSpacing: 1, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>{oppTotal.toFixed(1)}</div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text, fontWeight: 600, marginTop: 6 }}>{oppTeamName}</div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 2 }}>OPPONENT · STARTERS</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>{oppTotal.toFixed(1)}</div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 8 }}>{oppTeamName}</div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, letterSpacing: 1.5, marginTop: 3, textTransform: 'uppercase' }}>Opponent</div>
         </div>
       </div>
 
       {/* Starters section */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
         <div style={{ flex: 1, height: 1, background: C.surf3 }} />
-        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Starters</span>
+        <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Starters</span>
         <div style={{ flex: 1, height: 1, background: C.surf3 }} />
       </div>
 
@@ -1807,7 +1868,7 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20, marginBottom: 8 }}>
             <div style={{ flex: 1, height: 1, background: C.surf3 }} />
-            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Bench</span>
+            <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Bench</span>
             <div style={{ flex: 1, height: 1, background: C.surf3 }} />
           </div>
           {Array.from({ length: benchLen }).map((_, i) => (
@@ -2018,20 +2079,26 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         })}
       </div>
 
-      {/* Projected score header */}
+      {/* Team score header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10,
-        padding: '14px 18px', marginBottom: 20,
+        background: 'linear-gradient(135deg, #0e1f35 0%, #0b1624 100%)',
+        border: '1px solid ' + C.surf3, borderRadius: 14,
+        padding: '16px 20px', marginBottom: 20,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
       }}>
         <div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{gameStats?.completedSchools.length ? 'Actual' : 'Projected'} · Starters Only</div>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: C.gold, letterSpacing: 1, marginTop: 2 }}>{starterTotal.toFixed(1)}</div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginTop: 2 }}>{myTeamName}</div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{gameStats?.completedSchools.length ? 'Actual' : 'Projected'} · Starters Only</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, color: C.gold, lineHeight: 1, marginTop: 4 }}>{starterTotal.toFixed(1)}</div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.sub, marginTop: 4 }}>{myTeamName}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted }}>WEEK {week}</div>
-          {saving && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, marginTop: 4 }}>Saving…</div>}
+          <div style={{
+            fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 600,
+            letterSpacing: 1.5, color: C.sub, textTransform: 'uppercase',
+            background: C.surf3, padding: '4px 10px', borderRadius: 20,
+          }}>Week {week}</div>
+          {saving && <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, marginTop: 8 }}>Saving…</div>}
         </div>
       </div>
 
@@ -2054,7 +2121,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
       {/* Starters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
         <div style={{ flex: 1, height: 1, background: C.surf3 }} />
-        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Starters</span>
+        <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Starters</span>
         <div style={{ flex: 1, height: 1, background: C.surf3 }} />
       </div>
 
@@ -2084,11 +2151,11 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
           >
             {/* Slot badge */}
             <div style={{
-              width: 36, flexShrink: 0, textAlign: 'center',
-              fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700,
-              letterSpacing: 1, color,
-              background: color + '22', border: '1px solid ' + color + '44',
-              borderRadius: 4, padding: '3px 0',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              height: 22, minWidth: 42, padding: '0 8px', flexShrink: 0,
+              fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700,
+              color, background: color + '1a', border: '1px solid ' + color + '50',
+              borderRadius: 20, letterSpacing: 0.3,
             }}>{label}</div>
 
             {/* Player info */}
@@ -2129,7 +2196,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20, marginBottom: 8 }}>
             <div style={{ flex: 1, height: 1, background: C.surf3 }} />
-            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Bench</span>
+            <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Bench</span>
             <div style={{ flex: 1, height: 1, background: C.surf3 }} />
           </div>
 
@@ -2156,17 +2223,14 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                   transition: 'all .15s',
                 }}
               >
-                {/* BN badge */}
+                {/* Pos pill (bench) */}
                 <div style={{
-                  width: 36, flexShrink: 0, textAlign: 'center',
-                  fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700,
-                  letterSpacing: 1, color: C.muted,
-                  background: C.muted + '22', border: '1px solid ' + C.muted + '44',
-                  borderRadius: 4, padding: '3px 0',
-                }}>BN</div>
-
-                {/* Pos dot */}
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: col, flexShrink: 0 }} />
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  height: 22, minWidth: 42, padding: '0 8px', flexShrink: 0,
+                  fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700,
+                  color: col, background: col + '1a', border: '1px solid ' + col + '50',
+                  borderRadius: 20, letterSpacing: 0.3,
+                }}>{pos || 'BN'}</div>
 
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }} onClick={e => { e.stopPropagation(); setViewingPlayer(pick.player_data); }}>
@@ -2505,7 +2569,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
         {/* Starters */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <div style={{ flex: 1, height: 1, background: C.surf3 }} />
-          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Starters</span>
+          <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Starters</span>
           <div style={{ flex: 1, height: 1, background: C.surf3 }} />
         </div>
         {STARTER_SLOT_LABELS.map((label, i) => {
@@ -2538,7 +2602,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, marginBottom: 8 }}>
               <div style={{ flex: 1, height: 1, background: C.surf3 }} />
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Bench</span>
+              <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Bench</span>
               <div style={{ flex: 1, height: 1, background: C.surf3 }} />
             </div>
             {roster.bench.map((pick: any) => {
