@@ -45,3 +45,46 @@ button {
 table {
   border-collapse: collapse;
 }
+
+/* ── Mobile responsive (≤ 767px) ────────────────────────────── */
+@media (max-width: 767px) {
+  /* Hide sidebars — full-width content on phone */
+  .mob-hide { display: none !important; }
+
+  /* Fix 100vh on mobile (address bar eats space on iOS/Android) */
+  .layout-root { height: 100dvh !important; }
+
+  /* Tighter content padding */
+  .mob-pad { padding: 12px !important; }
+
+  /* Tighter header padding */
+  .mob-header-pad { padding: 10px 12px 0 !important; }
+
+  /* Score header card — compact on mobile */
+  .mob-score-card { padding: 14px 14px !important; }
+
+  /* Large score numbers — smaller on mobile */
+  .mob-score-big { font-size: 26px !important; line-height: 1 !important; }
+
+  /* Medium score numbers (TeamTab header) */
+  .mob-score-med { font-size: 22px !important; }
+
+  /* Team name in score card */
+  .mob-score-name { font-size: 12px !important; }
+
+  /* Scrollable tab nav bar — no wrapping */
+  .mob-scroll-x {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .mob-scroll-x::-webkit-scrollbar { display: none; }
+
+  /* Matchup comparison row — tighter center column */
+  .matchup-row { grid-template-columns: 1fr 26px 1fr !important; }
+
+  /* PlayerInfoLines 3rd-line text — allow wrapping on mobile */
+  .mob-info-line { font-size: 8px !important; white-space: normal !important; line-height: 1.3 !important; }
+}

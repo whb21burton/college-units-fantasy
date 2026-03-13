@@ -123,7 +123,7 @@ function PlayerInfoLines({
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', marginTop: 1 }}>{matchupLine}</div>
-      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, color: diffColor, letterSpacing: .3, marginTop: 1 }}>
+      <div className="mob-info-line" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, color: diffColor, letterSpacing: .3, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {diffLabel} · {breakdownLine}
       </div>
     </div>
@@ -326,7 +326,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   );
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
+    <div className="layout-root" style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
 
       {showSettings && (
         <LeagueSettingsModal
@@ -342,7 +342,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       {/* ══════════════════════════════════════════════
           LEFT SIDEBAR
       ══════════════════════════════════════════════ */}
-      <aside style={{
+      <aside className="mob-hide" style={{
         width: 220, flexShrink: 0,
         background: 'linear-gradient(180deg, #0b1628 0%, #090e1c 100%)',
         borderRight: '1px solid ' + C.surf3,
@@ -441,7 +441,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
 
         {/* League header + tabs */}
         <div style={{ background: 'linear-gradient(180deg, #0d1827 0%, #0c1422 100%)', borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
-          <div style={{ padding: '16px 24px 0' }}>
+          <div className="mob-header-pad" style={{ padding: '16px 24px 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
               <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 0.3, color: C.text, textTransform: 'uppercase', margin: 0 }}>{league?.name}</h1>
               <span style={{
@@ -455,7 +455,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
                 {totalOccupied}/{league?.league_size} · {isFull ? 'Full' : spotsLeft + ' open'}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 2 }}>
+            <div className="mob-scroll-x" style={{ display: 'flex', gap: 2 }}>
               {computedTabs.map(tab => (
                 <button
                   key={tab.key}
@@ -475,7 +475,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
         </div>
 
         {/* Tab content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+        <div className="mob-pad" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
           {activeTab === 'draft' && (
             <DraftTab
               league={league}
@@ -522,7 +522,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       {/* ══════════════════════════════════════════════
           RIGHT CHAT PANEL
       ══════════════════════════════════════════════ */}
-      <aside style={{
+      <aside className="mob-hide" style={{
         width: 280, flexShrink: 0, background: C.surf,
         borderLeft: '1px solid ' + C.surf3,
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -1810,7 +1810,7 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
       </div>
 
       {/* Score header card */}
-      <div style={{
+      <div className="mob-score-card" style={{
         background: 'linear-gradient(135deg, #0e1f35 0%, #0b1624 50%, #0e1f35 100%)',
         border: '1px solid ' + C.surf3,
         borderRadius: 16, padding: '24px 28px', marginBottom: 24,
@@ -1819,8 +1819,8 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
       }}>
         {/* My team */}
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>{myTotal.toFixed(1)}</div>
-          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 8 }}>{myTeamName}</div>
+          <div className="mob-score-big" style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>{myTotal.toFixed(1)}</div>
+          <div className="mob-score-name" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 8 }}>{myTeamName}</div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, letterSpacing: 1.5, marginTop: 3, textTransform: 'uppercase' }}>Your Team</div>
         </div>
         {/* VS divider */}
@@ -1835,8 +1835,8 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
         </div>
         {/* Opponent */}
         <div style={{ textAlign: 'left' }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>{oppTotal.toFixed(1)}</div>
-          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 8 }}>{oppTeamName}</div>
+          <div className="mob-score-big" style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>{oppTotal.toFixed(1)}</div>
+          <div className="mob-score-name" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 8 }}>{oppTeamName}</div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, letterSpacing: 1.5, marginTop: 3, textTransform: 'uppercase' }}>Opponent</div>
         </div>
       </div>
@@ -1851,7 +1851,7 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
       {STARTER_SLOT_LABELS.map((label, i) => {
         const color = POS_COLORS[label] || C.muted;
         return (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
+          <div key={i} className="matchup-row" style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
             <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} onView={myRoster.starters[i] ? () => setViewingPlayer(myRoster.starters[i]!.player_data) : undefined} />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: color + '22', border: '1px solid ' + color + '44', borderLeft: 'none', borderRight: 'none' }}>
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color, fontWeight: 700 }}>{label}</span>
@@ -1870,7 +1870,7 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
             <div style={{ flex: 1, height: 1, background: C.surf3 }} />
           </div>
           {Array.from({ length: benchLen }).map((_, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
+            <div key={i} className="matchup-row" style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
               <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} onView={myRoster.bench[i] ? () => setViewingPlayer(myRoster.bench[i]!.player_data) : undefined} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.muted + '22', border: '1px solid ' + C.muted + '44', borderLeft: 'none', borderRight: 'none' }}>
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, fontWeight: 700 }}>BN</span>
@@ -2045,7 +2045,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
     <div style={{ maxWidth: 540 }}>
 
       {/* Week tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, flexWrap: 'wrap' }}>
+      <div className="mob-scroll-x" style={{ display: 'flex', gap: 4, marginBottom: 20, flexWrap: 'wrap' }}>
         {Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1).map(w => {
           const isPlayoff  = w >= PLAYOFF_START;
           const isSelected = week === w;
@@ -2087,7 +2087,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
       }}>
         <div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{gameStats?.completedSchools.length ? 'Actual' : 'Projected'} · Starters Only</div>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, color: C.gold, lineHeight: 1, marginTop: 4 }}>{starterTotal.toFixed(1)}</div>
+          <div className="mob-score-med" style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, color: C.gold, lineHeight: 1, marginTop: 4 }}>{starterTotal.toFixed(1)}</div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.sub, marginTop: 4 }}>{myTeamName}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
