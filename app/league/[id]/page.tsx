@@ -67,8 +67,9 @@ function matchupProj(
   const opponent = ctx?.opponentMap[school] ?? null;
   if (!opponent || !ctx) return { pts: base, mult: 1.0, opponent };
 
-  // Use Elo rankMap — consistent with the #N rank displayed in the UI
-  const relevantRank = ctx.rankMap[opponent] ?? 999;
+  // DEF uses opponent's offensive rank; all other units use opponent's defensive rank
+  const rankMap      = unitType === 'DEF' ? ctx.offRankMap : ctx.defRankMap;
+  const relevantRank = rankMap[opponent] ?? 999;
   const mult = rankMult(relevantRank);
   return { pts: base * mult, mult, opponent };
 }
@@ -149,7 +150,8 @@ function effectivePts(
   const opponent     = ctx?.opponentMap[school] ?? null;
   // BYE week — no game, no points
   if (ctx && !opponent) return { pts: 0, isActual: false, base: 0 };
-  const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? 999) : 999;
+  const rankMap      = ctx ? (unitType === 'DEF' ? ctx.offRankMap : ctx.defRankMap) : null;
+  const relevantRank = opponent && rankMap ? (rankMap[opponent] ?? 999) : 999;
   const mult         = rankMult(relevantRank);
 
   if (gs?.completedSchools.includes(school)) {

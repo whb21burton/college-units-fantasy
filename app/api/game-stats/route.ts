@@ -140,27 +140,19 @@ export async function GET(req: Request) {
       );
     }
 
-    // WR: aggregate receiving from all WR entries
-    const wrReceivers = playerEntries.filter(e => e.category === 'receiving');
-    // We can't distinguish WR from TE/RB purely from player game stats without position.
-    // Use separate WR vs TE scoring buckets based on team game stats if available,
-    // otherwise split from player entries using a position lookup fallback.
-    // For now aggregate all receivers under WR and TE using team totals approach:
-    // Team passing yards split: use team stats netPassingYards if available, else player sum.
-    for (const recv of wrReceivers) {
-      // We don't have position in game player stats structure — split evenly:
-      // Heuristic: if player also has rushing entry, more likely RB/TE; otherwise WR.
-      // Best effort: attribute to WR unit (team-level unit not individual).
-      addPts(recv.school, 'WR',
-        (recv.YDS || 0) * S.recYd +
-        (recv.TD  || 0) * S.recTd
-      );
+    // WR / TE: top 5 receivers per school, excluding QBs — matches unit-stats scoring
+    const receiversBySchool: Record<string, any[]> = {};
+    for (const e of playerEntries.filter(e => e.category === 'receiving')) {
+      if (playerMap[`${e.school}||${e.player}||passing`]) continue; // exclude QBs
+      if (!receiversBySchool[e.school]) receiversBySchool[e.school] = [];
+      receiversBySchool[e.school].push(e);
     }
-
-    // TE: use team passing stats to compute a TE share
-    // Since getGamePlayerStats doesn't include position, we can't distinguish WR from TE.
-    // Set TE to 0 for actual scores — the WR unit captures all receiving.
-    // TODO: if CFBD adds position to game player stats, split WR/TE properly.
+    for (const [school, recvs] of Object.entries(receiversBySchool)) {
+      const top5 = [...recvs].sort((a, b) => (b.YDS || 0) - (a.YDS || 0)).slice(0, 5);
+      const pts  = top5.reduce((s, r) => s + (r.YDS || 0) * S.recYd + (r.TD || 0) * S.recTd, 0);
+      addPts(school, 'WR', pts);
+      addPts(school, 'TE', pts);
+    }
 
     // DEF: team defensive stats
     for (const [school, ts] of Object.entries(teamStat)) {
