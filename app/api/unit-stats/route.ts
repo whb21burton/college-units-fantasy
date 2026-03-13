@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import { initCfbdClient } from '@/lib/cfbd-client';
 
 const pkg = require('cfbd');
-const { getGames, getGamePlayerStats, getGameTeamStats, getSp } = pkg;
+const { getGames, getGamePlayerStats, getGameTeamStats, getElo } = pkg;
 
 const S = {
   passYd: 0.05, passTd: 4,  int: -2,
@@ -47,9 +47,9 @@ export async function GET(req: Request) {
   try {
     initCfbdClient();
 
-    // Fetch SP+ rankings and all weekly data in parallel
-    const [spRes, weeks] = await Promise.all([
-      getSp({ query: { year: season } }).then((r: any) => r.data || []).catch(() => []),
+    // Fetch Elo rankings and all weekly data in parallel
+    const [eloRes, weeks] = await Promise.all([
+      getElo({ query: { year: season } }).then((r: any) => r.data || []).catch(() => []),
       Promise.all(
         Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1).map(async (week) => {
           try {
@@ -188,31 +188,12 @@ export async function GET(req: Request) {
       ),
     ]);
 
-    // Build SP+ rank maps (same logic as matchup-context)
-    const spList: any[] = spRes;
-    const defRankMap: Record<string, number> = {};
-    const offRankMap: Record<string, number> = {};
+    // Build Elo rank map — rank 1 = strongest team (matches UI display)
+    const eloSorted: any[] = [...(eloRes as any[])].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
+    const rankMap: Record<string, number> = {};
+    eloSorted.forEach((t, idx) => { if (t.team) rankMap[t.team] = idx + 1; });
 
-    for (const t of spList) {
-      if (!t.team) continue;
-      if (t.defense?.rank != null) defRankMap[t.team] = t.defense.rank;
-      if (t.offense?.rank != null) offRankMap[t.team] = t.offense.rank;
-    }
-    if (Object.keys(defRankMap).length === 0) {
-      [...spList].filter(t => t.team && t.defense?.rating != null)
-        .sort((a, b) => (b.defense.rating ?? 0) - (a.defense.rating ?? 0))
-        .forEach((t, i) => { defRankMap[t.team] = i + 1; });
-    }
-    if (Object.keys(offRankMap).length === 0) {
-      [...spList].filter(t => t.team && t.offense?.rating != null)
-        .sort((a, b) => (b.offense.rating ?? 0) - (a.offense.rating ?? 0))
-        .forEach((t, i) => { offRankMap[t.team] = i + 1; });
-    }
-
-    // Apply ODR multiplier to each completed week
-    // Offense (QB/RB/WR/TE/K): opponent's defensive rank
-    // Defense: opponent's offensive rank
-    const rankMap = unitType === 'DEF' ? offRankMap : defRankMap;
+    // Apply multiplier to each completed week using opponent's Elo rank
     for (const wk of weeks) {
       if (!wk.completed || wk.rawPoints == null || !wk.opponent) continue;
       const oppRank  = rankMap[wk.opponent] ?? 999;

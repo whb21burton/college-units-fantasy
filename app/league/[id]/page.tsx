@@ -67,9 +67,7 @@ function matchupProj(
   const opponent = ctx?.opponentMap[school] ?? null;
   if (!opponent || !ctx) return { pts: base, mult: 1.0, opponent };
 
-  // DEF uses opponent's offensive rank; all other units use opponent's defensive rank
-  const rankMap      = unitType === 'DEF' ? ctx.offRankMap : ctx.defRankMap;
-  const relevantRank = rankMap[opponent] ?? 999;
+  const relevantRank = ctx.rankMap[opponent] ?? 999;
   const mult = rankMult(relevantRank);
   return { pts: base * mult, mult, opponent };
 }
@@ -100,7 +98,6 @@ function PlayerInfoLines({
   const schoolRank = ctx?.rankMap[school]     ?? null;
   const oppRank    = opponent ? (ctx?.rankMap[opponent] ?? null) : null;
 
-  // Use Elo rank — unranked opponents (FCS/non-FBS) treated as rank 999 → 0.5x
   const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? 999) : null;
 
   // No opponent (BYE) = 1.0x display; has opponent = use rank
@@ -127,7 +124,7 @@ function PlayerInfoLines({
       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{name}</div>
       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', marginTop: 1 }}>{matchupLine}</div>
       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, color: diffColor, letterSpacing: .3, marginTop: 1 }}>
-        {diffLabel} · {mult.toFixed(2)}x · {breakdownLine}
+        {diffLabel} · {breakdownLine}
       </div>
     </div>
   );
@@ -150,8 +147,7 @@ function effectivePts(
   const opponent     = ctx?.opponentMap[school] ?? null;
   // BYE week — no game, no points
   if (ctx && !opponent) return { pts: 0, isActual: false, base: 0 };
-  const rankMap      = ctx ? (unitType === 'DEF' ? ctx.offRankMap : ctx.defRankMap) : null;
-  const relevantRank = opponent && rankMap ? (rankMap[opponent] ?? 999) : 999;
+  const relevantRank = opponent && ctx ? (ctx.rankMap[opponent] ?? 999) : 999;
   const mult         = rankMult(relevantRank);
 
   if (gs?.completedSchools.includes(school)) {
