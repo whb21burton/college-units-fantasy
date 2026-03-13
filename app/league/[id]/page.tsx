@@ -871,7 +871,24 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
       ]);
       const all = picksRes.data || [];
       setAllPicks(all);
-      setMyPicks(all.filter((p: any) => p.user_id === userId));
+
+      // Commissioners drafted on behalf of CPU teams too — all those picks share
+      // commissioner's user_id.  Use snake-draft index to isolate just their slot.
+      const isComm     = userId === league?.commissioner_id;
+      const draftOrder: any[] = league?.settings?.draft_order || [];
+      const numTeams   = draftOrder.length;
+      const myEntry    = draftOrder.find((t: any) => t.userId === userId);
+      const slotIdx    = myEntry ? myEntry.slot - 1 : -1;
+
+      let mine: any[] = [];
+      if (isComm && numTeams > 0 && slotIdx >= 0) {
+        mine = all.filter((p: any) => snakeIdx(p.pick_number, numTeams) === slotIdx);
+        if (mine.length === 0) mine = all.filter((p: any) => p.user_id === userId);
+      } else {
+        mine = all.filter((p: any) => p.user_id === userId);
+      }
+      setMyPicks(mine);
+
       setPool(Array.isArray(poolRes) ? poolRes : []);
       setLoading(false);
     }
@@ -913,7 +930,19 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     const { data } = await supabase.from('draft_picks').select('*').eq('league_id', league.id);
     const all = data || [];
     setAllPicks(all);
-    setMyPicks(all.filter((p: any) => p.user_id === userId));
+    const isComm2    = userId === league?.commissioner_id;
+    const draftOrder2: any[] = league?.settings?.draft_order || [];
+    const numTeams2  = draftOrder2.length;
+    const myEntry2   = draftOrder2.find((t: any) => t.userId === userId);
+    const slotIdx2   = myEntry2 ? myEntry2.slot - 1 : -1;
+    let mine2: any[] = [];
+    if (isComm2 && numTeams2 > 0 && slotIdx2 >= 0) {
+      mine2 = all.filter((p: any) => snakeIdx(p.pick_number, numTeams2) === slotIdx2);
+      if (mine2.length === 0) mine2 = all.filter((p: any) => p.user_id === userId);
+    } else {
+      mine2 = all.filter((p: any) => p.user_id === userId);
+    }
+    setMyPicks(mine2);
     setAdding(null);
     setDropping(null);
     setBusy(false);
