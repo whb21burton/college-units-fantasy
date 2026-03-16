@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
@@ -85,18 +85,39 @@ function multLabel(mult: number): { label: string; color: string } {
   return                   { label: 'Super Weenie Hut Jr', color: '#9b59b6' };
 }
 
+/** Ranks all schools per unit type by projectedPoints desc (rank 1 = best). */
+function buildUnitRankMaps(picks: any[]): Record<string, Record<string, number>> {
+  const byType: Record<string, { school: string; pts: number }[]> = {};
+  for (const p of picks) {
+    const school = p.player_data?.school;
+    const ut     = p.player_data?.unitType;
+    const pts    = p.player_data?.projectedPoints ?? 0;
+    if (!school || !ut) continue;
+    if (!byType[ut]) byType[ut] = [];
+    byType[ut].push({ school, pts });
+  }
+  const maps: Record<string, Record<string, number>> = {};
+  for (const [ut, units] of Object.entries(byType)) {
+    const sorted = [...units].sort((a, b) => b.pts - a.pts);
+    maps[ut] = {};
+    sorted.forEach(({ school }, idx) => { maps[ut][school] = idx + 1; });
+  }
+  return maps;
+}
+
 /** Renders the 3-line player info block used in every roster/matchup row. */
 function PlayerInfoLines({
-  school, unitType, playerName, ctx, ep, align, seasonPts,
+  school, unitType, playerName, ctx, ep, align, seasonPts, unitRankMap,
 }: {
   school: string; unitType: string; playerName?: string;
   ctx: MatchupCtx; ep: { pts: number; isActual: boolean; base: number };
   align?: 'left' | 'right';
   seasonPts?: number;
+  unitRankMap?: Record<string, number>;
 }) {
   const opponent   = ctx?.opponentMap[school] ?? null;
-  const schoolRank = ctx?.rankMap[school]     ?? null;
-  const oppRank    = opponent ? (ctx?.rankMap[opponent] ?? null) : null;
+  const schoolRank = unitRankMap ? (unitRankMap[school] ?? null) : null;
+  const oppRank    = unitRankMap && opponent ? (unitRankMap[opponent] ?? null) : null;
 
   const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? 999) : null;
 
@@ -753,24 +774,38 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
   const weeks   = stats?.weeks ?? [];
   const posColor = UNIT_COLORS[player.unitType] ?? C.muted;
 
-  // Aggregate individual player season totals (for RB/WR/TE)
+  // Aggregate individual player season totals (all named players)
   const playerTotals: Record<string, any> = {};
-  if (['RB', 'WR', 'TE'].includes(player.unitType)) {
-    for (const wk of weeks) {
-      for (const p of (wk.players ?? [])) {
-        if (!p.name) continue;
-        if (!playerTotals[p.name]) playerTotals[p.name] = { name: p.name };
-        for (const k of Object.keys(p)) {
-          if (k !== 'name' && typeof p[k] === 'number') {
-            playerTotals[p.name][k] = (playerTotals[p.name][k] || 0) + p[k];
-          }
+  for (const wk of weeks) {
+    for (const p of (wk.players ?? [])) {
+      if (!p.name) continue;
+      if (!playerTotals[p.name]) playerTotals[p.name] = { name: p.name };
+      for (const k of Object.keys(p)) {
+        if (k !== 'name' && typeof p[k] === 'number') {
+          playerTotals[p.name][k] = (playerTotals[p.name][k] || 0) + p[k];
         }
       }
     }
   }
-  const sortedPlayers = Object.values(playerTotals).sort(
-    (a: any, b: any) => (b.recYd || b.rushYd || 0) - (a.recYd || a.rushYd || 0)
-  );
+  // DEF season totals (team totals, no named players)
+  const defSeason = { sacks: 0, ints: 0, fumRec: 0, defTd: 0 };
+  if (player.unitType === 'DEF') {
+    for (const wk of weeks) {
+      for (const p of (wk.players ?? [])) {
+        defSeason.sacks  += p.sacks  || 0;
+        defSeason.ints   += p.ints   || 0;
+        defSeason.fumRec += p.fumRec || 0;
+        defSeason.defTd  += p.defTd  || 0;
+      }
+    }
+  }
+  const jerseyMap: Record<string, string> = stats?.jerseyMap ?? {};
+  const sortedPlayers = Object.values(playerTotals).sort((a: any, b: any) => {
+    if (player.unitType === 'RB') return (b.rushYd || 0) - (a.rushYd || 0);
+    if (player.unitType === 'QB') return (b.passYd || 0) - (a.passYd || 0);
+    if (player.unitType === 'K')  return (b.pts    || 0) - (a.pts    || 0);
+    return (b.recYd || 0) - (a.recYd || 0);
+  });
 
   const colTemplate = `32px 1fr 64px 44px${cols.map(() => ' 64px').join('')}`;
 
@@ -863,25 +898,112 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
         </div>
       )}
 
-      {/* Unit Players (season totals) — RB/WR/TE only */}
-      {!loading && sortedPlayers.length > 0 && (
+      {/* Unit Players (season totals) — all unit types */}
+      {!loading && (
         <div style={{ marginTop: 24 }}>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>Unit Players (Season)</div>
           <div style={{ background: C.surf, borderRadius: 10, border: `1px solid ${C.surf3}`, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 50px 64px 44px', gap: 4, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2 }}>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: .5 }}>PLAYER</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>{player.unitType === 'RB' ? 'ATT' : 'REC'}</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>YDS</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right', letterSpacing: .5 }}>TD</div>
-            </div>
-            {sortedPlayers.map((p: any) => (
-              <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '1fr 50px 64px 44px', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22` }}>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{player.unitType === 'RB' ? (p.rushAtt || 0) : (p.rec || 0)}</div>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{player.unitType === 'RB' ? (p.rushYd || 0) : (p.recYd || 0)}</div>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.gold, textAlign: 'right' }}>{player.unitType === 'RB' ? (p.rushTd || 0) : (p.recTd || 0)}</div>
-              </div>
-            ))}
+
+            {/* DEF — team season totals */}
+            {player.unitType === 'DEF' && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 4, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2 }}>
+                  {['SACKS','INT','FUM','TD'].map(h => (
+                    <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center', letterSpacing: .5 }}>{h}</div>
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 4, padding: '10px 12px' }}>
+                  {[defSeason.sacks, defSeason.ints, defSeason.fumRec, defSeason.defTd].map((v, i) => (
+                    <div key={i} style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, textAlign: 'center' }}>{v}</div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* QB */}
+            {player.unitType === 'QB' && sortedPlayers.length > 0 && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 44px 44px 60px', gap: 4, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2 }}>
+                  {['PLAYER','PASS YDS','TD','INT','RUSH YDS'].map(h => (
+                    <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: h === 'PLAYER' ? 'left' : 'right', letterSpacing: .5 }}>{h}</div>
+                  ))}
+                </div>
+                {sortedPlayers.map((p: any) => (
+                  <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 44px 44px 60px', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22` }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.passYd || 0}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.gold, textAlign: 'right' }}>{p.passTd || 0}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.red, textAlign: 'right' }}>{p.int || 0}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.rushYd || 0}</div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* RB */}
+            {player.unitType === 'RB' && sortedPlayers.length > 0 && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 28px 44px 54px 40px 48px', gap: 4, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2 }}>
+                  {['RK','PLAYER','#','ATT','YDS','TD','YPC'].map(h => (
+                    <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: h === 'PLAYER' ? 'left' : 'right', letterSpacing: .5 }}>{h}</div>
+                  ))}
+                </div>
+                {sortedPlayers.map((p: any, idx: number) => {
+                  const ypc = (p.rushAtt || 0) > 0 ? (p.rushYd / p.rushAtt).toFixed(1) : '—';
+                  return (
+                    <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 28px 44px 54px 40px 48px', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22` }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right' }}>RB{idx + 1}</div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.muted, textAlign: 'right' }}>{jerseyMap[p.name] ?? ''}</div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.rushAtt || 0}</div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.rushYd || 0}</div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.gold, textAlign: 'right' }}>{p.rushTd || 0}</div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.green, textAlign: 'right' }}>{ypc}</div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {/* WR / TE */}
+            {(player.unitType === 'WR' || player.unitType === 'TE') && sortedPlayers.length > 0 && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 28px 44px 54px 40px', gap: 4, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2 }}>
+                  {['RK','PLAYER','#','REC','YDS','TD'].map(h => (
+                    <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: h === 'PLAYER' ? 'left' : 'right', letterSpacing: .5 }}>{h}</div>
+                  ))}
+                </div>
+                {sortedPlayers.map((p: any, idx: number) => (
+                  <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 28px 44px 54px 40px', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22` }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'right' }}>{player.unitType}{idx + 1}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.muted, textAlign: 'right' }}>{jerseyMap[p.name] ?? ''}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.rec || 0}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.recYd || 0}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.gold, textAlign: 'right' }}>{p.recTd || 0}</div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* K */}
+            {player.unitType === 'K' && sortedPlayers.length > 0 && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 28px 56px', gap: 4, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2 }}>
+                  {['PLAYER','#','PTS'].map(h => (
+                    <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: h === 'PLAYER' ? 'left' : 'right', letterSpacing: .5 }}>{h}</div>
+                  ))}
+                </div>
+                {sortedPlayers.map((p: any) => (
+                  <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '1fr 28px 56px', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22` }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.muted, textAlign: 'right' }}>{jerseyMap[p.name] ?? ''}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.gold, textAlign: 'right' }}>{p.pts || 0}</div>
+                  </div>
+                ))}
+              </>
+            )}
+
           </div>
         </div>
       )}
@@ -1693,7 +1815,7 @@ function assignRoster(picks: any[]): { starters: (any | null)[]; bench: any[] } 
   return { starters, bench };
 }
 
-function MatchupPlayerCell({ pick, align, ctx, gameStats, onView }: { pick: any | null; align: 'left' | 'right'; ctx: MatchupCtx; gameStats: GameStats; onView?: () => void }) {
+function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView }: { pick: any | null; align: 'left' | 'right'; ctx: MatchupCtx; gameStats: GameStats; unitRankMaps?: Record<string, Record<string, number>>; onView?: () => void }) {
   const isRight = align === 'right';
   if (!pick) return (
     <div style={{
@@ -1719,6 +1841,7 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, onView }: { pick: any 
       ep={ep}
       align={align}
       seasonPts={pick.player_data?.projectedPoints ?? 0}
+      unitRankMap={unitRankMaps?.[pick.player_data?.unitType ?? '']}
     />
   );
   const score = (
@@ -1767,6 +1890,8 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
 
   const draftOrder: any[] = league?.settings?.draft_order || [];
   const numTeams = draftOrder.length;
+
+  const unitRankMaps = useMemo(() => buildUnitRankMaps(picks), [picks]);
 
   const myEntry    = draftOrder.find((t: any) => t.userId === userId);
   const mySlotIdx  = myEntry ? myEntry.slot - 1 : -1;
@@ -1860,11 +1985,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
         const color = POS_COLORS[label] || C.muted;
         return (
           <div key={i} className="matchup-row" style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
-            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} onView={myRoster.starters[i] ? () => setViewingPlayer(myRoster.starters[i]!.player_data) : undefined} />
+            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} onView={myRoster.starters[i] ? () => setViewingPlayer(myRoster.starters[i]!.player_data) : undefined} />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: color + '22', border: '1px solid ' + color + '44', borderLeft: 'none', borderRight: 'none' }}>
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color, fontWeight: 700 }}>{label}</span>
             </div>
-            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} onView={oppRoster.starters[i] ? () => setViewingPlayer(oppRoster.starters[i]!.player_data) : undefined} />
+            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} onView={oppRoster.starters[i] ? () => setViewingPlayer(oppRoster.starters[i]!.player_data) : undefined} />
           </div>
         );
       })}
@@ -1879,11 +2004,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
           </div>
           {Array.from({ length: benchLen }).map((_, i) => (
             <div key={i} className="matchup-row" style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
-              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} onView={myRoster.bench[i] ? () => setViewingPlayer(myRoster.bench[i]!.player_data) : undefined} />
+              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} onView={myRoster.bench[i] ? () => setViewingPlayer(myRoster.bench[i]!.player_data) : undefined} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.muted + '22', border: '1px solid ' + C.muted + '44', borderLeft: 'none', borderRight: 'none' }}>
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, fontWeight: 700 }}>BN</span>
               </div>
-              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} onView={oppRoster.bench[i] ? () => setViewingPlayer(oppRoster.bench[i]!.player_data) : undefined} />
+              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} onView={oppRoster.bench[i] ? () => setViewingPlayer(oppRoster.bench[i]!.player_data) : undefined} />
             </div>
           ))}
         </>
@@ -1904,6 +2029,7 @@ function canFillSlot(unitType: string, slotLabel: string): boolean {
 
 function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const [myPicks,       setMyPicks]       = useState<any[]>([]);
+  const [allPicks,      setAllPicks]      = useState<any[]>([]);
   const [lineups,       setLineups]       = useState<Record<string, (string | null)[]>>({});
   const [week,          setWeek]          = useState(1);
   const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
@@ -1976,6 +2102,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
           }
         }
         setMyPicks(mine);
+        setAllPicks(allPicks);
       } finally {
         setLoading(false);
       }
@@ -1983,6 +2110,8 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league?.id, userId]);
+
+  const unitRankMaps = useMemo(() => buildUnitRankMaps(allPicks), [allPicks]);
 
   const draftOrder: any[] = league?.settings?.draft_order || [];
   const myEntry           = draftOrder.find((t: any) => t.userId === userId);
@@ -2174,6 +2303,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                   ctx={matchupCtx}
                   ep={ep}
                   seasonPts={pick?.player_data?.projectedPoints ?? 0}
+                  unitRankMap={unitRankMaps[pick?.player_data?.unitType ?? '']}
                 />
               ) : (
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
@@ -2247,6 +2377,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                     ctx={matchupCtx}
                     ep={bep}
                     seasonPts={pick.player_data?.projectedPoints ?? 0}
+                    unitRankMap={unitRankMaps[pick.player_data?.unitType ?? '']}
                   />
                 </div>
 
@@ -2338,6 +2469,8 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
     }
     load();
   }, [league?.id, userId]);
+
+  const unitRankMaps = useMemo(() => buildUnitRankMaps(allPicks), [allPicks]);
 
   function getTeamPicks(team: any): any[] {
     if (numTeams === 0) return [];
@@ -2595,6 +2728,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                     ctx={matchupCtx}
                     ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats)}
                     seasonPts={pick.player_data?.projectedPoints ?? 0}
+                    unitRankMap={unitRankMaps[pick.player_data?.unitType ?? '']}
                                 />
                 ) : <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>}
               </div>
@@ -2628,6 +2762,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                       ctx={matchupCtx}
                       ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats)}
                       seasonPts={pick.player_data?.projectedPoints ?? 0}
+                      unitRankMap={unitRankMaps[pick.player_data?.unitType ?? '']}
                                     />
                   </div>
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts.toFixed(1)}</div>

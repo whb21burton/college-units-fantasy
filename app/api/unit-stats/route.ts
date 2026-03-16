@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import { initCfbdClient } from '@/lib/cfbd-client';
 
 const pkg = require('cfbd');
-const { getGames, getGamePlayerStats, getGameTeamStats, getElo } = pkg;
+const { getGames, getGamePlayerStats, getGameTeamStats, getElo, getRoster } = pkg;
 
 const S = {
   passYd: 0.05, passTd: 4,  int: -2,
@@ -47,9 +47,10 @@ export async function GET(req: Request) {
   try {
     initCfbdClient();
 
-    // Fetch Elo rankings and all weekly data in parallel
-    const [eloRes, weeks] = await Promise.all([
+    // Fetch Elo rankings, roster, and all weekly data in parallel
+    const [eloRes, rosterRes, weeks] = await Promise.all([
       getElo({ query: { year: season } }).then((r: any) => r.data || []).catch(() => []),
+      getRoster({ query: { team: school, year: season } }).then((r: any) => r.data || []).catch(() => []),
       Promise.all(
         Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1).map(async (week) => {
           try {
@@ -193,6 +194,14 @@ export async function GET(req: Request) {
     const rankMap: Record<string, number> = {};
     eloSorted.forEach((t, idx) => { if (t.team) rankMap[t.team] = idx + 1; });
 
+    // Build jersey map keyed by "First Last" player name
+    const jerseyMap: Record<string, string> = {};
+    for (const p of rosterRes as any[]) {
+      if (p.firstName && p.lastName && p.jersey != null) {
+        jerseyMap[`${p.firstName} ${p.lastName}`] = String(p.jersey);
+      }
+    }
+
     // Apply multiplier to each completed week using opponent's Elo rank
     for (const wk of weeks) {
       if (!wk.completed || wk.rawPoints == null || !wk.opponent) continue;
@@ -203,7 +212,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json(
-      { school, unitType, weeks },
+      { school, unitType, weeks, jerseyMap },
       { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' } }
     );
   } catch (err: any) {

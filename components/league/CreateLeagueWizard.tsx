@@ -23,6 +23,7 @@ export function CreateLeagueWizard() {
   const [error, setError]     = useState<string | null>(null);
   const [createdLeague, setCreatedLeague] = useState<{ id: string; invite_code: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isPublic, setIsPublic] = useState(false);
 
   const [form, setForm] = useState<CreateLeagueFormData>({
     name:        '',
@@ -51,6 +52,7 @@ export function CreateLeagueWizard() {
         league_size:     form.league_size,
         draft_type:      form.draft_type,
         salary_cap:      form.salary_cap,
+        is_public:       isPublic,
         invite_code:     '',   // trigger fills this in
         status:          'forming',
       })
@@ -235,6 +237,26 @@ export function CreateLeagueWizard() {
 
             <Spacer />
 
+            <FieldLabel>League Visibility</FieldLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <ToggleBtn active={!isPublic} onClick={() => setIsPublic(false)}>
+                <div style={{ fontSize: 18, marginBottom: 4 }}>🔒</div>
+                <strong>Private</strong>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                  Invite link only
+                </div>
+              </ToggleBtn>
+              <ToggleBtn active={isPublic} onClick={() => setIsPublic(true)}>
+                <div style={{ fontSize: 18, marginBottom: 4 }}>🌐</div>
+                <strong>Public</strong>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                  Listed in leagues browser
+                </div>
+              </ToggleBtn>
+            </div>
+
+            <Spacer />
+
             <FieldLabel>Draft Type</FieldLabel>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <ToggleBtn active={form.draft_type === 'snake'} onClick={() => set('draft_type', 'snake')}>
@@ -331,6 +353,7 @@ export function CreateLeagueWizard() {
               ['League Name', form.name],
               ['League Size', `${form.league_size} teams`],
               ['Buy-In',      form.buy_in === 0 ? 'Free' : `$${form.buy_in} per team · $${form.buy_in * form.league_size} total pot`],
+              ['Visibility',  isPublic ? '🌐 Public — listed in leagues browser' : '🔒 Private — invite link only'],
               ['Draft Type',  form.draft_type === 'snake' ? '🐍 Snake Draft' : `💰 Salary Cap ($${form.salary_cap})`],
               ['Your Team',   form.team_name],
               ['Season',      'Weeks 1–10 regular season · 6-team playoff (Wks 11–13)'],

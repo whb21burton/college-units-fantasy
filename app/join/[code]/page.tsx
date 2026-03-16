@@ -45,13 +45,53 @@ export default function JoinPage({ params }: { params: { code: string } }) {
     setJoining(true); setError(null);
     if (memberCount >= league.league_size) { setError('This league is full.'); setJoining(false); return; }
     if (league.status !== 'forming') { setError('This league has already started.'); setJoining(false); return; }
-    const { error: joinError } = await supabase.from('league_members').insert({ league_id: league.id, user_id: user.id, team_name: teamName.trim(), draft_slot: memberCount + 1 });
+
+    // ── Paid league: redirect to Stripe Checkout ──────────────────────────
+    if (league.buy_in > 0) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch('/api/stripe/checkout', {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          league_id: league.id,
+          team_name: teamName.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? 'Could not start checkout. Please try again.');
+        setJoining(false);
+        return;
+      }
+
+      // Redirect to Stripe-hosted checkout page
+      window.location.href = data.url;
+      return;
+    }
+
+    // ── Free league: join directly ─────────────────────────────────────────
+    const { error: joinError } = await supabase.from('league_members').insert({
+      league_id: league.id,
+      user_id:   user.id,
+      team_name: teamName.trim(),
+      draft_slot: memberCount + 1,
+      paid:       true,
+    });
     if (joinError) { setError(joinError.message); setJoining(false); return; }
     router.push('/league/' + league.id + '?joined=1');
   }
 
   const spotsLeft = league ? league.league_size - memberCount : 0;
   const isFull = spotsLeft <= 0;
+  const buyIn  = league?.buy_in ?? 0;
+  const totalCharge = buyIn > 0 ? buyIn + Math.round(buyIn * 0.1) : 0;
 
   if (loading) return (
     <div style={{ minHeight:'100vh', background:C.bg, display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -80,17 +120,34 @@ export default function JoinPage({ params }: { params: { code: string } }) {
               <div style={{ fontFamily:'Oswald,sans-serif', fontSize:10, color:C.muted, letterSpacing:3, textTransform:'uppercase', marginBottom:8 }}>You are invited to join</div>
               <h1 style={{ fontFamily:'Anton,sans-serif', fontSize:30, letterSpacing:1, color:C.text, textTransform:'uppercase', marginBottom:20, lineHeight:1.1 }}>{league?.name}</h1>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:20 }}>
-                {[['League Size',league?.league_size+' teams'],['Spots Left',isFull?'Full':spotsLeft+' open'],['Buy-In',league?.buy_in===0?'Free':'$'+league?.buy_in],['Draft',league?.draft_type==='snake'?'Snake':'Salary']].map(([k,v]) => (
+                {[
+                  ['League Size', league?.league_size+' teams'],
+                  ['Spots Left',  isFull ? 'Full' : spotsLeft+' open'],
+                  ['Buy-In',      buyIn === 0 ? 'Free' : `$${buyIn} (+$${Math.round(buyIn*0.1)} fee)`],
+                  ['Draft',       league?.draft_type==='snake' ? 'Snake' : 'Salary'],
+                ].map(([k,v]) => (
                   <div key={k} style={{ padding:'12px 14px', background:C.surf2, border:'1px solid '+C.surf3, borderRadius:8 }}>
                     <div style={{ fontFamily:'Oswald,sans-serif', fontSize:9, color:C.muted, letterSpacing:2, textTransform:'uppercase', marginBottom:4 }}>{k}</div>
                     <div style={{ fontFamily:'Oswald,sans-serif', fontWeight:600, fontSize:14, color:C.text }}>{v}</div>
                   </div>
                 ))}
               </div>
+
+              {/* Prize pool callout for paid leagues */}
+              {buyIn > 0 && (
+                <div style={{ padding:'12px 14px', background:'rgba(212,168,40,.08)', border:'1px solid rgba(212,168,40,.2)', borderRadius:8, marginBottom:20, fontFamily:'Oswald,sans-serif', fontSize:12, color:C.sub }}>
+                  🏆 Prize pool: <strong style={{ color:C.gold }}>${buyIn * league.league_size}</strong>
+                  <span style={{ color:C.muted }}> · 80% to 1st, 20% to 2nd</span>
+                  <br/>
+                  <span style={{ fontSize:11 }}>You'll be charged <strong style={{ color:C.text }}>${totalCharge}</strong> via Stripe (includes 10% platform fee).</span>
+                </div>
+              )}
+
               <div style={{ textAlign:'center', padding:10, background:C.bg, borderRadius:8, border:'1px solid '+C.surf3, marginBottom:24 }}>
                 <span style={{ fontFamily:'Oswald,sans-serif', fontSize:10, color:C.muted, letterSpacing:2 }}>CODE: </span>
                 <span style={{ fontFamily:'Anton,sans-serif', fontSize:22, letterSpacing:6, color:C.gold }}>{code}</span>
               </div>
+
               {alreadyMember ? (
                 <button onClick={() => router.push('/league/'+league?.id)} style={{ width:'100%', padding:15, background:C.gold, border:'none', borderRadius:8, cursor:'pointer', fontFamily:'Anton,sans-serif', fontSize:15, letterSpacing:2, color:C.bg }}>Go to League Dashboard</button>
               ) : isFull ? (
@@ -104,7 +161,13 @@ export default function JoinPage({ params }: { params: { code: string } }) {
                   </div>
                   {error && <div style={{ marginBottom:12, padding:'10px 14px', background:'rgba(231,76,60,.1)', border:'1px solid rgba(231,76,60,.3)', borderRadius:6, fontFamily:'Oswald,sans-serif', fontSize:12, color:C.red }}>⚠️ {error}</div>}
                   <button onClick={handleJoin} disabled={joining} style={{ width:'100%', padding:15, background:joining?C.surf3:C.gold, border:'none', borderRadius:8, cursor:joining?'wait':'pointer', fontFamily:'Anton,sans-serif', fontSize:15, letterSpacing:2, textTransform:'uppercase', color:C.bg }}>
-                    {joining ? 'Joining...' : !user ? 'Sign In to Join' : 'Join League'}
+                    {joining
+                      ? (buyIn > 0 ? 'Redirecting to payment…' : 'Joining...')
+                      : !user
+                        ? 'Sign In to Join'
+                        : buyIn > 0
+                          ? `Pay $${totalCharge} & Join`
+                          : 'Join League'}
                   </button>
                 </>
               )}

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import { CreateLeagueWizard } from '@/components/league/CreateLeagueWizard';
+import { WalletPanel } from '@/components/wallet/WalletPanel';
 
 const C = {
   bg:'#05080f', surf:'#0c1220', surf2:'#131d30', surf3:'#1e2d47',
@@ -26,6 +27,7 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [leagues, setLeagues] = useState<any[]>([]);
+  const [walletOpen, setWalletOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -195,7 +197,10 @@ export default function HomePage() {
               <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 4, color: C.gold, textTransform: 'uppercase', marginBottom: 6 }}>Welcome back</div>
               <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 28, letterSpacing: 1, textTransform: 'uppercase' }}>{user?.email?.split('@')[0]}</div>
             </div>
-            <button onClick={signOut} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>Sign Out</button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setWalletOpen(true)} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>💰 Wallet</button>
+              <button onClick={signOut} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>Sign Out</button>
+            </div>
           </div>
 
           {leagues.length > 0 && (
@@ -226,6 +231,9 @@ export default function HomePage() {
 
       {/* CREATE */}
       {view === 'create' && <CreateLeagueWizard />}
+
+      {/* WALLET */}
+      {walletOpen && <WalletPanel onClose={() => setWalletOpen(false)} />}
     </div>
   );
 }
