@@ -83,10 +83,14 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ amount }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
+      let data: any = {};
+      try { data = await res.json(); } catch { /* non-JSON response */ }
+      if (!res.ok) { setError(data.error ?? `Server error (${res.status})`); return; }
+      if (!data.url) { setError('No checkout URL returned. Check Stripe configuration.'); return; }
       // Redirect to Stripe Checkout
       window.location.href = data.url;
+    } catch (err: any) {
+      setError(err?.message ?? 'Network error. Please try again.');
     } finally {
       setDepositing(false);
     }
