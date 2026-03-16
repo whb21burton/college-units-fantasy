@@ -136,7 +136,7 @@ export default function PublicLeaguesPage() {
               No open leagues right now
             </div>
             <button
-              onClick={() => router.push('/create')}
+              onClick={() => router.push('/')}
               style={{
                 marginTop: 20, padding: '12px 28px',
                 background: 'linear-gradient(135deg,#d4a828,#f0c94a)',
@@ -258,7 +258,7 @@ export default function PublicLeaguesPage() {
             Don't see what you're looking for?
           </div>
           <button
-            onClick={() => router.push('/create')}
+            onClick={() => router.push('/')}
             style={{
               padding: '12px 32px',
               background: 'transparent',
