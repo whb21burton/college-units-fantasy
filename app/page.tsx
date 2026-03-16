@@ -141,12 +141,18 @@ export default function HomePage() {
           </div>
           <button onClick={() => setView('signup')} style={{ ...btnStyle, marginBottom: 12 }}>Get Started</button>
           <button onClick={() => setView('signin')} style={ghostStyle}>Sign In</button>
-          <div style={{ marginTop: 24 }}>
+          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
             <span
               onClick={() => setView('join')}
               style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.muted, cursor: 'pointer', letterSpacing: 1 }}
             >
               Have an invite code? Join a league →
+            </span>
+            <span
+              onClick={() => router.push('/leagues')}
+              style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.gold, cursor: 'pointer', letterSpacing: 1 }}
+            >
+              🏟️ Browse public leagues →
             </span>
           </div>
         </div>
@@ -222,10 +228,25 @@ export default function HomePage() {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <button onClick={() => setView('create')} style={btnStyle}>+ Create League</button>
-            <button onClick={() => setView('join')} style={ghostStyle}>Join League</button>
+            <button onClick={() => setView('join')} style={{ ...ghostStyle, marginTop: 0 }}>Join League</button>
           </div>
+          <button
+            onClick={() => router.push('/leagues')}
+            style={{
+              width: '100%', padding: '14px',
+              background: 'rgba(212,168,40,.12)',
+              border: `1px solid ${C.gold}`,
+              borderRadius: 8, cursor: 'pointer',
+              fontFamily: "'Anton', sans-serif", fontSize: 14,
+              letterSpacing: 2, textTransform: 'uppercase',
+              color: C.gold,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            🏟️ Browse Public Leagues
+          </button>
         </div>
       )}
 
