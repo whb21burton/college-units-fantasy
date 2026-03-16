@@ -16,6 +16,8 @@ type League = {
   buy_in: number;
   league_size: number;
   draft_type: string;
+  league_type: string;
+  week: number | null;
   status: string;
   invite_code: string;
   member_count: number;
@@ -38,7 +40,7 @@ export default function PublicLeaguesPage() {
       setLoading(true);
       const { data, error } = await supabase
         .from('leagues')
-        .select('id, name, buy_in, league_size, draft_type, status, invite_code')
+        .select('id, name, buy_in, league_size, draft_type, league_type, week, status, invite_code')
         .eq('is_public', true)
         .eq('status', 'forming')
         .order('created_at', { ascending: false });
@@ -180,10 +182,16 @@ export default function PublicLeaguesPage() {
                           {league.name}
                         </div>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                          {/* Draft type */}
-                          <span style={pillStyle(C.sub + '22', C.sub)}>
-                            {league.draft_type === 'snake' ? '🐍 Snake' : '💰 Salary'}
-                          </span>
+                          {/* League type */}
+                          {league.league_type === 'weekly' ? (
+                            <span style={pillStyle('rgba(245,166,35,.15)', '#f5a623')}>
+                              ⚡ Weekly{league.week ? ` · Wk ${league.week}` : ''}
+                            </span>
+                          ) : (
+                            <span style={pillStyle(C.sub + '22', C.sub)}>
+                              {league.draft_type === 'snake' ? '🐍 Snake' : '💰 Salary'}
+                            </span>
+                          )}
                           {/* Buy-in */}
                           <span style={pillStyle(
                             league.buy_in > 0 ? 'rgba(212,168,40,.12)' : 'rgba(46,204,113,.1)',

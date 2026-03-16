@@ -7,6 +7,7 @@ import type { CreateLeagueFormData } from '@/types';
 
 const BUY_INS  = [0, 10, 25, 50];
 const SIZES    = [4, 6, 8, 10, 12];
+const WEEKS    = [1,2,3,4,5,6,7,8,9,10,11,12,13,14];
 
 const C = {
   bg:'#05080f', surf:'#0c1220', surf2:'#131d30', surf3:'#1e2d47',
@@ -23,7 +24,9 @@ export function CreateLeagueWizard() {
   const [error, setError]     = useState<string | null>(null);
   const [createdLeague, setCreatedLeague] = useState<{ id: string; invite_code: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [isPublic, setIsPublic] = useState(false);
+  const [isPublic,    setIsPublic]    = useState(false);
+  const [leagueType,  setLeagueType]  = useState<'season' | 'weekly'>('season');
+  const [week,        setWeek]        = useState<number>(1);
 
   const [form, setForm] = useState<CreateLeagueFormData>({
     name:        '',
@@ -50,9 +53,11 @@ export function CreateLeagueWizard() {
         commissioner_id: user.id,
         buy_in:          form.buy_in,
         league_size:     form.league_size,
-        draft_type:      form.draft_type,
+        draft_type:      leagueType === 'season' ? form.draft_type : 'snake',
         salary_cap:      form.salary_cap,
         is_public:       isPublic,
+        league_type:     leagueType,
+        week:            leagueType === 'weekly' ? week : null,
         invite_code:     '',   // trigger fills this in
         status:          'forming',
       })
@@ -176,6 +181,28 @@ export function CreateLeagueWizard() {
       {step === 1 && (
         <div className="wiz-step">
           <Card>
+            {/* ── League Type ── */}
+            <FieldLabel>League Type</FieldLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+              <ToggleBtn active={leagueType === 'season'} onClick={() => setLeagueType('season')}>
+                <div style={{ fontSize: 18, marginBottom: 4 }}>🏈</div>
+                <strong>Season Long</strong>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Draft once, compete all season</div>
+              </ToggleBtn>
+              <ToggleBtn active={leagueType === 'weekly'} onClick={() => setLeagueType('weekly')}>
+                <div style={{ fontSize: 18, marginBottom: 4 }}>⚡</div>
+                <strong>Weekly Pick'em</strong>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Pick your lineup each week</div>
+              </ToggleBtn>
+            </div>
+            {leagueType === 'weekly' && (
+              <div style={{ padding: '10px 14px', background: 'rgba(245,166,35,.06)', border: '1px solid rgba(245,166,35,.2)', borderRadius: 8, fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.sub, marginBottom: 4 }}>
+                ⚡ High-margin weekly contest — 1st gets 80%, 2nd gets 20%. Repeatable every week!
+              </div>
+            )}
+
+            <Spacer />
+
             <FieldLabel>League Name</FieldLabel>
             <input
               type="text"
@@ -255,25 +282,42 @@ export function CreateLeagueWizard() {
               </ToggleBtn>
             </div>
 
-            <Spacer />
+            {leagueType === 'weekly' && (
+              <>
+                <Spacer />
+                <FieldLabel>Contest Week</FieldLabel>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+                  {WEEKS.map(w => (
+                    <ToggleBtn key={w} active={week === w} onClick={() => setWeek(w)}>
+                      {w}
+                    </ToggleBtn>
+                  ))}
+                </div>
+              </>
+            )}
 
-            <FieldLabel>Draft Type</FieldLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <ToggleBtn active={form.draft_type === 'snake'} onClick={() => set('draft_type', 'snake')}>
-                <div style={{ fontSize: 18, marginBottom: 4 }}>🐍</div>
-                <strong>Snake Draft</strong>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                  Pick order reverses each round
+            {leagueType === 'season' && (
+              <>
+                <Spacer />
+                <FieldLabel>Draft Type</FieldLabel>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <ToggleBtn active={form.draft_type === 'snake'} onClick={() => set('draft_type', 'snake')}>
+                    <div style={{ fontSize: 18, marginBottom: 4 }}>🐍</div>
+                    <strong>Snake Draft</strong>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                      Pick order reverses each round
+                    </div>
+                  </ToggleBtn>
+                  <ToggleBtn active={form.draft_type === 'salary'} onClick={() => set('draft_type', 'salary')}>
+                    <div style={{ fontSize: 18, marginBottom: 4 }}>💰</div>
+                    <strong>Salary Cap</strong>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                      ${form.salary_cap} cap · bid on players
+                    </div>
+                  </ToggleBtn>
                 </div>
-              </ToggleBtn>
-              <ToggleBtn active={form.draft_type === 'salary'} onClick={() => set('draft_type', 'salary')}>
-                <div style={{ fontSize: 18, marginBottom: 4 }}>💰</div>
-                <strong>Salary Cap</strong>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                  ${form.salary_cap} cap · bid on players
-                </div>
-              </ToggleBtn>
-            </div>
+              </>
+            )}
           </Card>
 
           <NavRow>
@@ -350,13 +394,18 @@ export function CreateLeagueWizard() {
             </div>
 
             {[
-              ['League Name', form.name],
-              ['League Size', `${form.league_size} teams`],
-              ['Buy-In',      form.buy_in === 0 ? 'Free' : `$${form.buy_in} per team · $${form.buy_in * form.league_size} total pot`],
-              ['Visibility',  isPublic ? '🌐 Public — listed in leagues browser' : '🔒 Private — invite link only'],
-              ['Draft Type',  form.draft_type === 'snake' ? '🐍 Snake Draft' : `💰 Salary Cap ($${form.salary_cap})`],
+              ['League Type',  leagueType === 'weekly' ? `⚡ Weekly Pick'em — Week ${week}` : '🏈 Season Long'],
+              ['League Name',  form.name],
+              ['League Size',  `${form.league_size} teams`],
+              ['Buy-In',       form.buy_in === 0 ? 'Free' : `$${form.buy_in} per team · $${form.buy_in * form.league_size} total pot`],
+              ['Visibility',   isPublic ? '🌐 Public — listed in leagues browser' : '🔒 Private — invite link only'],
+              ...(leagueType === 'season'
+                ? [['Draft Type', form.draft_type === 'snake' ? '🐍 Snake Draft' : `💰 Salary Cap ($${form.salary_cap})`]]
+                : [['Scoring',   '1st: 80% · 2nd: 20% of prize pool']]),
               ['Your Team',   form.team_name],
-              ['Season',      'Weeks 1–10 regular season · 6-team playoff (Wks 11–13)'],
+              ...(leagueType === 'season'
+                ? [['Season', 'Weeks 1–10 regular season · 6-team playoff (Wks 11–13)']]
+                : []),
             ].map(([k, v]) => (
               <div key={k} style={{
                 display: 'flex', justifyContent: 'space-between',

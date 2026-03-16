@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
+import { WeeklyLeaguePage } from '@/components/league/WeeklyLeaguePage';
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
@@ -353,6 +354,11 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 3, fontSize: 13 }}>Loading league...</div>
     </div>
   );
+
+  // ── Weekly Pick'em leagues get their own dedicated page ──
+  if (league?.league_type === 'weekly') {
+    return <WeeklyLeaguePage leagueId={params.id} />;
+  }
 
   return (
     <div className="layout-root" style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
