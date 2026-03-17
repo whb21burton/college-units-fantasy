@@ -4,6 +4,10 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'College Units Fantasy',
   description: 'Draft whole CFB position units. Real depth charts. True college football strategy.',
+  icons: {
+    icon: '/logo.png',
+    apple: '/logo.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

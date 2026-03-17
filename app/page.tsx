@@ -129,14 +129,16 @@ export default function HomePage() {
 
       {/* LANDING */}
       {view === 'landing' && (
-        <div className="fade-up" style={{ maxWidth: 480, margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
-          <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 5, color: C.gold, textTransform: 'uppercase', marginBottom: 16 }}>
-            College Fantasy Football
+        <div className="fade-up" style={{ maxWidth: 480, margin: '0 auto', padding: '60px 24px', textAlign: 'center' }}>
+          {/* Logo */}
+          <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'center' }}>
+            <img
+              src="/logo.png"
+              alt="College Units Fantasy"
+              style={{ width: 180, height: 180, objectFit: 'contain', filter: 'drop-shadow(0 4px 24px rgba(212,168,40,.35))' }}
+            />
           </div>
-          <h1 style={{ fontFamily: "'Anton', sans-serif", fontSize: 56, letterSpacing: 2, textTransform: 'uppercase', lineHeight: 1, marginBottom: 8 }}>
-            UNITS
-          </h1>
-          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 14, color: C.sub, letterSpacing: 1, marginBottom: 48 }}>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 14, color: C.sub, letterSpacing: 1, marginBottom: 36 }}>
             Draft college football units. Dominate your league.
           </div>
           <button onClick={() => setView('signup')} style={{ ...btnStyle, marginBottom: 12 }}>Get Started</button>
@@ -199,9 +201,12 @@ export default function HomePage() {
       {view === 'dashboard' && (
         <div className="fade-up" style={{ maxWidth: 600, margin: '0 auto', padding: '60px 24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 }}>
-            <div>
-              <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 4, color: C.gold, textTransform: 'uppercase', marginBottom: 6 }}>Welcome back</div>
-              <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 28, letterSpacing: 1, textTransform: 'uppercase' }}>{user?.email?.split('@')[0]}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <img src="/logo.png" alt="College Units Fantasy" style={{ width: 52, height: 52, objectFit: 'contain' }} />
+              <div>
+                <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 4, color: C.gold, textTransform: 'uppercase', marginBottom: 4 }}>Welcome back</div>
+                <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 22, letterSpacing: 1, textTransform: 'uppercase' }}>{user?.email?.split('@')[0]}</div>
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setWalletOpen(true)} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>💰 Wallet</button>
