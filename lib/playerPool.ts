@@ -435,3 +435,4 @@ export const SCORING = {
     pointsAllowed1420: 1, pointsAllowed2127: 0, pointsAllowed28plus: -1,
   },
 };
+

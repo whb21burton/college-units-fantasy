@@ -1,0 +1,7 @@
+{
+  "crons": [
+    { "path": "/api/cron/sync-scores",   "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/sync-schedule", "schedule": "0 6 * * *"   },
+    { "path": "/api/cron/sync-rosters",  "schedule": "0 4 * * *"   }
+  ]
+}
