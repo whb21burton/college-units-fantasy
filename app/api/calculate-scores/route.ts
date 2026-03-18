@@ -95,8 +95,8 @@ function scoreStarters(
     const mult = rankMult(relevantRank);
 
     const pts = completedSchools.includes(school)
-      ? (schoolPoints[school]?.[unitType] ?? 0) * mult
-      : (seasonPts / 12) * mult;
+      ? (schoolPoints[school]?.[unitType] ?? 0)   // mult already baked in by syncStats
+      : (seasonPts / 12) * mult;                  // apply for future projections
 
     score += pts;
   }

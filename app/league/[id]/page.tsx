@@ -174,7 +174,8 @@ function effectivePts(
 
   if (gs?.completedSchools.includes(school)) {
     const rawActual = gs.schoolPoints[school]?.[unitType];
-    if (rawActual != null) return { pts: rawActual * mult, isActual: true, base: rawActual };
+    // rawActual already includes the Elo multiplier (baked in by syncStats) — do NOT re-apply
+    if (rawActual != null) return { pts: rawActual, isActual: true, base: rawActual };
   }
   const base = weeklyProj(seasonPts);
   return { pts: base * mult, isActual: false, base };
