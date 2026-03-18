@@ -9,21 +9,30 @@ const C = { bg:'#05080f', surf:'#0c1220', surf2:'#131d30', surf3:'#1e2d47', gold
 export default function JoinPage({ params }: { params: { code: string } }) {
   const router = useRouter();
   const code = params.code.toUpperCase();
-  const [league, setLeague] = useState<any>(null);
-  const [user, setUser] = useState<any>(null);
-  const [teamName, setTeamName] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [joining, setJoining] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [alreadyMember, setAlreadyMember] = useState(false);
-  const [showAuth, setShowAuth] = useState(false);
-  const [memberCount, setMemberCount] = useState(0);
+  const [league,       setLeague]       = useState<any>(null);
+  const [user,         setUser]         = useState<any>(null);
+  const [walletCents,  setWalletCents]  = useState<number | null>(null);
+  const [teamName,     setTeamName]     = useState('');
+  const [loading,      setLoading]      = useState(true);
+  const [joining,      setJoining]      = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+  const [alreadyMember,setAlreadyMember]= useState(false);
+  const [showAuth,     setShowAuth]     = useState(false);
+  const [memberCount,  setMemberCount]  = useState(0);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       const { data: { user: u } } = await supabase.auth.getUser();
-      if (u) setUser({ id: u.id, email: u.email || '' });
+      if (u) {
+        setUser({ id: u.id, email: u.email || '' });
+        // Load wallet balance
+        const walletRes = await fetch('/api/wallet');
+        if (walletRes.ok) {
+          const d = await walletRes.json();
+          setWalletCents(d.wallet?.balance ?? 0);
+        }
+      }
       const { data: leagueData } = await supabase.from('leagues').select('*').eq('invite_code', code).single();
       if (!leagueData) { setError('League not found.'); setLoading(false); return; }
       setLeague(leagueData);
@@ -46,52 +55,34 @@ export default function JoinPage({ params }: { params: { code: string } }) {
     if (memberCount >= league.league_size) { setError('This league is full.'); setJoining(false); return; }
     if (league.status !== 'forming') { setError('This league has already started.'); setJoining(false); return; }
 
-    // ── Paid league: redirect to Stripe Checkout ──────────────────────────
-    if (league.buy_in > 0) {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+    // POST to /api/leagues/enter (handles both free and paid via wallet)
+    const res  = await fetch('/api/leagues/enter', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ league_id: league.id, team_name: teamName.trim() }),
+    });
+    const data = await res.json();
 
-      const res = await fetch('/api/stripe/checkout', {
-        method:  'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          league_id: league.id,
-          team_name: teamName.trim(),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error ?? 'Could not start checkout. Please try again.');
-        setJoining(false);
-        return;
+    if (!res.ok) {
+      if (data.code === 'INSUFFICIENT_BALANCE') {
+        const needDollars  = ((data.need_cents ?? 0) / 100).toFixed(2);
+        const haveDollars  = ((data.balance_cents ?? 0) / 100).toFixed(2);
+        setError(`Not enough funds. Need $${needDollars}, you have $${haveDollars}.`);
+      } else {
+        setError(data.error ?? 'Could not join. Please try again.');
       }
-
-      // Redirect to Stripe-hosted checkout page
-      window.location.href = data.url;
+      setJoining(false);
       return;
     }
 
-    // ── Free league: join directly ─────────────────────────────────────────
-    const { error: joinError } = await supabase.from('league_members').insert({
-      league_id: league.id,
-      user_id:   user.id,
-      team_name: teamName.trim(),
-      draft_slot: memberCount + 1,
-      paid:       true,
-    });
-    if (joinError) { setError(joinError.message); setJoining(false); return; }
     router.push('/league/' + league.id + '?joined=1');
   }
 
-  const spotsLeft = league ? league.league_size - memberCount : 0;
-  const isFull = spotsLeft <= 0;
-  const buyIn  = league?.buy_in ?? 0;
-  const totalCharge = buyIn > 0 ? buyIn + Math.round(buyIn * 0.1) : 0;
+  const spotsLeft   = league ? league.league_size - memberCount : 0;
+  const isFull      = spotsLeft <= 0;
+  const buyIn       = league?.buy_in ?? 0;
+  const buyInCents  = Math.round(buyIn * 100);
+  const hasBalance  = walletCents !== null && walletCents >= buyInCents;
 
   if (loading) return (
     <div style={{ minHeight:'100vh', background:C.bg, display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -123,8 +114,8 @@ export default function JoinPage({ params }: { params: { code: string } }) {
                 {[
                   ['League Size', league?.league_size+' teams'],
                   ['Spots Left',  isFull ? 'Full' : spotsLeft+' open'],
-                  ['Buy-In',      buyIn === 0 ? 'Free' : `$${buyIn} (+$${Math.round(buyIn*0.1)} fee)`],
-                  ['Draft',       league?.draft_type==='snake' ? 'Snake' : 'Salary'],
+                  ['Buy-In',      buyIn === 0 ? 'Free' : `$${buyIn}`],
+                  ['Type',        league?.league_type === 'weekly' ? 'Weekly Pick\'em' : league?.draft_type === 'snake' ? 'Snake Draft' : 'Salary Draft'],
                 ].map(([k,v]) => (
                   <div key={k} style={{ padding:'12px 14px', background:C.surf2, border:'1px solid '+C.surf3, borderRadius:8 }}>
                     <div style={{ fontFamily:'Oswald,sans-serif', fontSize:9, color:C.muted, letterSpacing:2, textTransform:'uppercase', marginBottom:4 }}>{k}</div>
@@ -135,11 +126,36 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
               {/* Prize pool callout for paid leagues */}
               {buyIn > 0 && (
-                <div style={{ padding:'12px 14px', background:'rgba(212,168,40,.08)', border:'1px solid rgba(212,168,40,.2)', borderRadius:8, marginBottom:20, fontFamily:'Oswald,sans-serif', fontSize:12, color:C.sub }}>
+                <div style={{ padding:'12px 14px', background:'rgba(212,168,40,.08)', border:'1px solid rgba(212,168,40,.2)', borderRadius:8, marginBottom:16, fontFamily:'Oswald,sans-serif', fontSize:12, color:C.sub }}>
                   🏆 Prize pool: <strong style={{ color:C.gold }}>${buyIn * league.league_size}</strong>
                   <span style={{ color:C.muted }}> · 80% to 1st, 20% to 2nd</span>
                   <br/>
-                  <span style={{ fontSize:11 }}>You'll be charged <strong style={{ color:C.text }}>${totalCharge}</strong> via Stripe (includes 10% platform fee).</span>
+                  <span style={{ fontSize:11 }}>Paid from your wallet balance.</span>
+                </div>
+              )}
+
+              {/* Wallet balance indicator for paid leagues */}
+              {buyIn > 0 && user && walletCents !== null && (
+                <div style={{
+                  padding:'10px 14px', borderRadius:8, marginBottom:16,
+                  background: hasBalance ? 'rgba(46,204,113,.08)' : 'rgba(231,76,60,.08)',
+                  border: `1px solid ${hasBalance ? 'rgba(46,204,113,.25)' : 'rgba(231,76,60,.25)'}`,
+                  fontFamily:'Oswald,sans-serif', fontSize:12,
+                  color: hasBalance ? C.green : C.red,
+                }}>
+                  💰 Your wallet: <strong>${(walletCents / 100).toFixed(2)}</strong>
+                  {hasBalance
+                    ? ` ✓ Sufficient`
+                    : ` — need $${(buyInCents / 100).toFixed(2)} more`
+                  }
+                  {!hasBalance && (
+                    <button
+                      onClick={() => router.push('/wallet')}
+                      style={{ display:'block', marginTop:8, padding:'7px 14px', background:'rgba(231,76,60,.15)', border:'1px solid rgba(231,76,60,.3)', borderRadius:6, fontFamily:'Oswald,sans-serif', fontSize:11, letterSpacing:1, color:C.red, cursor:'pointer', textTransform:'uppercase' }}
+                    >
+                      Add Funds →
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -160,13 +176,17 @@ export default function JoinPage({ params }: { params: { code: string } }) {
                     <input type="text" placeholder="e.g. Athens Ave Dawgs" value={teamName} onChange={e => setTeamName(e.target.value)} maxLength={32} onKeyDown={e => e.key==='Enter' && handleJoin()} style={{ width:'100%', padding:14, background:C.bg, border:'1px solid '+C.surf3, borderRadius:8, color:C.text, fontFamily:'Inter,sans-serif', fontSize:15, outline:'none', boxSizing:'border-box' }} />
                   </div>
                   {error && <div style={{ marginBottom:12, padding:'10px 14px', background:'rgba(231,76,60,.1)', border:'1px solid rgba(231,76,60,.3)', borderRadius:6, fontFamily:'Oswald,sans-serif', fontSize:12, color:C.red }}>⚠️ {error}</div>}
-                  <button onClick={handleJoin} disabled={joining} style={{ width:'100%', padding:15, background:joining?C.surf3:C.gold, border:'none', borderRadius:8, cursor:joining?'wait':'pointer', fontFamily:'Anton,sans-serif', fontSize:15, letterSpacing:2, textTransform:'uppercase', color:C.bg }}>
+                  <button
+                    onClick={handleJoin}
+                    disabled={joining || (buyIn > 0 && user && !hasBalance)}
+                    style={{ width:'100%', padding:15, background:joining?C.surf3:(buyIn > 0 && user && !hasBalance)?C.surf3:C.gold, border:'none', borderRadius:8, cursor:(joining||(buyIn > 0 && user && !hasBalance))?'not-allowed':'pointer', fontFamily:'Anton,sans-serif', fontSize:15, letterSpacing:2, textTransform:'uppercase', color:C.bg }}
+                  >
                     {joining
-                      ? (buyIn > 0 ? 'Redirecting to payment…' : 'Joining...')
+                      ? 'Joining...'
                       : !user
                         ? 'Sign In to Join'
                         : buyIn > 0
-                          ? `Pay $${totalCharge} & Join`
+                          ? hasBalance ? `Pay $${buyIn} & Join` : 'Insufficient Balance'
                           : 'Join League'}
                   </button>
                 </>

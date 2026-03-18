@@ -2,115 +2,141 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
-import { splitEntryFee } from '@/lib/stripe';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/leagues/enter
- * Body: { league_id: string }
+ * Body: { league_id: string, team_name: string }
  *
- * Deducts entry_fee from user wallet, credits prize pool.
- * Called after the user has already been added to league_members.
+ * Wallet-based league join. Deducts buy_in (in cents) from the user's wallet,
+ * inserts a contest_entry, and adds the user to league_members.
+ *
+ * Free leagues: join directly (no wallet deduction).
+ * Paid leagues: requires balance >= buy_in_cents.
  */
 export async function POST(req: NextRequest) {
   const supabase = createRouteHandlerClient({ cookies });
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { league_id } = await req.json();
-  if (!league_id) return NextResponse.json({ error: 'league_id required' }, { status: 400 });
+  const body = await req.json().catch(() => ({}));
+  const { league_id, team_name } = body as { league_id?: string; team_name?: string };
+
+  if (!league_id || !team_name?.trim()) {
+    return NextResponse.json({ error: 'league_id and team_name required' }, { status: 400 });
+  }
 
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  // Load league to get entry_fee
-  const { data: league, error: leagueErr } = await admin
+  // Load league
+  const { data: league } = await admin
     .from('leagues')
-    .select('id, name, entry_fee, status')
+    .select('id, name, buy_in, league_size, status')
     .eq('id', league_id)
     .single();
 
-  if (leagueErr || !league) return NextResponse.json({ error: 'League not found' }, { status: 404 });
+  if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 });
   if (league.status !== 'forming') {
     return NextResponse.json({ error: 'League is not accepting entries' }, { status: 400 });
   }
 
-  const entryFee = Number(league.entry_fee ?? 0);
+  // Check not already a member
+  const { data: existing } = await admin
+    .from('league_members')
+    .select('id')
+    .eq('league_id', league_id)
+    .eq('user_id', user.id)
+    .single();
 
-  // Free league — just mark paid
-  if (entryFee === 0) {
-    await admin
-      .from('league_members')
-      .update({ paid: true })
-      .eq('league_id', league_id)
-      .eq('user_id', user.id);
-    return NextResponse.json({ success: true, charged: 0 });
+  if (existing) return NextResponse.json({ error: 'Already a member' }, { status: 409 });
+
+  // Count current members for draft_slot + capacity check
+  const { count: memberCount } = await admin
+    .from('league_members')
+    .select('*', { count: 'exact', head: true })
+    .eq('league_id', league_id);
+
+  if ((memberCount ?? 0) >= league.league_size) {
+    return NextResponse.json({ error: 'League is full' }, { status: 400 });
   }
 
-  // Check wallet balance
+  const buyInCents = Math.round((league.buy_in ?? 0) * 100);
+
+  // ── Free league ──────────────────────────────────────────────────────────
+  if (buyInCents === 0) {
+    await admin.from('league_members').insert({
+      league_id,
+      user_id:    user.id,
+      team_name:  team_name.trim(),
+      draft_slot: (memberCount ?? 0) + 1,
+      paid:       true,
+    });
+    return NextResponse.json({ success: true, charged_cents: 0 });
+  }
+
+  // ── Paid league — deduct from wallet ────────────────────────────────────
   const { data: wallet } = await admin
     .from('wallets')
     .select('balance')
     .eq('user_id', user.id)
     .single();
 
-  if (!wallet || wallet.balance < entryFee) {
+  const currentBalance = wallet?.balance ?? 0;
+
+  if (currentBalance < buyInCents) {
     return NextResponse.json({
-      error: `Insufficient balance. You need $${entryFee.toFixed(2)} but have $${(wallet?.balance ?? 0).toFixed(2)}.`,
-      code: 'INSUFFICIENT_BALANCE',
+      error: `Insufficient balance. Need $${(buyInCents / 100).toFixed(2)}, have $${(currentBalance / 100).toFixed(2)}.`,
+      code:  'INSUFFICIENT_BALANCE',
+      need_cents:    buyInCents,
+      balance_cents: currentBalance,
     }, { status: 400 });
   }
 
-  // Debit user wallet
-  const { error: debitErr } = await admin.rpc('wallet_debit', {
-    p_user_id:    user.id,
-    p_amount:     entryFee,
-    p_type:       'entry',
-    p_league_id:  league_id,
-    p_description: `Entry fee — ${league.name}`,
-  });
-  if (debitErr) return NextResponse.json({ error: debitErr.message }, { status: 500 });
+  const balanceAfter = currentBalance - buyInCents;
 
-  // Split into platform fee + prize payout
-  const { fee, payout } = splitEntryFee(entryFee);
-
-  // Update prize pool (upsert)
+  // Deduct wallet
   await admin
-    .from('pools')
-    .upsert({
-      league_id,
-      total_amount:  admin.rpc ? undefined : 0, // handled below
-      fee_amount:    fee,
-      payout_amount: payout,
-    })
-    .select();
-
-  // Increment pool amounts
-  const { data: pool } = await admin
-    .from('pools')
-    .select('total_amount, fee_amount, payout_amount')
-    .eq('league_id', league_id)
-    .single();
-
-  await admin
-    .from('pools')
-    .update({
-      total_amount:  (pool?.total_amount  ?? 0) + entryFee,
-      fee_amount:    (pool?.fee_amount    ?? 0) + fee,
-      payout_amount: (pool?.payout_amount ?? 0) + payout,
-      updated_at:    new Date().toISOString(),
-    })
-    .eq('league_id', league_id);
-
-  // Mark member as paid
-  await admin
-    .from('league_members')
-    .update({ paid: true })
-    .eq('league_id', league_id)
+    .from('wallets')
+    .update({ balance: balanceAfter, updated_at: new Date().toISOString() })
     .eq('user_id', user.id);
 
-  return NextResponse.json({ success: true, charged: entryFee, pool_payout: payout });
+  // Insert transaction
+  const { data: tx } = await admin
+    .from('transactions')
+    .insert({
+      user_id:        user.id,
+      type:           'contest_entry',
+      amount:         buyInCents,
+      balance_before: currentBalance,
+      balance_after:  balanceAfter,
+      league_id,
+      status:         'completed',
+      description:    `Entry — ${league.name}`,
+    })
+    .select('id')
+    .single();
+
+  // Insert contest_entries
+  await admin.from('contest_entries').insert({
+    user_id:        user.id,
+    league_id,
+    amount_paid:    buyInCents,
+    transaction_id: tx?.id ?? null,
+    status:         'active',
+  });
+
+  // Add to league_members
+  await admin.from('league_members').insert({
+    league_id,
+    user_id:    user.id,
+    team_name:  team_name.trim(),
+    draft_slot: (memberCount ?? 0) + 1,
+    paid:       true,
+  });
+
+  return NextResponse.json({ success: true, charged_cents: buyInCents });
 }
