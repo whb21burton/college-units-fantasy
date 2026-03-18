@@ -888,7 +888,11 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                     : (isPlayoff ? 'PLAYOFF' : '—')}
                 </div>
                 <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: wk.fantasyPoints != null ? C.gold : C.muted, textAlign: 'right' }}>
-                  {wk.fantasyPoints != null ? wk.fantasyPoints.toFixed(1) : '—'}
+                  {wk.fantasyPoints != null
+                    ? wk.fantasyPoints.toFixed(1)
+                    : wk.opponent != null
+                      ? weeklyProj(player.projectedPoints).toFixed(1)
+                      : '—'}
                 </div>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right', color: wk.multiplier == null ? C.muted : wk.multiplier > 1 ? C.green : wk.multiplier < 1 ? C.red : C.sub }}>
                   {wk.multiplier != null ? `×${wk.multiplier.toFixed(1)}` : '—'}
