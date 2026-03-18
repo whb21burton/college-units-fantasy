@@ -83,7 +83,7 @@ export async function syncSchedule(season: number): Promise<number> {
     const games = await cfbdGet('/games', { year: season });
 
     const rows = games
-      .filter((g: any) => g.id && g.homeTeam && g.awayTeam)
+      .filter((g: any) => g.id && g.homeTeam && g.awayTeam && (g.seasonType === 'regular' || g.season_type === 'regular'))
       .map((g: any) => ({
         game_id:    String(g.id),
         week:       g.week ?? 0,
@@ -237,9 +237,12 @@ export async function syncStats(week: number, season: number): Promise<number> {
     const eloRankMap: Record<string, number> = {};
     eloSorted.forEach((t, idx) => { if (t.team) eloRankMap[t.team] = idx + 1; });
 
-    // Only process completed games
+    // Only process completed regular-season games (exclude bowls/postseason)
     const completedGames = (games as any[]).filter(
-      (g: any) => g.homePoints != null && g.awayPoints != null,
+      (g: any) =>
+        g.homePoints != null &&
+        g.awayPoints != null &&
+        (g.seasonType === 'regular' || g.season_type === 'regular'),
     );
 
     if (completedGames.length === 0) {
