@@ -2,19 +2,21 @@
  * GET /api/matchup-context?week=N&season=YYYY
  *
  * Returns for each school:
- *   - opponentMap:  school → opponent school this week
+ *   - opponentMap:  school → opponent school this week  (from cached_schedule)
  *   - rankMap:      school → Elo power rank (1 = best)
  *   - defRankMap:   school → SP+ defensive rank (1 = best defense = toughest to score on)
  *   - offRankMap:   school → SP+ offensive rank (1 = best offense)
  *
- * ODR multiplier (applied to RB/WR/TE/QB/K): based on opponent's defRankMap value
- * OOR multiplier (applied to DEF):            based on opponent's offRankMap value
+ * opponentMap is read from cached_schedule (Supabase) so it always matches
+ * the same schedule used by game-stats and cached_stats.  Elo/SP+ still come
+ * from the CFBD API because we don't cache ratings in Supabase yet.
  */
 import { NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase-server';
 import { initCfbdClient } from '@/lib/cfbd-client';
 
 const pkg = require('cfbd');
-const { getGames, getElo, getSp } = pkg;
+const { getElo, getSp } = pkg;
 
 const SEASON = 2025;
 
@@ -25,10 +27,15 @@ export async function GET(req: Request) {
 
   try {
     initCfbdClient();
+    const admin = createAdminClient();
 
-    const [gamesRes, eloData, spRes] = await Promise.all([
-      // seasonType: 'regular' avoids bowl/postseason games bleeding into schedule
-      getGames({ query: { year: season, week, seasonType: 'regular' } }).then((r: any) => r.data || []),
+    // Fetch schedule from Supabase + Elo/SP+ from CFBD in parallel
+    const [scheduleRes, eloData, spRes] = await Promise.all([
+      admin
+        .from('cached_schedule')
+        .select('home_team, away_team')
+        .eq('week', week)
+        .eq('season', season),
       getElo({ query: { year: season, week } }).then((r: any) => r.data || []).catch(() => []),
       getSp({ query: { year: season } }).then((r: any) => r.data || []).catch(() => []),
     ]);
@@ -39,23 +46,16 @@ export async function GET(req: Request) {
     eloSorted.forEach((t, idx) => { rankMap[t.team] = idx + 1; });
 
     // ── SP+ rank maps (1 = best offense/defense) ──────────────
-    // Strategy:
-    //   1. Try pre-computed .rank fields from SP+ response
-    //   2. If empty, derive ranks by sorting on .rating values
-    //      (higher SP+ rating = better unit = rank 1)
-    //   3. If SP+ has no data at all, fall back to Elo rankMap
     const spList: any[] = spRes as any[];
     const defRankMap: Record<string, number> = {};
     const offRankMap: Record<string, number> = {};
 
-    // Try pre-computed rank fields first
     for (const t of spList) {
       if (!t.team) continue;
-      if (t.defense?.rank  != null) defRankMap[t.team] = t.defense.rank;
-      if (t.offense?.rank  != null) offRankMap[t.team] = t.offense.rank;
+      if (t.defense?.rank != null) defRankMap[t.team] = t.defense.rank;
+      if (t.offense?.rank != null) offRankMap[t.team] = t.offense.rank;
     }
 
-    // Fall back: derive from rating values if ranks weren't populated
     if (Object.keys(defRankMap).length === 0) {
       [...spList]
         .filter(t => t.team && t.defense?.rating != null)
@@ -69,26 +69,21 @@ export async function GET(req: Request) {
         .forEach((t, i) => { offRankMap[t.team] = i + 1; });
     }
 
-    // Final fallback: use Elo rank for both if SP+ returned nothing
-    if (Object.keys(defRankMap).length === 0) {
-      Object.assign(defRankMap, rankMap);
-    }
-    if (Object.keys(offRankMap).length === 0) {
-      Object.assign(offRankMap, rankMap);
-    }
+    if (Object.keys(defRankMap).length === 0) Object.assign(defRankMap, rankMap);
+    if (Object.keys(offRankMap).length === 0) Object.assign(offRankMap, rankMap);
 
-    // ── Opponent map from this week's regular-season schedule ──
+    // ── Opponent map from cached_schedule (same source as game-stats) ──
     const opponentMap: Record<string, string> = {};
-    for (const g of gamesRes as any[]) {
-      if (g.homeTeam && g.awayTeam) {
-        opponentMap[g.homeTeam] = g.awayTeam;
-        opponentMap[g.awayTeam] = g.homeTeam;
+    for (const g of scheduleRes.data ?? []) {
+      if (g.home_team && g.away_team) {
+        opponentMap[g.home_team] = g.away_team;
+        opponentMap[g.away_team] = g.home_team;
       }
     }
 
     return NextResponse.json(
       { week, season, opponentMap, rankMap, defRankMap, offRankMap },
-      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' } }
+      { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } }
     );
   } catch (err: any) {
     console.error('matchup-context error:', err);

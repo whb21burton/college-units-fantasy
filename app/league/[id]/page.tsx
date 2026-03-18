@@ -136,10 +136,13 @@ function PlayerInfoLines({
       ? `${school} · BYE`
       : school;
 
-  // Line 4: score breakdown — same formula for both actuals and projections
+  // Line 4: score breakdown
+  // For completed games ep.pts already has the multiplier baked in, so
+  // back-derive the raw base as pts/mult so the formula always adds up.
+  const displayBase  = (ep.isActual && mult > 0) ? ep.pts / mult : ep.base;
   const breakdownLine = (!opponent)
     ? 'No game this week'
-    : `${ep.base.toFixed(1)} × ${mult.toFixed(2)} = ${ep.pts.toFixed(1)}`;
+    : `${displayBase.toFixed(1)} × ${mult.toFixed(2)} = ${ep.pts.toFixed(1)}`;
 
   return (
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
