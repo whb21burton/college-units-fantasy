@@ -111,20 +111,8 @@ export async function getSchoolWeekGameLog(
   const admin = createAdminClient();
   const TOTAL_WEEKS = 14;
 
-  function rankMult(rank: number): number {
-    if (rank <=   5) return 1.3;
-    if (rank <=  10) return 1.2;
-    if (rank <=  15) return 1.1;
-    if (rank <=  25) return 1.0;
-    if (rank <=  35) return 0.9;
-    if (rank <=  50) return 0.8;
-    if (rank <=  80) return 0.7;
-    if (rank <= 100) return 0.6;
-    return 0.5;
-  }
-
-  // Fetch schedule + stats + Elo ranks for this school in parallel
-  const [scheduleRows, unitStatRows, playerStatRows, teamRows] = await Promise.all([
+  // Fetch schedule + stats for this school in parallel
+  const [scheduleRows, unitStatRows, playerStatRows] = await Promise.all([
     admin
       .from('cached_schedule')
       .select('week, home_team, away_team, game_id')
@@ -135,7 +123,7 @@ export async function getSchoolWeekGameLog(
       .select('week, stat_type, value')
       .eq('school', school)
       .eq('season', season)
-      .like('stat_type', 'unit_%')
+      .or('stat_type.like.unit_%,stat_type.eq.game_mult')
       .is('player_name', null),
     admin
       .from('cached_stats')
@@ -143,16 +131,7 @@ export async function getSchoolWeekGameLog(
       .eq('school', school)
       .eq('season', season)
       .not('player_name', 'is', null),
-    admin
-      .from('cached_teams')
-      .select('school, elo_rank'),
   ]);
-
-  // Build opponent Elo rank map
-  const eloRankMap: Record<string, number> = {};
-  for (const t of teamRows.data ?? []) {
-    eloRankMap[t.school] = t.elo_rank;
-  }
 
   // Build lookup maps
   const scheduleByWeek: Record<number, { opponent: string; gameId: string }> = {};
@@ -164,9 +143,12 @@ export async function getSchoolWeekGameLog(
   }
 
   const unitPtsByWeek: Record<number, number> = {};
+  const multByWeek:    Record<number, number> = {};
   for (const row of unitStatRows.data ?? []) {
     if (row.stat_type === `unit_${unitType}`) {
       unitPtsByWeek[row.week] = row.value;
+    } else if (row.stat_type === 'game_mult') {
+      multByWeek[row.week] = row.value;
     }
   }
 
@@ -237,8 +219,9 @@ export async function getSchoolWeekGameLog(
       }
     }
 
-    const mult = opponent != null ? rankMult(eloRankMap[opponent] ?? 999) : null;
-    return { week, opponent, completed: true, fantasyPoints: pts, rawPoints: pts, multiplier: mult, players };
+    const mult      = multByWeek[week] ?? null;
+    const rawPoints = mult && mult > 0 ? Math.round(pts / mult * 10) / 10 : pts;
+    return { week, opponent, completed: true, fantasyPoints: pts, rawPoints, multiplier: mult, players };
   });
 }
 

@@ -338,6 +338,9 @@ export async function syncStats(week: number, season: number): Promise<number> {
           addStatRow(null, `team_${cat}`, ts[cat] || 0);
         }
 
+        // ── Store the multiplier used so game logs can display it accurately ──
+        addStatRow(null, 'game_mult', mult);
+
         // ── Compute unit fantasy points (Elo-adjusted) ──────────────────────
 
         // QB
