@@ -71,9 +71,10 @@ export async function getStatsForWeek(week: number, season: number) {
 // Returns precomputed unit fantasy points AND stored multipliers for all schools.
 // Returns: { schoolPoints: { [school]: { QB, RB, WR, TE, DEF, K } }, schoolMults: { [school]: number } }
 //
-// game_mult rows can be stored with an inconsistent week value in cached_stats,
-// so we look them up by game_id (via cached_schedule) instead of by week.
-// This mirrors how getSchoolWeekGameLog finds multipliers.
+// cached_stats rows have unreliable week column values, so we look up stats
+// by game_id (sourced from cached_schedule) instead of filtering by week.
+// This is the same approach getSchoolWeekGameLog uses and is the only
+// reliable way to get data for a specific week.
 export async function getUnitPointsForWeek(
   week: number,
   season: number,
@@ -83,55 +84,43 @@ export async function getUnitPointsForWeek(
 }> {
   const admin = createAdminClient();
 
-  // Step 1: get game_ids for this week from the schedule
+  // Step 1: get game_ids for this week from cached_schedule (week column is reliable here)
   const { data: scheduleData } = await admin
     .from('cached_schedule')
-    .select('game_id, home_team, away_team')
+    .select('game_id')
     .eq('week', week)
     .eq('season', season);
 
   const gameIds = (scheduleData ?? []).map((g: any) => g.game_id).filter(Boolean);
 
-  // Step 2: fetch unit scores (by week — these are reliably stored with week)
-  // and game_mult (by game_id — bypasses any week column mismatch)
-  const UNIT_TYPES = ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'];
+  if (gameIds.length === 0) {
+    return { schoolPoints: {}, schoolMults: {} };
+  }
 
-  const [unitData, multData] = await Promise.all([
-    admin
-      .from('cached_stats')
-      .select('school, stat_type, value')
-      .eq('week', week)
-      .eq('season', season)
-      .in('stat_type', UNIT_TYPES)
-      .is('player_name', null)
-      .limit(50000),
-    gameIds.length > 0
-      ? admin
-          .from('cached_stats')
-          .select('school, value')
-          .in('game_id', gameIds)
-          .eq('stat_type', 'game_mult')
-          .is('player_name', null)
-      : Promise.resolve({ data: [] }),
-  ]);
+  // Step 2: fetch all unit stats + multipliers by game_id — bypasses broken week column
+  const STAT_TYPES = ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K', 'game_mult'];
+  const { data } = await admin
+    .from('cached_stats')
+    .select('school, stat_type, value')
+    .in('game_id', gameIds)
+    .in('stat_type', STAT_TYPES)
+    .is('player_name', null)
+    .limit(50000);
 
-  // DEBUG: log first 5 raw rows from each query
-  const unitRows = unitData.data ?? [];
-  const multRows = (multData as any).data ?? [];
-  console.log(`[getUnitPointsForWeek] week=${week} season=${season} | unit rows: ${unitRows.length} | mult rows: ${multRows.length}`);
-  console.log(`[getUnitPointsForWeek] first 5 unit rows:`, JSON.stringify(unitRows.slice(0, 5)));
-  console.log(`[getUnitPointsForWeek] first 5 mult rows:`, JSON.stringify(multRows.slice(0, 5)));
+  const rows = data ?? [];
+  console.log(`[getUnitPointsForWeek] week=${week} gameIds=${gameIds.length} rows=${rows.length} first5=${JSON.stringify(rows.slice(0,5))}`);
 
   const schoolPoints: Record<string, Partial<Record<UnitType, number>>> = {};
   const schoolMults:  Record<string, number> = {};
 
-  for (const row of unitRows) {
-    const unitType = row.stat_type.replace('unit_', '') as UnitType;
-    if (!schoolPoints[row.school]) schoolPoints[row.school] = {};
-    schoolPoints[row.school][unitType] = row.value;
-  }
-  for (const row of multRows) {
-    schoolMults[row.school] = row.value;
+  for (const row of rows) {
+    if (row.stat_type === 'game_mult') {
+      schoolMults[row.school] = row.value;
+    } else {
+      const unitType = row.stat_type.replace('unit_', '') as UnitType;
+      if (!schoolPoints[row.school]) schoolPoints[row.school] = {};
+      schoolPoints[row.school][unitType] = row.value;
+    }
   }
 
   return { schoolPoints, schoolMults };
