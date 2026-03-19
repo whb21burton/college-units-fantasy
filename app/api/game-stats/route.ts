@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json(
       { week, season, completedSchools, schoolPoints },
-      { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } },
+      { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (err: any) {
     console.error('game-stats error:', err);
