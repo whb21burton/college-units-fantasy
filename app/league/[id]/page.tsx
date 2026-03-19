@@ -189,7 +189,12 @@ function effectivePts(
     return { pts: storedPts, isActual: true, base: rawBase, storedMult };
   }
 
-  // No stored score — game not yet played; use live Elo projection
+  // Game is completed but no cached_stats row yet — show 0, never projection
+  if (gs?.completedSchools?.includes(school)) {
+    return { pts: 0, isActual: true, base: 0, storedMult: null };
+  }
+
+  // Game not yet played — use live Elo projection
   const relevantRank = opponent && ctx ? (ctx.rankMap[opponent] ?? 999) : 999;
   const mult         = rankMult(relevantRank);
   const base         = weeklyProj(seasonPts);

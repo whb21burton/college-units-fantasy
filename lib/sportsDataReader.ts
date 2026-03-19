@@ -70,6 +70,10 @@ export async function getStatsForWeek(week: number, season: number) {
 // ── getUnitPointsForWeek ─────────────────────────────────────────────────────
 // Returns precomputed unit fantasy points AND stored multipliers for all schools.
 // Returns: { schoolPoints: { [school]: { QB, RB, WR, TE, DEF, K } }, schoolMults: { [school]: number } }
+//
+// game_mult rows can be stored with an inconsistent week value in cached_stats,
+// so we look them up by game_id (via cached_schedule) instead of by week.
+// This mirrors how getSchoolWeekGameLog finds multipliers.
 export async function getUnitPointsForWeek(
   week: number,
   season: number,
@@ -78,41 +82,57 @@ export async function getUnitPointsForWeek(
   schoolMults:  Record<string, number>;
 }> {
   const admin = createAdminClient();
-  const { data } = await admin
-    .from('cached_stats')
-    .select('school, stat_type, value')
+
+  // Step 1: get game_ids for this week from the schedule
+  const { data: scheduleData } = await admin
+    .from('cached_schedule')
+    .select('game_id, home_team, away_team')
     .eq('week', week)
-    .eq('season', season)
-    .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K', 'game_mult'])
-    .is('player_name', null)
-    .limit(50000);
+    .eq('season', season);
+
+  const gameIds = (scheduleData ?? []).map((g: any) => g.game_id).filter(Boolean);
+
+  // Step 2: fetch unit scores (by week — these are reliably stored with week)
+  // and game_mult (by game_id — bypasses any week column mismatch)
+  const UNIT_TYPES = ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'];
+
+  const [unitData, multData] = await Promise.all([
+    admin
+      .from('cached_stats')
+      .select('school, stat_type, value')
+      .eq('week', week)
+      .eq('season', season)
+      .in('stat_type', UNIT_TYPES)
+      .is('player_name', null)
+      .limit(50000),
+    gameIds.length > 0
+      ? admin
+          .from('cached_stats')
+          .select('school, value')
+          .in('game_id', gameIds)
+          .eq('stat_type', 'game_mult')
+          .is('player_name', null)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  // DEBUG: log first 5 raw rows from each query
+  const unitRows = unitData.data ?? [];
+  const multRows = (multData as any).data ?? [];
+  console.log(`[getUnitPointsForWeek] week=${week} season=${season} | unit rows: ${unitRows.length} | mult rows: ${multRows.length}`);
+  console.log(`[getUnitPointsForWeek] first 5 unit rows:`, JSON.stringify(unitRows.slice(0, 5)));
+  console.log(`[getUnitPointsForWeek] first 5 mult rows:`, JSON.stringify(multRows.slice(0, 5)));
 
   const schoolPoints: Record<string, Partial<Record<UnitType, number>>> = {};
   const schoolMults:  Record<string, number> = {};
 
-  // ── DEBUG ──────────────────────────────────────────────────────────────────
-  const totalRows = (data ?? []).length;
-  const ohioRows  = (data ?? []).filter(r => r.school === 'Ohio State');
-  console.log(`[game-stats DEBUG] week=${week} season=${season}`);
-  console.log(`[game-stats DEBUG] query: cached_stats WHERE week=${week} AND season=${season} AND (stat_type LIKE 'unit_%' OR stat_type='game_mult') AND player_name IS NULL LIMIT 50000`);
-  console.log(`[game-stats DEBUG] total rows returned: ${totalRows}`);
-  console.log(`[game-stats DEBUG] Ohio State rows (${ohioRows.length}):`, JSON.stringify(ohioRows));
-  // ── END DEBUG ──────────────────────────────────────────────────────────────
-
-  for (const row of data ?? []) {
-    if (row.stat_type === 'game_mult') {
-      schoolMults[row.school] = row.value;
-    } else {
-      const unitType = row.stat_type.replace('unit_', '') as UnitType;
-      if (!schoolPoints[row.school]) schoolPoints[row.school] = {};
-      schoolPoints[row.school][unitType] = row.value;
-    }
+  for (const row of unitRows) {
+    const unitType = row.stat_type.replace('unit_', '') as UnitType;
+    if (!schoolPoints[row.school]) schoolPoints[row.school] = {};
+    schoolPoints[row.school][unitType] = row.value;
   }
-
-  // ── DEBUG ──────────────────────────────────────────────────────────────────
-  console.log(`[game-stats DEBUG] final schoolPoints['Ohio State']:`, JSON.stringify(schoolPoints['Ohio State']));
-  console.log(`[game-stats DEBUG] final schoolMults['Ohio State']:`, schoolMults['Ohio State']);
-  // ── END DEBUG ──────────────────────────────────────────────────────────────
+  for (const row of multRows) {
+    schoolMults[row.school] = row.value;
+  }
 
   return { schoolPoints, schoolMults };
 }
@@ -167,19 +187,6 @@ export async function getSchoolWeekGameLog(
     };
   }
 
-  // ── DEBUG ──────────────────────────────────────────────────────────────────
-  if (school === 'Ohio State' && unitType === 'WR') {
-    const allUnitRows = unitStatRows.data ?? [];
-    console.log(`[unit-stats DEBUG] school=${school} unitType=${unitType} season=${season}`);
-    console.log(`[unit-stats DEBUG] query: cached_stats WHERE school='${school}' AND season=${season} AND (stat_type LIKE 'unit_%' OR stat_type='game_mult') AND player_name IS NULL`);
-    console.log(`[unit-stats DEBUG] total unitStatRows returned: ${allUnitRows.length}`);
-    const week1Rows = allUnitRows.filter(r => r.week === 1);
-    console.log(`[unit-stats DEBUG] week 1 rows (${week1Rows.length}):`, JSON.stringify(week1Rows));
-    const unitWRRows = allUnitRows.filter(r => r.stat_type === 'unit_WR');
-    console.log(`[unit-stats DEBUG] all unit_WR rows across season:`, JSON.stringify(unitWRRows));
-  }
-  // ── END DEBUG ──────────────────────────────────────────────────────────────
-
   const unitPtsByWeek: Record<number, number> = {};
   const multByWeek:    Record<number, number> = {};
   for (const row of unitStatRows.data ?? []) {
@@ -200,14 +207,6 @@ export async function getSchoolWeekGameLog(
     }
     playersByWeek[row.week][row.player_name][row.stat_type] = row.value;
   }
-
-  // ── DEBUG ──────────────────────────────────────────────────────────────────
-  if (school === 'Ohio State' && unitType === 'WR') {
-    console.log(`[unit-stats DEBUG] unitPtsByWeek:`, JSON.stringify(unitPtsByWeek));
-    console.log(`[unit-stats DEBUG] multByWeek:`, JSON.stringify(multByWeek));
-    console.log(`[unit-stats DEBUG] week 1 final → fantasyPoints=${unitPtsByWeek[1] ?? 'MISSING'}, mult=${multByWeek[1] ?? 'MISSING'}`);
-  }
-  // ── END DEBUG ──────────────────────────────────────────────────────────────
 
   return Array.from({ length: TOTAL_WEEKS }, (_, i) => {
     const week     = i + 1;

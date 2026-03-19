@@ -23,17 +23,6 @@ export async function GET(req: Request) {
       getCompletedSchoolsForWeek(week, season),
     ]);
 
-    // ── DEBUG ─────────────────────────────────────────────────────────────────
-    const ohioWR   = schoolPoints?.['Ohio State']?.['WR'];
-    const ohioMult = schoolMults?.['Ohio State'];
-    const totalSchools = Object.keys(schoolPoints ?? {}).length;
-    console.log(`[game-stats] week=${week} season=${season} | total schools in schoolPoints: ${totalSchools}`);
-    console.log(`[game-stats] schoolPoints['Ohio State']['WR'] = ${ohioWR ?? 'UNDEFINED'}`);
-    console.log(`[game-stats] schoolMults['Ohio State']        = ${ohioMult ?? 'UNDEFINED'}`);
-    console.log(`[game-stats] Ohio State in completedSchools:  ${completedSchools.includes('Ohio State')}`);
-    console.log(`[game-stats] all Ohio State entries:`, JSON.stringify(schoolPoints?.['Ohio State'] ?? {}));
-    // ── END DEBUG ─────────────────────────────────────────────────────────────
-
     return NextResponse.json(
       { week, season, completedSchools, schoolPoints, schoolMults },
       { headers: { 'Cache-Control': 'no-store' } },
