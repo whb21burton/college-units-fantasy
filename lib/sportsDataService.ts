@@ -402,7 +402,7 @@ export async function syncStats(week: number, season: number): Promise<number> {
     const playerRows = statRows.filter(r => r.player_name !== null);
     const unitRows   = statRows.filter(r => r.player_name === null);
 
-    const gameIds = [...new Set(completedGames.map((g: any) => String(g.id)))];
+    const gameIds = Array.from(new Set(completedGames.map((g: any) => String(g.id))));
     if (gameIds.length > 0) {
       const { error: delErr } = await admin
         .from('cached_stats')
