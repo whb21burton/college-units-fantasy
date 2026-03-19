@@ -81,7 +81,8 @@ export async function getUnitPointsForWeek(
     .eq('week', week)
     .eq('season', season)
     .like('stat_type', 'unit_%')
-    .is('player_name', null);
+    .is('player_name', null)
+    .limit(50000);
 
   const result: Record<string, Partial<Record<UnitType, number>>> = {};
   for (const row of data ?? []) {
