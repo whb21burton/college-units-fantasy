@@ -18,13 +18,13 @@ export async function GET(req: Request) {
   const season = parseInt(searchParams.get('season') || String(SEASON), 10);
 
   try {
-    const [schoolPoints, completedSchools] = await Promise.all([
+    const [{ schoolPoints, schoolMults }, completedSchools] = await Promise.all([
       getUnitPointsForWeek(week, season),
       getCompletedSchoolsForWeek(week, season),
     ]);
 
     return NextResponse.json(
-      { week, season, completedSchools, schoolPoints },
+      { week, season, completedSchools, schoolPoints, schoolMults },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (err: any) {

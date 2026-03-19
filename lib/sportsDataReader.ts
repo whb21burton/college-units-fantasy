@@ -68,29 +68,38 @@ export async function getStatsForWeek(week: number, season: number) {
 }
 
 // ── getUnitPointsForWeek ─────────────────────────────────────────────────────
-// Returns precomputed unit fantasy points for all schools for a given week.
-// Returns: { [school]: { QB, RB, WR, TE, DEF, K } }
+// Returns precomputed unit fantasy points AND stored multipliers for all schools.
+// Returns: { schoolPoints: { [school]: { QB, RB, WR, TE, DEF, K } }, schoolMults: { [school]: number } }
 export async function getUnitPointsForWeek(
   week: number,
   season: number,
-): Promise<Record<string, Partial<Record<UnitType, number>>>> {
+): Promise<{
+  schoolPoints: Record<string, Partial<Record<UnitType, number>>>;
+  schoolMults:  Record<string, number>;
+}> {
   const admin = createAdminClient();
   const { data } = await admin
     .from('cached_stats')
     .select('school, stat_type, value')
     .eq('week', week)
     .eq('season', season)
-    .like('stat_type', 'unit_%')
+    .or('stat_type.like.unit_%,stat_type.eq.game_mult')
     .is('player_name', null)
     .limit(50000);
 
-  const result: Record<string, Partial<Record<UnitType, number>>> = {};
+  const schoolPoints: Record<string, Partial<Record<UnitType, number>>> = {};
+  const schoolMults:  Record<string, number> = {};
+
   for (const row of data ?? []) {
-    const unitType = row.stat_type.replace('unit_', '') as UnitType;
-    if (!result[row.school]) result[row.school] = {};
-    result[row.school][unitType] = row.value;
+    if (row.stat_type === 'game_mult') {
+      schoolMults[row.school] = row.value;
+    } else {
+      const unitType = row.stat_type.replace('unit_', '') as UnitType;
+      if (!schoolPoints[row.school]) schoolPoints[row.school] = {};
+      schoolPoints[row.school][unitType] = row.value;
+    }
   }
-  return result;
+  return { schoolPoints, schoolMults };
 }
 
 // ── getSchoolWeekGameLog ─────────────────────────────────────────────────────

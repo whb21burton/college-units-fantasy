@@ -111,7 +111,7 @@ function PlayerInfoLines({
   school, unitType, playerName, ctx, ep, align, seasonPts, unitRankMap,
 }: {
   school: string; unitType: string; playerName?: string;
-  ctx: MatchupCtx; ep: { pts: number; isActual: boolean; base: number };
+  ctx: MatchupCtx; ep: { pts: number; isActual: boolean; base: number; storedMult: number | null };
   align?: 'left' | 'right';
   seasonPts?: number;
   unitRankMap?: Record<string, number>;
@@ -137,12 +137,13 @@ function PlayerInfoLines({
       : school;
 
   // Line 4: score breakdown
-  // For completed games ep.pts already has the multiplier baked in, so
-  // back-derive the raw base as pts/mult so the formula always adds up.
-  const displayBase  = (ep.isActual && mult > 0) ? ep.pts / mult : ep.base;
+  // For completed games: use the stored multiplier from cached_stats so the
+  // formula shown matches exactly how the score was computed by syncStats.
+  // For projected games: use the live Elo mult.
+  const displayMult  = ep.isActual && ep.storedMult != null ? ep.storedMult : mult;
   const breakdownLine = (!opponent)
     ? 'No game this week'
-    : `${displayBase.toFixed(1)} × ${mult.toFixed(2)} = ${ep.pts.toFixed(1)}`;
+    : `${ep.base.toFixed(1)} × ${displayMult.toFixed(2)} = ${ep.pts.toFixed(1)}`;
 
   return (
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
@@ -158,30 +159,37 @@ function PlayerInfoLines({
 type GameStats = {
   completedSchools: string[];
   schoolPoints: Record<string, Partial<Record<string, number>>>;
+  schoolMults:  Record<string, number>;
 } | null;
 
 /**
  * Returns pts for the unit this week.
- * For completed games: base = raw box score, pts = base × multiplier.
- * For future games:    base = seasonPts/12,  pts = base × multiplier.
+ * For completed games: reads the exact stored score + stored multiplier from
+ *   cached_stats (via game-stats API).  Does NOT re-derive anything from Elo.
+ * For future/unplayed games: base = seasonPts/12, pts = base × live Elo mult.
  */
 function effectivePts(
   school: string, unitType: string, seasonPts: number,
   ctx: MatchupCtx, gs: GameStats
-): { pts: number; isActual: boolean; base: number } {
+): { pts: number; isActual: boolean; base: number; storedMult: number | null } {
   const opponent     = ctx?.opponentMap[school] ?? null;
   // BYE week — no game, no points
-  if (ctx && !opponent) return { pts: 0, isActual: false, base: 0 };
-  const relevantRank = opponent && ctx ? (ctx.rankMap[opponent] ?? 999) : 999;
-  const mult         = rankMult(relevantRank);
+  if (ctx && !opponent) return { pts: 0, isActual: false, base: 0, storedMult: null };
 
   if (gs?.completedSchools.includes(school)) {
-    const rawActual = gs.schoolPoints[school]?.[unitType];
-    // rawActual already includes the Elo multiplier (baked in by syncStats) — do NOT re-apply
-    if (rawActual != null) return { pts: rawActual, isActual: true, base: rawActual };
+    const storedPts  = gs.schoolPoints[school]?.[unitType];
+    const storedMult = gs.schoolMults?.[school] ?? null;
+    // Use exact stored values from cached_stats — no re-calculation
+    if (storedPts != null) {
+      const rawBase = storedMult && storedMult > 0 ? storedPts / storedMult : storedPts;
+      return { pts: storedPts, isActual: true, base: rawBase, storedMult };
+    }
   }
-  const base = weeklyProj(seasonPts);
-  return { pts: base * mult, isActual: false, base };
+  // Not yet played — project using live Elo mult
+  const relevantRank = opponent && ctx ? (ctx.rankMap[opponent] ?? 999) : 999;
+  const mult         = rankMult(relevantRank);
+  const base         = weeklyProj(seasonPts);
+  return { pts: base * mult, isActual: false, base, storedMult: null };
 }
 
 type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'ranks';
