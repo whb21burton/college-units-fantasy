@@ -121,7 +121,7 @@ export async function syncScores(week: number, season: number): Promise<number> 
     const games = await cfbdGet('/games', { year: season, week });
 
     const rows = games
-      .filter((g: any) => g.id && g.homeTeam && g.awayTeam)
+      .filter((g: any) => g.id && g.homeTeam && g.awayTeam && (g.seasonType === 'regular' || g.season_type === 'regular'))
       .map((g: any) => {
         const completed = g.homePoints != null && g.awayPoints != null;
         const inProgress = !completed && g.startDate && new Date(g.startDate) < new Date();
