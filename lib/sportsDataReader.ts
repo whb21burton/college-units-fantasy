@@ -90,6 +90,15 @@ export async function getUnitPointsForWeek(
   const schoolPoints: Record<string, Partial<Record<UnitType, number>>> = {};
   const schoolMults:  Record<string, number> = {};
 
+  // ── DEBUG ──────────────────────────────────────────────────────────────────
+  const totalRows = (data ?? []).length;
+  const ohioRows  = (data ?? []).filter(r => r.school === 'Ohio State');
+  console.log(`[game-stats DEBUG] week=${week} season=${season}`);
+  console.log(`[game-stats DEBUG] query: cached_stats WHERE week=${week} AND season=${season} AND (stat_type LIKE 'unit_%' OR stat_type='game_mult') AND player_name IS NULL LIMIT 50000`);
+  console.log(`[game-stats DEBUG] total rows returned: ${totalRows}`);
+  console.log(`[game-stats DEBUG] Ohio State rows (${ohioRows.length}):`, JSON.stringify(ohioRows));
+  // ── END DEBUG ──────────────────────────────────────────────────────────────
+
   for (const row of data ?? []) {
     if (row.stat_type === 'game_mult') {
       schoolMults[row.school] = row.value;
@@ -99,6 +108,12 @@ export async function getUnitPointsForWeek(
       schoolPoints[row.school][unitType] = row.value;
     }
   }
+
+  // ── DEBUG ──────────────────────────────────────────────────────────────────
+  console.log(`[game-stats DEBUG] final schoolPoints['Ohio State']:`, JSON.stringify(schoolPoints['Ohio State']));
+  console.log(`[game-stats DEBUG] final schoolMults['Ohio State']:`, schoolMults['Ohio State']);
+  // ── END DEBUG ──────────────────────────────────────────────────────────────
+
   return { schoolPoints, schoolMults };
 }
 
@@ -152,6 +167,19 @@ export async function getSchoolWeekGameLog(
     };
   }
 
+  // ── DEBUG ──────────────────────────────────────────────────────────────────
+  if (school === 'Ohio State' && unitType === 'WR') {
+    const allUnitRows = unitStatRows.data ?? [];
+    console.log(`[unit-stats DEBUG] school=${school} unitType=${unitType} season=${season}`);
+    console.log(`[unit-stats DEBUG] query: cached_stats WHERE school='${school}' AND season=${season} AND (stat_type LIKE 'unit_%' OR stat_type='game_mult') AND player_name IS NULL`);
+    console.log(`[unit-stats DEBUG] total unitStatRows returned: ${allUnitRows.length}`);
+    const week1Rows = allUnitRows.filter(r => r.week === 1);
+    console.log(`[unit-stats DEBUG] week 1 rows (${week1Rows.length}):`, JSON.stringify(week1Rows));
+    const unitWRRows = allUnitRows.filter(r => r.stat_type === 'unit_WR');
+    console.log(`[unit-stats DEBUG] all unit_WR rows across season:`, JSON.stringify(unitWRRows));
+  }
+  // ── END DEBUG ──────────────────────────────────────────────────────────────
+
   const unitPtsByWeek: Record<number, number> = {};
   const multByWeek:    Record<number, number> = {};
   for (const row of unitStatRows.data ?? []) {
@@ -172,6 +200,14 @@ export async function getSchoolWeekGameLog(
     }
     playersByWeek[row.week][row.player_name][row.stat_type] = row.value;
   }
+
+  // ── DEBUG ──────────────────────────────────────────────────────────────────
+  if (school === 'Ohio State' && unitType === 'WR') {
+    console.log(`[unit-stats DEBUG] unitPtsByWeek:`, JSON.stringify(unitPtsByWeek));
+    console.log(`[unit-stats DEBUG] multByWeek:`, JSON.stringify(multByWeek));
+    console.log(`[unit-stats DEBUG] week 1 final → fantasyPoints=${unitPtsByWeek[1] ?? 'MISSING'}, mult=${multByWeek[1] ?? 'MISSING'}`);
+  }
+  // ── END DEBUG ──────────────────────────────────────────────────────────────
 
   return Array.from({ length: TOTAL_WEEKS }, (_, i) => {
     const week     = i + 1;
