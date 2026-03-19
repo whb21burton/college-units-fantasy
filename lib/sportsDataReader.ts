@@ -83,7 +83,7 @@ export async function getUnitPointsForWeek(
     .select('school, stat_type, value')
     .eq('week', week)
     .eq('season', season)
-    .or('stat_type.like.unit_%,stat_type.eq.game_mult')
+    .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K', 'game_mult'])
     .is('player_name', null)
     .limit(50000);
 
@@ -148,7 +148,7 @@ export async function getSchoolWeekGameLog(
       .select('week, stat_type, value')
       .eq('school', school)
       .eq('season', season)
-      .or('stat_type.like.unit_%,stat_type.eq.game_mult')
+      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K', 'game_mult'])
       .is('player_name', null),
     admin
       .from('cached_stats')
