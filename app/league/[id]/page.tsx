@@ -164,28 +164,32 @@ type GameStats = {
 
 /**
  * Returns pts for the unit this week.
- * For completed games: reads the exact stored score + stored multiplier from
- *   cached_stats (via game-stats API).  Does NOT re-derive anything from Elo.
- * For future/unplayed games: base = seasonPts/12, pts = base × live Elo mult.
+ *
+ * Source of truth: gs.schoolPoints[school][unitType] from cached_stats.
+ * If a stored score exists → game is completed → use it directly.
+ * If no stored score → game not yet played → fall back to projection.
+ *
+ * Does NOT use completedSchools (from cached_scores) as a gate —
+ * cached_scores and cached_stats can be out of sync, causing the matchup
+ * to show projections even when a real score is stored.
  */
 function effectivePts(
   school: string, unitType: string, seasonPts: number,
   ctx: MatchupCtx, gs: GameStats
 ): { pts: number; isActual: boolean; base: number; storedMult: number | null } {
-  const opponent     = ctx?.opponentMap[school] ?? null;
+  const opponent = ctx?.opponentMap[school] ?? null;
   // BYE week — no game, no points
   if (ctx && !opponent) return { pts: 0, isActual: false, base: 0, storedMult: null };
 
-  if (gs?.completedSchools.includes(school)) {
-    const storedPts  = gs.schoolPoints[school]?.[unitType];
-    const storedMult = gs.schoolMults?.[school] ?? null;
-    // Use exact stored values from cached_stats — no re-calculation
-    if (storedPts != null) {
-      const rawBase = storedMult && storedMult > 0 ? storedPts / storedMult : storedPts;
-      return { pts: storedPts, isActual: true, base: rawBase, storedMult };
-    }
+  // Check cached_stats for a stored actual score (same source as game log)
+  const storedPts  = gs?.schoolPoints?.[school]?.[unitType];
+  const storedMult = gs?.schoolMults?.[school] ?? null;
+  if (storedPts != null) {
+    const rawBase = storedMult && storedMult > 0 ? storedPts / storedMult : storedPts;
+    return { pts: storedPts, isActual: true, base: rawBase, storedMult };
   }
-  // Not yet played — project using live Elo mult
+
+  // No stored score — game not yet played; use live Elo projection
   const relevantRank = opponent && ctx ? (ctx.rankMap[opponent] ?? 999) : 999;
   const mult         = rankMult(relevantRank);
   const base         = weeklyProj(seasonPts);
