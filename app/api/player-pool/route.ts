@@ -31,8 +31,9 @@ export async function GET() {
       .from('cached_stats')
       .select('school, stat_type, value')
       .eq('season', SEASON)
-      .like('stat_type', 'unit_%')
-      .is('player_name', null);
+      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'])
+      .is('player_name', null)
+      .limit(50000);
 
     if (error) throw error;
 
@@ -92,7 +93,7 @@ export async function GET() {
     pool.sort((a, b) => a.adp - b.adp);
 
     return NextResponse.json(pool, {
-      headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' },
+      headers: { 'Cache-Control': 'no-store' },
     });
   } catch (err: any) {
     console.error('player-pool error:', err);
