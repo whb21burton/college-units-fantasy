@@ -3,11 +3,12 @@
  *
  * Builds the draft-eligible player pool from Supabase cached_stats.
  * Aggregates season totals per school+unit, ranks them, and returns DraftUnit[].
+ * Falls back to FULL_POOL static data for schools with no cached_stats rows.
  * Never calls CFBD directly.
  */
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-server';
-import { CONFERENCES, type DraftUnit, type UnitType, type Tier, type Conference } from '@/lib/playerPool';
+import { CONFERENCES, FULL_POOL, type DraftUnit, type UnitType, type Tier, type Conference } from '@/lib/playerPool';
 
 const SEASON = 2025;
 
@@ -22,9 +23,17 @@ function uid(school: string, unitType: UnitType) {
   return `${school}-${unitType}`.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const admin = createAdminClient();
+
+    // Build school→conference lookup from CONFERENCES constant
+    const schoolConf: Record<string, Conference> = {};
+    for (const [conf, schools] of Object.entries(CONFERENCES) as [Conference, string[]][]) {
+      for (const s of schools) schoolConf[s] = conf;
+    }
 
     // Sum unit fantasy points across all weeks per school+unit
     const { data, error } = await admin
@@ -37,28 +46,52 @@ export async function GET() {
 
     if (error) throw error;
 
-    // Build school→conference lookup from CONFERENCES constant
-    const schoolConf: Record<string, Conference> = {};
-    for (const [conf, schools] of Object.entries(CONFERENCES) as [Conference, string[]][]) {
-      for (const s of schools) schoolConf[s] = conf;
-    }
+    const rows = data ?? [];
 
-    // Aggregate season totals: school+unitType → total points
-    const totals: Record<string, { school: string; unitType: UnitType; pts: number }> = {};
-    for (const row of data ?? []) {
+    // Diagnostic: log school names from cached_stats that don't match CONFERENCES
+    const unknownSchools = new Set<string>();
+    for (const row of rows) {
+      if (!schoolConf[row.school]) unknownSchools.add(row.school);
+    }
+    if (unknownSchools.size > 0) {
+      console.warn('[player-pool] Schools in cached_stats not in CONFERENCES:', Array.from(unknownSchools).sort());
+    }
+    console.log(`[player-pool] cached_stats rows=${rows.length} known=${rows.filter(r => schoolConf[r.school]).length} unknown=${unknownSchools.size}`);
+
+    // Aggregate season totals from live data: school+unitType → total points
+    const liveTotals: Record<string, { school: string; unitType: UnitType; pts: number }> = {};
+    for (const row of rows) {
       const conf = schoolConf[row.school];
-      if (!conf) continue; // skip non-P4+Ind schools
+      if (!conf) continue;
       const unitType = row.stat_type.replace('unit_', '') as UnitType;
       const key = `${row.school}||${unitType}`;
-      if (!totals[key]) totals[key] = { school: row.school, unitType, pts: 0 };
-      totals[key].pts += row.value ?? 0;
+      if (!liveTotals[key]) liveTotals[key] = { school: row.school, unitType, pts: 0 };
+      liveTotals[key].pts += row.value ?? 0;
     }
+
+    // Schools covered by live data
+    const liveSchools = new Set(Object.values(liveTotals).map(t => t.school));
+
+    // Fall back to FULL_POOL for schools with no live data
+    // Use projectedPoints directly (already a season total in FULL_POOL)
+    const allTotals: Record<string, { school: string; unitType: UnitType; pts: number }> = { ...liveTotals };
+    for (const unit of FULL_POOL) {
+      if (liveSchools.has(unit.school)) continue; // live data takes precedence
+      const conf = schoolConf[unit.school];
+      if (!conf) continue;
+      const key = `${unit.school}||${unit.unitType}`;
+      if (!allTotals[key]) {
+        allTotals[key] = { school: unit.school, unitType: unit.unitType, pts: unit.projectedPoints };
+      }
+    }
+
+    console.log(`[player-pool] liveSchools=${liveSchools.size} totalUnits=${Object.keys(allTotals).length}`);
 
     // Group by unit type and sort by total pts desc
     const byUnit: Record<UnitType, { school: string; pts: number }[]> = {
       QB: [], RB: [], WR: [], TE: [], DEF: [], K: [],
     };
-    for (const { school, unitType, pts } of Object.values(totals)) {
+    for (const { school, unitType, pts } of Object.values(allTotals)) {
       byUnit[unitType].push({ school, pts });
     }
     for (const arr of Object.values(byUnit)) arr.sort((a, b) => b.pts - a.pts);
@@ -91,6 +124,8 @@ export async function GET() {
 
     // Sort by ADP ascending
     pool.sort((a, b) => a.adp - b.adp);
+
+    console.log(`[player-pool] returning pool size=${pool.length}`);
 
     return NextResponse.json(pool, {
       headers: { 'Cache-Control': 'no-store' },
