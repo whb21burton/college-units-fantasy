@@ -48,16 +48,6 @@ export async function GET() {
 
     const rows = data ?? [];
 
-    // Diagnostic: log school names from cached_stats that don't match CONFERENCES
-    const unknownSchools = new Set<string>();
-    for (const row of rows) {
-      if (!schoolConf[row.school]) unknownSchools.add(row.school);
-    }
-    if (unknownSchools.size > 0) {
-      console.warn('[player-pool] Schools in cached_stats not in CONFERENCES:', Array.from(unknownSchools).sort());
-    }
-    console.log(`[player-pool] cached_stats rows=${rows.length} known=${rows.filter(r => schoolConf[r.school]).length} unknown=${unknownSchools.size}`);
-
     // Aggregate season totals from live data: school+unitType → total points
     const liveTotals: Record<string, { school: string; unitType: UnitType; pts: number }> = {};
     for (const row of rows) {
@@ -84,8 +74,6 @@ export async function GET() {
         allTotals[key] = { school: unit.school, unitType: unit.unitType, pts: unit.projectedPoints };
       }
     }
-
-    console.log(`[player-pool] liveSchools=${liveSchools.size} totalUnits=${Object.keys(allTotals).length}`);
 
     // Group by unit type and sort by total pts desc
     const byUnit: Record<UnitType, { school: string; pts: number }[]> = {
@@ -124,8 +112,6 @@ export async function GET() {
 
     // Sort by ADP ascending
     pool.sort((a, b) => a.adp - b.adp);
-
-    console.log(`[player-pool] returning pool size=${pool.length}`);
 
     return NextResponse.json(pool, {
       headers: { 'Cache-Control': 'no-store' },
