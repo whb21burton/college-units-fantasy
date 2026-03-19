@@ -229,7 +229,7 @@ export async function syncStats(week: number, season: number): Promise<number> {
       cfbdGet('/games',         { year: season, week }),
       cfbdGet('/games/players', { year: season, week }).catch(() => []),
       cfbdGet('/games/teams',   { year: season, week }).catch(() => []),
-      cfbdGet('/ratings/elo',   { year: season         }).catch(() => []),
+      cfbdGet('/ratings/elo',   { year: season, week   }).catch(() => []),
     ]);
 
     // Build Elo rank map (rank 1 = strongest)
@@ -393,13 +393,39 @@ export async function syncStats(week: number, season: number): Promise<number> {
       }
     }
 
-    // Upsert stat rows in batches of 500
+    // Split into player rows (player_name NOT NULL) and unit/team rows (player_name IS NULL).
+    // Player rows can be safely upserted — the unique key (game_id, school, player_name, stat_type)
+    // works correctly because player_name is never NULL.
+    // Unit/team rows (unit_QB, unit_RB, game_mult, team_*) have player_name=NULL.
+    // PostgreSQL UNIQUE treats NULL≠NULL, so upsert would INSERT duplicates every run.
+    // Fix: DELETE existing NULL-player rows for these game_ids, then INSERT fresh.
+    const playerRows = statRows.filter(r => r.player_name !== null);
+    const unitRows   = statRows.filter(r => r.player_name === null);
+
+    const gameIds = [...new Set(completedGames.map((g: any) => String(g.id)))];
+    if (gameIds.length > 0) {
+      const { error: delErr } = await admin
+        .from('cached_stats')
+        .delete()
+        .in('game_id', gameIds)
+        .is('player_name', null);
+      if (delErr) throw delErr;
+    }
+
     const BATCH = 500;
-    for (let i = 0; i < statRows.length; i += BATCH) {
-      const batch = statRows.slice(i, i + BATCH);
+    for (let i = 0; i < playerRows.length; i += BATCH) {
+      const batch = playerRows.slice(i, i + BATCH);
       const { error } = await admin
         .from('cached_stats')
         .upsert(batch, { onConflict: 'game_id,school,player_name,stat_type' });
+      if (error) throw error;
+      recordsUpdated += batch.length;
+    }
+    for (let i = 0; i < unitRows.length; i += BATCH) {
+      const batch = unitRows.slice(i, i + BATCH);
+      const { error } = await admin
+        .from('cached_stats')
+        .insert(batch);
       if (error) throw error;
       recordsUpdated += batch.length;
     }
