@@ -158,7 +158,8 @@ export async function syncScores(week: number, season: number): Promise<number> 
 // ─────────────────────────────────────────────────────────────────────────────
 // syncRosters — fetch rosters for given teams, upsert cached_players
 // ─────────────────────────────────────────────────────────────────────────────
-export async function syncRosters(teams: string[], season: number = 2025): Promise<number> {
+// cfbdYear can differ from season when roster data is only available for a prior year.
+export async function syncRosters(teams: string[], season: number = 2025, cfbdYear?: number): Promise<number> {
   const admin = createAdminClient();
   let recordsUpdated = 0;
 
@@ -173,9 +174,11 @@ export async function syncRosters(teams: string[], season: number = 2025): Promi
       K: 'K', PK: 'K', 'PLACE KICKER': 'K', KICKER: 'K', KR: 'K',
     };
 
+    const rosterYear = cfbdYear ?? season;
+
     for (const team of teams) {
       try {
-        const roster = await cfbdGet('/roster', { team, year: season });
+        const roster = await cfbdGet('/roster', { team, year: rosterYear });
 
         const skipped: string[] = [];
         const rows = roster

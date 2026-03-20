@@ -20,9 +20,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const start   = Date.now();
-  const jobName = `syncRosters:${CURRENT_SEASON}`;
-  const force   = request.nextUrl.searchParams.get('force') === '1';
+  const start     = Date.now();
+  const jobName   = `syncRosters:${CURRENT_SEASON}`;
+  const force     = request.nextUrl.searchParams.get('force') === '1';
+  const yearParam = request.nextUrl.searchParams.get('year');
+  const cfbdYear  = yearParam ? parseInt(yearParam, 10) : undefined;
 
   // Check if already ran today (skip if force=1)
   if (!force) {
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
       new Set(Object.values(CONFERENCES).flatMap(teams => teams)),
     );
 
-    const recordsUpdated = await syncRosters(allTeams, CURRENT_SEASON);
+    const recordsUpdated = await syncRosters(allTeams, CURRENT_SEASON, cfbdYear);
     const duration = Date.now() - start;
 
     return NextResponse.json({
