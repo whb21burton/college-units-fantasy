@@ -1048,6 +1048,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   const [myPicks,     setMyPicks]     = useState<any[]>([]);
   const [pool,        setPool]        = useState<DraftUnit[]>([]);
   const [posFilter,   setPosFilter]   = useState<string>('ALL');
+  const [availFilter, setAvailFilter] = useState<'Available' | 'All'>('Available');
   const [search,      setSearch]      = useState('');
   const [viewing,     setViewing]     = useState<any | null>(null);
   const [adding,      setAdding]      = useState<any | null>(null);
@@ -1093,8 +1094,9 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
 
   const draftedIds = new Set(allPicks.map((p: any) => p.player_data?.id).filter(Boolean));
 
-  const freeAgents = pool
-    .filter(p => !draftedIds.has(p.id))
+  const visiblePool = availFilter === 'Available' ? pool.filter(p => !draftedIds.has(p.id)) : pool;
+
+  const freeAgents = visiblePool
     .filter(p => posFilter === 'ALL' || p.unitType === posFilter)
     .filter(p => {
       if (!search.trim()) return true;
@@ -1266,6 +1268,12 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
       )}
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+        {(['Available', 'All'] as const).map(opt => (
+          <button key={opt} onClick={() => setAvailFilter(opt)} style={{ padding: '5px 14px', borderRadius: 20, border: '1px solid ' + (availFilter === opt ? C.sub : C.surf3), background: availFilter === opt ? C.surf3 : C.surf2, color: availFilter === opt ? C.text : C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: .5 }}>
+            {opt}
+          </button>
+        ))}
+        <div style={{ width: 1, height: 20, background: C.surf3, flexShrink: 0 }} />
         {POS_FILTERS.map(f => (
           <button key={f} onClick={() => setPosFilter(f)} style={{ padding: '5px 14px', borderRadius: 20, border: '1px solid ' + (posFilter === f ? C.gold : C.surf3), background: posFilter === f ? C.gold : C.surf2, color: posFilter === f ? C.bg : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: .5 }}>
             {f}
@@ -1283,18 +1291,22 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
       </div>
 
       {freeAgents.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>No free agents found.</div>
+        <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
+          {availFilter === 'Available' ? 'No available players found.' : 'No players found.'}
+        </div>
       )}
 
       {freeAgents.map(p => {
-        const name     = p.playerName || p.school;
-        const posColor = UNIT_COLORS[p.unitType] || C.muted;
+        const name      = p.playerName || p.school;
+        const posColor  = UNIT_COLORS[p.unitType] || C.muted;
+        const isDrafted = draftedIds.has(p.id);
         return (
           <div key={p.id} onClick={() => setViewing(p)} style={{
             display: 'grid', gridTemplateColumns: '1fr 60px 60px 80px', gap: 8, alignItems: 'center',
             background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10,
             padding: '10px 14px', marginBottom: 5, cursor: 'pointer',
             boxShadow: '0 1px 4px rgba(0,0,0,0.25)', transition: 'border-color .15s',
+            opacity: isDrafted ? 0.45 : 1,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
               {/* Pill badge */}
@@ -1312,12 +1324,21 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
             </div>
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.gold, textAlign: 'right' }}>{weeklyProj(p.projectedPoints).toFixed(1)}</div>
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.adp.toFixed(1)}</div>
-            <button onClick={e => { e.stopPropagation(); setAdding(p); }} style={{
-              padding: '6px 0', background: 'rgba(21,198,120,.12)',
-              border: '1px solid rgba(21,198,120,.35)', borderRadius: 8,
-              fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700,
-              color: C.green, cursor: 'pointer', letterSpacing: .3,
-            }}>+ ADD</button>
+            {isDrafted ? (
+              <div style={{
+                padding: '6px 0', background: C.surf2,
+                border: '1px solid ' + C.surf3, borderRadius: 8,
+                fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700,
+                color: C.muted, textAlign: 'center', letterSpacing: .3,
+              }}>DRAFTED</div>
+            ) : (
+              <button onClick={e => { e.stopPropagation(); setAdding(p); }} style={{
+                padding: '6px 0', background: 'rgba(21,198,120,.12)',
+                border: '1px solid rgba(21,198,120,.35)', borderRadius: 8,
+                fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700,
+                color: C.green, cursor: 'pointer', letterSpacing: .3,
+              }}>+ ADD</button>
+            )}
           </div>
         );
       })}
