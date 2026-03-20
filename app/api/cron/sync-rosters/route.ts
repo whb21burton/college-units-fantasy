@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
   const start     = Date.now();
   const jobName   = `syncRosters:${CURRENT_SEASON}`;
-  const force     = request.nextUrl.searchParams.get('force') === '1';
+  const force     = request.nextUrl.searchParams.has('force');
   const yearParam = request.nextUrl.searchParams.get('year');
   const cfbdYear  = yearParam ? parseInt(yearParam, 10) : undefined;
 

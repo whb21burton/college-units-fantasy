@@ -176,20 +176,32 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
 
     const rosterYear = cfbdYear ?? season;
 
+    // Normalize year: CFBD returns integers (1=FR,2=SO,3=JR,4=SR) OR strings ('FR','SR','GR',etc.).
+    // cached_players.year CHECK: must be 'FR','SO','JR','SR' or NULL.
+    const numToYear: Record<number, string> = { 1: 'FR', 2: 'SO', 3: 'JR', 4: 'SR' };
+    const validYears = new Set(['FR', 'SO', 'JR', 'SR']);
+    const normalizeYear = (raw: any): string | null => {
+      if (raw == null) return null;
+      if (typeof raw === 'number') return numToYear[raw] ?? null;
+      const s = String(raw).trim().toUpperCase();
+      if (validYears.has(s)) return s;
+      const n = parseInt(s, 10);
+      if (!isNaN(n)) return numToYear[n] ?? null;
+      return null; // e.g. 'GR', 'RS', 'RS-FR', '5', 'N/A' → null
+    };
+
     for (const team of teams) {
       try {
         const roster = await cfbdGet('/roster', { team, year: rosterYear });
 
         const skippedPositions = new Set<string>();
-        // CFBD returns year as a number (1=FR, 2=SO, 3=JR, 4=SR, 5+=null).
-        // cached_players.year CHECK constraint expects 'FR','SO','JR','SR' or NULL.
-        const yearMap: Record<number, string> = { 1: 'FR', 2: 'SO', 3: 'JR', 4: 'SR' };
 
         const rows = roster
           .filter((p: any) => p.firstName || p.lastName)
           .map((p: any) => {
             const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
-            const posRaw: string = (p.position ?? '').toUpperCase();
+            if (!name) return null;
+            const posRaw: string = (p.position ?? '').toUpperCase().trim();
             const pos = cfbdPositionMap[posRaw] ?? null;
             if (!pos) { skippedPositions.add(p.position ?? 'null'); return null; }
 
@@ -198,8 +210,8 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
               position:             pos,
               player_name:          name,
               jersey_number:        p.jersey != null ? String(p.jersey) : null,
-              year:                 p.year   != null ? (yearMap[p.year] ?? null) : null,
-              status:               'active',
+              year:                 normalizeYear(p.year),
+              status:               'active' as const,
               depth_chart_position: null,
               updated_at:           new Date().toISOString(),
             };
