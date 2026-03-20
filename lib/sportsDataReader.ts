@@ -171,16 +171,23 @@ export async function getSchoolWeekGameLog(
       .eq('school', school),
   ]);
 
-  // Build player→position lookup; normalise full names → abbreviations
-  const POSITION_ABBR: Record<string, string> = {
-    'Wide Receiver': 'WR', 'Tight End': 'TE', 'Running Back': 'RB',
-    'Quarterback': 'QB', 'Kicker': 'K', 'Punter': 'P',
-  };
+  // Build player→position lookup from cached_players.
+  // cached_players stores positions as abbreviations ('WR','TE',...) already.
+  // Normalise names for matching: strip punctuation, lowercase, collapse spaces
+  // so "T.J. Logan" and "TJ Logan" resolve to the same key.
+  const normName = (n: string) =>
+    n.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+
   const playerPos: Record<string, string> = {};
   for (const row of rosterRows.data ?? []) {
-    const pos = POSITION_ABBR[row.position] ?? row.position ?? '';
-    playerPos[row.player_name] = pos;
+    // row.position is already an abbreviation ('WR','TE','QB','RB','K')
+    if (row.position) playerPos[normName(row.player_name)] = row.position;
   }
+
+  // Whether we have any position data for this school at all.
+  // When empty (roster sync hasn't run yet), fall back to showing all receivers
+  // rather than showing nothing — avoids blank WR/TE game logs.
+  const hasPositionData = Object.keys(playerPos).length > 0;
 
   // Build lookup maps
   const scheduleByWeek: Record<number, { opponent: string; gameId: string }> = {};
@@ -246,19 +253,30 @@ export async function getSchoolWeekGameLog(
         break;
       }
       case 'WR': {
-        // Only include players whose position in cached_players is exactly 'WR'.
-        // No fallback — if position data is missing, show empty rather than mixing positions.
-        players = weekPlayers
-          .filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null && playerPos[p.name] === 'WR')
+        // When position data exists: strict WR-only filter.
+        // When cached_players is empty (sync hasn't run): show all receivers as fallback.
+        const receivers = weekPlayers.filter(
+          p => p['receiving_YDS'] != null && p['passing_YDS'] == null,
+        );
+        players = (hasPositionData
+          ? receivers.filter(p => playerPos[normName(p.name)] === 'WR')
+          : receivers
+        )
           .sort((a, b) => (b['receiving_YDS'] || 0) - (a['receiving_YDS'] || 0))
           .slice(0, 5)
           .map(r => ({ name: r.name, rec: r['receiving_REC'] || 0, recYd: r['receiving_YDS'] || 0, recTd: r['receiving_TD'] || 0 }));
         break;
       }
       case 'TE': {
-        // Only include players whose position in cached_players is exactly 'TE'.
-        players = weekPlayers
-          .filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null && playerPos[p.name] === 'TE')
+        // When position data exists: strict TE-only filter.
+        // When cached_players is empty (sync hasn't run): show all receivers as fallback.
+        const receivers = weekPlayers.filter(
+          p => p['receiving_YDS'] != null && p['passing_YDS'] == null,
+        );
+        players = (hasPositionData
+          ? receivers.filter(p => playerPos[normName(p.name)] === 'TE')
+          : receivers
+        )
           .sort((a, b) => (b['receiving_YDS'] || 0) - (a['receiving_YDS'] || 0))
           .slice(0, 5)
           .map(r => ({ name: r.name, rec: r['receiving_REC'] || 0, recYd: r['receiving_YDS'] || 0, recTd: r['receiving_TD'] || 0 }));
