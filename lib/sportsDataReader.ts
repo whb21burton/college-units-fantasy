@@ -145,8 +145,8 @@ export async function getSchoolWeekGameLog(
   const admin = createAdminClient();
   const TOTAL_WEEKS = 14;
 
-  // Fetch schedule + stats for this school in parallel
-  const [scheduleRows, unitStatRows, playerStatRows] = await Promise.all([
+  // Fetch schedule, stats, and player positions in parallel
+  const [scheduleRows, unitStatRows, playerStatRows, rosterRows] = await Promise.all([
     admin
       .from('cached_schedule')
       .select('week, home_team, away_team, game_id')
@@ -165,7 +165,22 @@ export async function getSchoolWeekGameLog(
       .eq('school', school)
       .eq('season', season)
       .not('player_name', 'is', null),
+    admin
+      .from('cached_players')
+      .select('player_name, position')
+      .eq('school', school),
   ]);
+
+  // Build player→position lookup; normalise full names → abbreviations
+  const POSITION_ABBR: Record<string, string> = {
+    'Wide Receiver': 'WR', 'Tight End': 'TE', 'Running Back': 'RB',
+    'Quarterback': 'QB', 'Kicker': 'K', 'Punter': 'P',
+  };
+  const playerPos: Record<string, string> = {};
+  for (const row of rosterRows.data ?? []) {
+    const pos = POSITION_ABBR[row.position] ?? row.position ?? '';
+    playerPos[row.player_name] = pos;
+  }
 
   // Build lookup maps
   const scheduleByWeek: Record<number, { opponent: string; gameId: string }> = {};
@@ -230,10 +245,24 @@ export async function getSchoolWeekGameLog(
           .map(r => ({ name: r.name, rushAtt: r['rushing_ATT'] || 0, rushYd: r['rushing_YDS'] || 0, rushTd: r['rushing_TD'] || 0, rec: r['receiving_REC'] || 0, recYd: r['receiving_YDS'] || 0 }));
         break;
       }
-      case 'WR':
+      case 'WR': {
+        // Target positions: WR. If position data is unavailable for a receiver,
+        // include them only when no position-confirmed WRs exist (graceful fallback).
+        const receivers = weekPlayers.filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null);
+        const wrPlayers = receivers.filter(p => playerPos[p.name] === 'WR');
+        const source    = wrPlayers.length > 0 ? wrPlayers : receivers;
+        players = source
+          .sort((a, b) => (b['receiving_YDS'] || 0) - (a['receiving_YDS'] || 0))
+          .slice(0, 5)
+          .map(r => ({ name: r.name, rec: r['receiving_REC'] || 0, recYd: r['receiving_YDS'] || 0, recTd: r['receiving_TD'] || 0 }));
+        break;
+      }
       case 'TE': {
-        players = weekPlayers
-          .filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null)
+        // Target positions: TE.
+        const receivers = weekPlayers.filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null);
+        const tePlayers = receivers.filter(p => playerPos[p.name] === 'TE');
+        const source    = tePlayers.length > 0 ? tePlayers : receivers;
+        players = source
           .sort((a, b) => (b['receiving_YDS'] || 0) - (a['receiving_YDS'] || 0))
           .slice(0, 5)
           .map(r => ({ name: r.name, rec: r['receiving_REC'] || 0, recYd: r['receiving_YDS'] || 0, recTd: r['receiving_TD'] || 0 }));
