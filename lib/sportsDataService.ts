@@ -181,6 +181,10 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
         const roster = await cfbdGet('/roster', { team, year: rosterYear });
 
         const skippedPositions = new Set<string>();
+        // CFBD returns year as a number (1=FR, 2=SO, 3=JR, 4=SR, 5+=null).
+        // cached_players.year CHECK constraint expects 'FR','SO','JR','SR' or NULL.
+        const yearMap: Record<number, string> = { 1: 'FR', 2: 'SO', 3: 'JR', 4: 'SR' };
+
         const rows = roster
           .filter((p: any) => p.firstName || p.lastName)
           .map((p: any) => {
@@ -194,17 +198,13 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
               position:             pos,
               player_name:          name,
               jersey_number:        p.jersey != null ? String(p.jersey) : null,
-              year:                 p.year   != null ? p.year            : null,
+              year:                 p.year   != null ? (yearMap[p.year] ?? null) : null,
               status:               'active',
               depth_chart_position: null,
               updated_at:           new Date().toISOString(),
             };
           })
           .filter(Boolean);
-
-        if (team === 'Alabama' || team === 'Ohio State') {
-          console.log(`[syncRosters:debug] ${team}: total=${roster.length} mapped=${rows.length} unrecognizedPositions=${JSON.stringify(Array.from(skippedPositions))}`);
-        }
 
         if (rows.length > 0) {
           const { error } = await admin
