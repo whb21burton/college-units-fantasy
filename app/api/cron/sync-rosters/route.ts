@@ -22,29 +22,32 @@ export async function GET(request: NextRequest) {
 
   const start   = Date.now();
   const jobName = `syncRosters:${CURRENT_SEASON}`;
+  const force   = request.nextUrl.searchParams.get('force') === '1';
 
-  // Check if already ran today
-  const admin      = createAdminClient();
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
+  // Check if already ran today (skip if force=1)
+  if (!force) {
+    const admin      = createAdminClient();
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
 
-  const { data: lastRun } = await admin
-    .from('data_refresh_log')
-    .select('ran_at')
-    .eq('job_name', jobName)
-    .eq('status', 'success')
-    .gte('ran_at', todayStart.toISOString())
-    .order('ran_at', { ascending: false })
-    .limit(1)
-    .single();
+    const { data: lastRun } = await admin
+      .from('data_refresh_log')
+      .select('ran_at')
+      .eq('job_name', jobName)
+      .eq('status', 'success')
+      .gte('ran_at', todayStart.toISOString())
+      .order('ran_at', { ascending: false })
+      .limit(1)
+      .single();
 
-  if (lastRun) {
-    return NextResponse.json({
-      success:  true,
-      skipped:  true,
-      message:  `Already ran today at ${lastRun.ran_at}`,
-      duration: Date.now() - start,
-    });
+    if (lastRun) {
+      return NextResponse.json({
+        success:  true,
+        skipped:  true,
+        message:  `Already ran today at ${lastRun.ran_at}. Use ?force=1 to re-run.`,
+        duration: Date.now() - start,
+      });
+    }
   }
 
   try {

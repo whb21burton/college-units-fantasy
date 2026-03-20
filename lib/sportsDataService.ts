@@ -163,22 +163,28 @@ export async function syncRosters(teams: string[], season: number = 2025): Promi
   let recordsUpdated = 0;
 
   try {
+    // CFBD returns both abbreviations ('WR') and full names ('Wide Receiver').
+    // Keys are compared after .toUpperCase(), so all keys here must be uppercase.
     const cfbdPositionMap: Record<string, string> = {
-      QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K',
-      PK: 'K', KR: 'K',
+      QB: 'QB', QUARTERBACK: 'QB',
+      RB: 'RB', 'RUNNING BACK': 'RB', HB: 'RB', FB: 'RB', FULLBACK: 'RB',
+      WR: 'WR', 'WIDE RECEIVER': 'WR',
+      TE: 'TE', 'TIGHT END': 'TE',
+      K: 'K', PK: 'K', 'PLACE KICKER': 'K', KICKER: 'K', KR: 'K',
     };
 
     for (const team of teams) {
       try {
         const roster = await cfbdGet('/roster', { team, year: season });
 
+        const skipped: string[] = [];
         const rows = roster
           .filter((p: any) => p.firstName || p.lastName)
           .map((p: any) => {
             const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
             const posRaw: string = (p.position ?? '').toUpperCase();
             const pos = cfbdPositionMap[posRaw] ?? null;
-            if (!pos) return null;
+            if (!pos) { skipped.push(`${name}(${p.position ?? 'null'})`); return null; }
 
             return {
               school:               team,
@@ -192,6 +198,10 @@ export async function syncRosters(teams: string[], season: number = 2025): Promi
             };
           })
           .filter(Boolean);
+
+        if (skipped.length > 0) {
+          console.log(`[syncRosters] ${team}: skipped ${skipped.length} players with unrecognized positions:`, skipped.slice(0, 10).join(', '));
+        }
 
         if (rows.length > 0) {
           const { error } = await admin

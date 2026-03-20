@@ -246,23 +246,19 @@ export async function getSchoolWeekGameLog(
         break;
       }
       case 'WR': {
-        // Target positions: WR. If position data is unavailable for a receiver,
-        // include them only when no position-confirmed WRs exist (graceful fallback).
-        const receivers = weekPlayers.filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null);
-        const wrPlayers = receivers.filter(p => playerPos[p.name] === 'WR');
-        const source    = wrPlayers.length > 0 ? wrPlayers : receivers;
-        players = source
+        // Only include players whose position in cached_players is exactly 'WR'.
+        // No fallback — if position data is missing, show empty rather than mixing positions.
+        players = weekPlayers
+          .filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null && playerPos[p.name] === 'WR')
           .sort((a, b) => (b['receiving_YDS'] || 0) - (a['receiving_YDS'] || 0))
           .slice(0, 5)
           .map(r => ({ name: r.name, rec: r['receiving_REC'] || 0, recYd: r['receiving_YDS'] || 0, recTd: r['receiving_TD'] || 0 }));
         break;
       }
       case 'TE': {
-        // Target positions: TE.
-        const receivers = weekPlayers.filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null);
-        const tePlayers = receivers.filter(p => playerPos[p.name] === 'TE');
-        const source    = tePlayers.length > 0 ? tePlayers : receivers;
-        players = source
+        // Only include players whose position in cached_players is exactly 'TE'.
+        players = weekPlayers
+          .filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null && playerPos[p.name] === 'TE')
           .sort((a, b) => (b['receiving_YDS'] || 0) - (a['receiving_YDS'] || 0))
           .slice(0, 5)
           .map(r => ({ name: r.name, rec: r['receiving_REC'] || 0, recYd: r['receiving_YDS'] || 0, recTd: r['receiving_TD'] || 0 }));
