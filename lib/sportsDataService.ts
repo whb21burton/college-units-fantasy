@@ -180,14 +180,14 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
       try {
         const roster = await cfbdGet('/roster', { team, year: rosterYear });
 
-        const skipped: string[] = [];
+        const skippedPositions = new Set<string>();
         const rows = roster
           .filter((p: any) => p.firstName || p.lastName)
           .map((p: any) => {
             const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
             const posRaw: string = (p.position ?? '').toUpperCase();
             const pos = cfbdPositionMap[posRaw] ?? null;
-            if (!pos) { skipped.push(`${name}(${p.position ?? 'null'})`); return null; }
+            if (!pos) { skippedPositions.add(p.position ?? 'null'); return null; }
 
             return {
               school:               team,
@@ -202,8 +202,8 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
           })
           .filter(Boolean);
 
-        if (skipped.length > 0) {
-          console.log(`[syncRosters] ${team}: skipped ${skipped.length} players with unrecognized positions:`, skipped.slice(0, 10).join(', '));
+        if (team === 'Alabama' || team === 'Ohio State') {
+          console.log(`[syncRosters:debug] ${team}: total=${roster.length} mapped=${rows.length} unrecognizedPositions=${JSON.stringify(Array.from(skippedPositions))}`);
         }
 
         if (rows.length > 0) {
