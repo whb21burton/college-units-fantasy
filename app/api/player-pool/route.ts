@@ -3,14 +3,17 @@
  *
  * Builds the draft-eligible player pool from Supabase cached_stats.
  * Aggregates season totals per school+unit, ranks them, and returns DraftUnit[].
- * Falls back to FULL_POOL static data for schools with no cached_stats rows.
- * Never calls CFBD directly.
+ *
+ * Guarantee: every school in CONFERENCES appears for every unit type.
+ * Priority:  (1) live cached_stats data  (2) FULL_POOL projection  (3) pts=0 placeholder
+ * Sort:      live-data schools rank above projection-only schools within each unit type.
  */
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-server';
 import { CONFERENCES, FULL_POOL, type DraftUnit, type UnitType, type Tier, type Conference } from '@/lib/playerPool';
 
-const SEASON = 2025;
+const SEASON    = 2025;
+const UNIT_TYPES: UnitType[] = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
 function tierFromRank(rank: number, total: number): Tier {
   const pct = rank / total;
@@ -35,66 +38,75 @@ export async function GET() {
       for (const s of schools) schoolConf[s] = conf;
     }
 
-    // Sum unit fantasy points across all weeks per school+unit
+    // Build FULL_POOL lookup: school+unitType → projectedPoints (first entry per key wins)
+    const fullPoolMap: Record<string, number> = {};
+    for (const unit of FULL_POOL) {
+      const key = `${unit.school}||${unit.unitType}`;
+      if (!(key in fullPoolMap)) fullPoolMap[key] = unit.projectedPoints;
+    }
+
+    // Fetch all unit-level rows for the season — high limit, no week filter needed
     const { data, error } = await admin
       .from('cached_stats')
       .select('school, stat_type, value')
       .eq('season', SEASON)
       .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'])
       .is('player_name', null)
-      .limit(50000);
+      .limit(100000);
 
     if (error) throw error;
 
-    const rows = data ?? [];
-
-    // Aggregate season totals from live data: school+unitType → total points
-    const liveTotals: Record<string, { school: string; unitType: UnitType; pts: number }> = {};
-    for (const row of rows) {
-      const conf = schoolConf[row.school];
-      if (!conf) continue;
+    // Aggregate season totals from live data, keyed by school||unitType
+    const liveTotals: Record<string, number> = {};
+    for (const row of data ?? []) {
+      if (!schoolConf[row.school]) continue; // skip non-P4+Ind schools
       const unitType = row.stat_type.replace('unit_', '') as UnitType;
       const key = `${row.school}||${unitType}`;
-      if (!liveTotals[key]) liveTotals[key] = { school: row.school, unitType, pts: 0 };
-      liveTotals[key].pts += row.value ?? 0;
+      liveTotals[key] = (liveTotals[key] ?? 0) + (row.value ?? 0);
     }
 
-    // Schools covered by live data
-    const liveSchools = new Set(Object.values(liveTotals).map(t => t.school));
+    // Build complete pool: every CONFERENCES school × every unit type, no gaps
+    type Entry = { school: string; unitType: UnitType; pts: number; isLive: boolean };
+    const allEntries: Entry[] = [];
 
-    // Fall back to FULL_POOL for schools with no live data
-    // Use projectedPoints directly (already a season total in FULL_POOL)
-    const allTotals: Record<string, { school: string; unitType: UnitType; pts: number }> = { ...liveTotals };
-    for (const unit of FULL_POOL) {
-      if (liveSchools.has(unit.school)) continue; // live data takes precedence
-      const conf = schoolConf[unit.school];
-      if (!conf) continue;
-      const key = `${unit.school}||${unit.unitType}`;
-      if (!allTotals[key]) {
-        allTotals[key] = { school: unit.school, unitType: unit.unitType, pts: unit.projectedPoints };
+    for (const schools of Object.values(CONFERENCES)) {
+      for (const school of schools) {
+        for (const unitType of UNIT_TYPES) {
+          const key = `${school}||${unitType}`;
+          if (key in liveTotals) {
+            allEntries.push({ school, unitType, pts: liveTotals[key], isLive: true });
+          } else {
+            // Fall back to FULL_POOL projected season total, or 0 if not listed
+            allEntries.push({ school, unitType, pts: fullPoolMap[key] ?? 0, isLive: false });
+          }
+        }
       }
     }
 
-    // Group by unit type and sort by total pts desc
-    const byUnit: Record<UnitType, { school: string; pts: number }[]> = {
-      QB: [], RB: [], WR: [], TE: [], DEF: [], K: [],
-    };
-    for (const { school, unitType, pts } of Object.values(allTotals)) {
-      byUnit[unitType].push({ school, pts });
+    // Group by unit type; within each group sort live-data first, then by pts desc
+    const byUnit: Record<UnitType, Entry[]> = { QB: [], RB: [], WR: [], TE: [], DEF: [], K: [] };
+    for (const entry of allEntries) byUnit[entry.unitType].push(entry);
+    for (const arr of Object.values(byUnit)) {
+      arr.sort((a, b) => {
+        if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+        return b.pts - a.pts;
+      });
     }
-    for (const arr of Object.values(byUnit)) arr.sort((a, b) => b.pts - a.pts);
 
-    // Build global ADP by interleaving all units sorted by pts
-    const allUnits = (Object.entries(byUnit) as [UnitType, { school: string; pts: number }[]][])
+    // Build global ADP by interleaving across all unit types, live first then projection
+    const allUnits = (Object.entries(byUnit) as [UnitType, Entry[]][])
       .flatMap(([unitType, arr]) => arr.map(u => ({ ...u, unitType })))
-      .sort((a, b) => b.pts - a.pts);
+      .sort((a, b) => {
+        if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+        return b.pts - a.pts;
+      });
 
     const adpMap = new Map<string, number>();
     allUnits.forEach((u, i) => adpMap.set(`${u.school}||${u.unitType}`, i + 1));
 
     // Assemble DraftUnit[]
     const pool: DraftUnit[] = [];
-    for (const [unitType, arr] of Object.entries(byUnit) as [UnitType, { school: string; pts: number }[]][]) {
+    for (const [unitType, arr] of Object.entries(byUnit) as [UnitType, Entry[]][]) {
       arr.forEach(({ school, pts }, rank) => {
         const conf = schoolConf[school];
         if (!conf) return;
