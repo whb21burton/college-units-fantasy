@@ -164,21 +164,31 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
   let recordsUpdated = 0;
 
   try {
-    // CFBD returns both abbreviations ('WR') and full names ('Wide Receiver').
-    // Keys are compared after .toUpperCase(), so all keys here must be uppercase.
+    // Maps every known CFBD position string (uppercased) to our DB abbreviation.
+    // Non-skill positions (OL, DL, LB, DB, P, LS, etc.) are intentionally absent
+    // so they map to null and get filtered out before upsert.
+    // CHECK constraint: position IN ('QB','RB','WR','TE','K','DEF')
     const cfbdPositionMap: Record<string, string> = {
+      // QB
       QB: 'QB', QUARTERBACK: 'QB',
-      RB: 'RB', 'RUNNING BACK': 'RB', HB: 'RB', FB: 'RB', FULLBACK: 'RB',
-      WR: 'WR', 'WIDE RECEIVER': 'WR',
-      TE: 'TE', 'TIGHT END': 'TE',
-      K: 'K', PK: 'K', 'PLACE KICKER': 'K', KICKER: 'K', KR: 'K',
+      // RB
+      RB: 'RB', 'RUNNING BACK': 'RB', HB: 'RB', HALFBACK: 'RB',
+      FB: 'RB', FULLBACK: 'RB',
+      // WR
+      WR: 'WR', 'WIDE RECEIVER': 'WR', 'WIDE RECEIVERS': 'WR',
+      // TE
+      TE: 'TE', 'TIGHT END': 'TE', 'TIGHT ENDS': 'TE',
+      // K — all kicker variants CFBD uses
+      K: 'K', PK: 'K', KICKER: 'K', 'PLACE KICKER': 'K',
+      PLACEKICKER: 'K', 'PLACE-KICKER': 'K', KR: 'K',
     };
 
     const rosterYear = cfbdYear ?? season;
 
-    // Normalize year: CFBD returns integers (1=FR,2=SO,3=JR,4=SR) OR strings ('FR','SR','GR',etc.).
+    // Normalize year: CFBD returns integers (1=FR,2=SO,3=JR,4=SR,5=SR) OR
+    // strings ('FR','SO','JR','SR','GR','RS','RS-FR',etc.).
     // cached_players.year CHECK: must be 'FR','SO','JR','SR' or NULL.
-    const numToYear: Record<number, string> = { 1: 'FR', 2: 'SO', 3: 'JR', 4: 'SR' };
+    const numToYear: Record<number, string> = { 1: 'FR', 2: 'SO', 3: 'JR', 4: 'SR', 5: 'SR' };
     const validYears = new Set(['FR', 'SO', 'JR', 'SR']);
     const normalizeYear = (raw: any): string | null => {
       if (raw == null) return null;
@@ -187,49 +197,55 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
       if (validYears.has(s)) return s;
       const n = parseInt(s, 10);
       if (!isNaN(n)) return numToYear[n] ?? null;
-      return null; // e.g. 'GR', 'RS', 'RS-FR', '5', 'N/A' → null
+      return null; // 'GR','RS','RS-FR','6','N/A' etc. → null (allowed by CHECK)
     };
 
     for (const team of teams) {
       try {
         const roster = await cfbdGet('/roster', { team, year: rosterYear });
 
-        const skippedPositions = new Set<string>();
-
         const rows = roster
           .filter((p: any) => p.firstName || p.lastName)
           .map((p: any) => {
-            const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
+            const name = [p.firstName, p.lastName].filter(Boolean).join(' ').trim();
             if (!name) return null;
+
             const posRaw: string = (p.position ?? '').toUpperCase().trim();
             const pos = cfbdPositionMap[posRaw] ?? null;
-            if (!pos) { skippedPositions.add(p.position ?? 'null'); return null; }
+            if (!pos) return null; // non-skill position — skip silently
+
+            const yr = normalizeYear(p.year);
 
             return {
               school:               team,
-              position:             pos,
+              position:             pos,              // CHECK: 'QB'|'RB'|'WR'|'TE'|'K'|'DEF'
               player_name:          name,
               jersey_number:        p.jersey != null ? String(p.jersey) : null,
-              year:                 normalizeYear(p.year),
-              status:               'active' as const,
+              year:                 yr,               // CHECK: 'FR'|'SO'|'JR'|'SR'|null
+              status:               'active' as const, // CHECK: 'active'|'injured'|'out'
               depth_chart_position: null,
               updated_at:           new Date().toISOString(),
             };
           })
           .filter(Boolean);
 
-        if (rows.length > 0) {
-          const { error } = await admin
-            .from('cached_players')
-            .upsert(rows, { onConflict: 'school,position,player_name' });
-          if (error) {
-            console.error(`syncRosters:${team} upsert error:`, error.message);
-          } else {
-            recordsUpdated += rows.length;
-          }
+        if (rows.length === 0) continue;
+
+        const { error } = await admin
+          .from('cached_players')
+          .upsert(rows, { onConflict: 'school,position,player_name' });
+
+        if (error) {
+          console.error(
+            `syncRosters:${team} upsert FAILED — code=${error.code} msg=${error.message}`,
+            `details=${error.details ?? ''} hint=${error.hint ?? ''}`,
+            `first_row=${JSON.stringify(rows[0])}`,
+          );
+        } else {
+          recordsUpdated += rows.length;
         }
       } catch (teamErr: any) {
-        console.error(`syncRosters:${team} error:`, teamErr.message);
+        console.error(`syncRosters:${team} fetch error:`, teamErr.message);
       }
     }
 
