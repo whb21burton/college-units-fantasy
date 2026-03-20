@@ -27,7 +27,7 @@ const WEEKLY_SLOTS = [
   { key: 'K',   unitType: 'K',   label: 'K'    },
 ];
 
-const SEASON_GAMES = 12;
+const SEASON_GAMES = 14;
 
 // Schools per unitType sorted by projected points descending
 function schoolOptions(unitType: string) {

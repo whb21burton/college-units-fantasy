@@ -20,7 +20,7 @@ const C = {
   red:   '#f03a5a',   // rose red
 };
 
-const SEASON_GAMES = 12;
+const SEASON_GAMES = 14;
 function weeklyProj(seasonPts: number): number {
   return seasonPts / SEASON_GAMES;
 }

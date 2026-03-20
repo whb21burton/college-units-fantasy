@@ -12,7 +12,8 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-server';
 import { CONFERENCES, FULL_POOL, type DraftUnit, type UnitType, type Tier, type Conference } from '@/lib/playerPool';
 
-const SEASON    = 2025;
+const SEASON          = 2025;
+const TOTAL_WEEKS     = 14; // regular season length used to project avg → full season
 const UNIT_TYPES: UnitType[] = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
 function tierFromRank(rank: number, total: number): Tier {
@@ -56,13 +57,20 @@ export async function GET() {
 
     if (error) throw error;
 
-    // Aggregate season totals from live data, keyed by school||unitType
-    const liveTotals: Record<string, number> = {};
+    // Aggregate per-week average from live data, keyed by school||unitType.
+    // Track both sum and count so we can compute avgPerWeek = sum / weeksPlayed,
+    // then project to a full 14-week season: projectedSeason = avgPerWeek * TOTAL_WEEKS.
+    // This ensures projectedPoints always reflects actual performance pace rather
+    // than the season cumulative total (which grows each week and can't be compared
+    // fairly against the static FULL_POOL 14-week projections).
+    const liveSums:   Record<string, number> = {};
+    const liveCounts: Record<string, number> = {};
     for (const row of data ?? []) {
       if (!schoolConf[row.school]) continue; // skip non-P4+Ind schools
       const unitType = row.stat_type.replace('unit_', '') as UnitType;
       const key = `${row.school}||${unitType}`;
-      liveTotals[key] = (liveTotals[key] ?? 0) + (row.value ?? 0);
+      liveSums[key]   = (liveSums[key]   ?? 0) + (row.value ?? 0);
+      liveCounts[key] = (liveCounts[key] ?? 0) + 1;
     }
 
     // Build complete pool: every CONFERENCES school × every unit type, no gaps
@@ -73,10 +81,12 @@ export async function GET() {
       for (const school of schools) {
         for (const unitType of UNIT_TYPES) {
           const key = `${school}||${unitType}`;
-          if (key in liveTotals) {
-            allEntries.push({ school, unitType, pts: liveTotals[key], isLive: true });
+          if (key in liveSums) {
+            // Project from actual avg: (sum / weeksPlayed) * 14
+            const avgPerWeek = liveSums[key] / liveCounts[key];
+            allEntries.push({ school, unitType, pts: avgPerWeek * TOTAL_WEEKS, isLive: true });
           } else {
-            // Fall back to FULL_POOL projected season total, or 0 if not listed
+            // Fall back to FULL_POOL static 14-week season projection
             allEntries.push({ school, unitType, pts: fullPoolMap[key] ?? 0, isLive: false });
           }
         }
