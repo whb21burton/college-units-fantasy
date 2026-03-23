@@ -221,9 +221,10 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const [loading,      setLoading]      = useState(true);
   const [copied,       setCopied]       = useState(false);
   const [activeTab,    setActiveTab]    = useState<Tab>('draft');
-  const [showSettings, setShowSettings] = useState(false);
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const [chatInput,    setChatInput]    = useState('');
+  const [showSettings,  setShowSettings]  = useState(false);
+  const [chatMessages,  setChatMessages]  = useState<any[]>([]);
+  const [chatInput,     setChatInput]     = useState('');
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -265,6 +266,10 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       setUserEmail(user.email || '');
       await loadData(user.id);
       setLoading(false);
+      // Load wallet balance for sidebar display
+      fetch('/api/wallet').then(r => r.ok ? r.json() : null).then(d => {
+        if (d?.wallet?.balance != null) setWalletBalance(d.wallet.balance);
+      }).catch(() => {});
     }
     init();
 
@@ -447,6 +452,22 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               </button>
             );
           })}
+        </div>
+
+        {/* Wallet widget */}
+        <div style={{ padding: '10px 14px', borderTop: '1px solid ' + C.surf3, flexShrink: 0 }}>
+          <button
+            onClick={() => router.push('/wallet')}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(212,168,40,.06)', border: '1px solid rgba(212,168,40,.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', textDecoration: 'none' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ fontSize: 14 }}>💰</span>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase' }}>Wallet</span>
+            </div>
+            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold, letterSpacing: 0.5 }}>
+              {walletBalance != null ? `$${(walletBalance / 100).toFixed(2)}` : '—'}
+            </span>
+          </button>
         </div>
 
         {/* User footer */}

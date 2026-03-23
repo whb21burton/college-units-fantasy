@@ -55,8 +55,8 @@ export default function JoinPage({ params }: { params: { code: string } }) {
     if (memberCount >= league.league_size) { setError('This league is full.'); setJoining(false); return; }
     if (league.status !== 'forming') { setError('This league has already started.'); setJoining(false); return; }
 
-    // POST to /api/leagues/enter (handles both free and paid via wallet)
-    const res  = await fetch('/api/leagues/enter', {
+    // POST to /api/wallet/join-contest (atomically deducts balance)
+    const res  = await fetch('/api/wallet/join-contest', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ league_id: league.id, team_name: teamName.trim() }),
@@ -65,8 +65,8 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
     if (!res.ok) {
       if (data.code === 'INSUFFICIENT_BALANCE') {
-        const needDollars  = ((data.need_cents ?? 0) / 100).toFixed(2);
-        const haveDollars  = ((data.balance_cents ?? 0) / 100).toFixed(2);
+        const needDollars = ((data.required ?? 0) / 100).toFixed(2);
+        const haveDollars = ((data.balance  ?? 0) / 100).toFixed(2);
         setError(`Not enough funds. Need $${needDollars}, you have $${haveDollars}.`);
       } else {
         setError(data.error ?? 'Could not join. Please try again.');
