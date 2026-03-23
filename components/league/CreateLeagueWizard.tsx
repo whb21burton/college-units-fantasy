@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { CreateLeagueFormData } from '@/types';
+
+const ADMIN_EMAIL = 'whb21burton@gmail.com';
 
 const BUY_INS  = [0, 10, 25, 50];
 const SIZES    = [4, 6, 8, 10, 12];
@@ -25,8 +27,15 @@ export function CreateLeagueWizard() {
   const [createdLeague, setCreatedLeague] = useState<{ id: string; invite_code: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [isPublic,    setIsPublic]    = useState(false);
+  const [isAdmin,     setIsAdmin]     = useState(false);
   const [leagueType,  setLeagueType]  = useState<'season' | 'weekly'>('season');
   const [week,        setWeek]        = useState<number>(1);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setIsAdmin(user?.email === ADMIN_EMAIL);
+    });
+  }, []);
 
   const [form, setForm] = useState<CreateLeagueFormData>({
     name:        '',
@@ -43,56 +52,31 @@ export function CreateLeagueWizard() {
 
   async function handleCreate() {
     setLoading(true); setError(null);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setError('You must be signed in.'); setLoading(false); return; }
 
-    const { data, error: dbError } = await supabase
-      .from('leagues')
-      .insert({
-        name:            form.name.trim(),
-        commissioner_id: user.id,
-        buy_in:          form.buy_in,
-        league_size:     form.league_size,
-        draft_type:      leagueType === 'season' ? form.draft_type : 'snake',
-        salary_cap:      form.salary_cap,
-        is_public:       isPublic,
-        league_type:     leagueType,
-        week:            leagueType === 'weekly' ? week : null,
-        invite_code:     '',   // trigger fills this in
-        status:          'forming',
-      })
-      .select('id, invite_code, name')
-      .single();
+    const res = await fetch('/api/leagues/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name:        form.name.trim(),
+        buy_in:      form.buy_in,
+        league_size: form.league_size,
+        draft_type:  leagueType === 'season' ? form.draft_type : 'snake',
+        salary_cap:  form.salary_cap,
+        is_public:   isPublic,   // server enforces admin-only; just pass intent
+        league_type: leagueType,
+        week:        leagueType === 'weekly' ? week : null,
+        team_name:   form.team_name.trim() || 'My Team',
+      }),
+    });
 
-    if (dbError || !data) {
-      setError(dbError?.message || 'Failed to create league.');
+    const json = await res.json();
+
+    if (!res.ok) {
+      setError(json.error || 'Failed to create league.');
       setLoading(false); return;
     }
 
-    // Add commissioner as first member
-    const { error: memberError } = await supabase.from('league_members').insert({
-      league_id: data.id,
-      user_id:   user.id,
-      team_name: form.team_name.trim() || 'My Team',
-      draft_slot: 1,
-    });
-
-    if (memberError) {
-      // Retry once — can fail on first attempt due to RLS timing
-      const { error: retryError } = await supabase.from('league_members').insert({
-        league_id: data.id,
-        user_id:   user.id,
-        team_name: form.team_name.trim() || 'My Team',
-        draft_slot: 1,
-      });
-      if (retryError) {
-        setError('League created but could not add you as a member. Please refresh and try joining via the invite link.');
-        setLoading(false);
-        return;
-      }
-    }
-
-    setCreatedLeague(data);
+    setCreatedLeague(json);
     setLoading(false);
     setStep(4);
   }
@@ -265,22 +249,36 @@ export function CreateLeagueWizard() {
             <Spacer />
 
             <FieldLabel>League Visibility</FieldLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <ToggleBtn active={!isPublic} onClick={() => setIsPublic(false)}>
-                <div style={{ fontSize: 18, marginBottom: 4 }}>🔒</div>
-                <strong>Private</strong>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                  Invite link only
+            {isAdmin ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <ToggleBtn active={!isPublic} onClick={() => setIsPublic(false)}>
+                  <div style={{ fontSize: 18, marginBottom: 4 }}>🔒</div>
+                  <strong>Private</strong>
+                  <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                    Invite link only
+                  </div>
+                </ToggleBtn>
+                <ToggleBtn active={isPublic} onClick={() => setIsPublic(true)}>
+                  <div style={{ fontSize: 18, marginBottom: 4 }}>🌐</div>
+                  <strong>Public</strong>
+                  <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                    Listed in leagues browser
+                  </div>
+                </ToggleBtn>
+              </div>
+            ) : (
+              <div style={{
+                padding: '12px 16px', background: C.surf2,
+                border: `1px solid ${C.surf3}`, borderRadius: 8,
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <span style={{ fontSize: 20 }}>🔒</span>
+                <div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, color: C.text }}>Private</div>
+                  <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, marginTop: 2 }}>Invite link only</div>
                 </div>
-              </ToggleBtn>
-              <ToggleBtn active={isPublic} onClick={() => setIsPublic(true)}>
-                <div style={{ fontSize: 18, marginBottom: 4 }}>🌐</div>
-                <strong>Public</strong>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                  Listed in leagues browser
-                </div>
-              </ToggleBtn>
-            </div>
+              </div>
+            )}
 
             {leagueType === 'weekly' && (
               <>
