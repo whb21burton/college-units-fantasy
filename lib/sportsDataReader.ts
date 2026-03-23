@@ -238,33 +238,81 @@ export async function getSchoolWeekGameLog(
         break;
       }
       case 'RB': {
-        players = weekPlayers
-          .filter(p => p['rushing_YDS'] != null && p['passing_YDS'] == null)
-          .sort((a, b) => (b['rushing_YDS'] || 0) - (a['rushing_YDS'] || 0))
-          .slice(0, 4)
-          .map(r => ({ name: r.name, rushAtt: r['rushing_ATT'] || 0, rushYd: r['rushing_YDS'] || 0, rushTd: r['rushing_TD'] || 0, rec: r['receiving_REC'] || 0, recYd: r['receiving_YDS'] || 0 }));
+        // Use position data if available; fall back to "rusher who isn't a QB"
+        const rbList = weekPlayers
+          .filter(p => {
+            const pos = playerPos[normName(p.name)];
+            return pos ? pos === 'RB' : (p['rushing_YDS'] != null && p['passing_YDS'] == null);
+          })
+          .sort((a, b) => (b['rushing_YDS'] || 0) - (a['rushing_YDS'] || 0));
+        if (rbList.length > 0) {
+          // players[0] = nameless unit aggregate for game-log stat columns
+          // players[1+] = individual named RBs for Unit Players season table
+          players = [
+            {
+              rushAtt: rbList.reduce((s, p) => s + (p['rushing_ATT']  || 0), 0),
+              rushYd:  rbList.reduce((s, p) => s + (p['rushing_YDS']  || 0), 0),
+              // TD = rush TDs + receiving TDs for all RBs (unit scoring is inclusive)
+              rushTd:  rbList.reduce((s, p) => s + (p['rushing_TD']   || 0) + (p['receiving_TD'] || 0), 0),
+              rec:     rbList.reduce((s, p) => s + (p['receiving_REC']|| 0), 0),
+              recYd:   rbList.reduce((s, p) => s + (p['receiving_YDS']|| 0), 0),
+            },
+            ...rbList.map(r => ({
+              name:    r.name,
+              rushAtt: r['rushing_ATT']   || 0,
+              rushYd:  r['rushing_YDS']   || 0,
+              rushTd:  (r['rushing_TD']   || 0) + (r['receiving_TD'] || 0),
+              rec:     r['receiving_REC'] || 0,
+              recYd:   r['receiving_YDS'] || 0,
+            })),
+          ];
+        }
         break;
       }
       case 'WR': {
         // Strict: only players whose position in cached_players is 'WR'.
-        // A TE must never appear here. Returns empty if cached_players has no data yet.
-        players = weekPlayers
+        const wrList = weekPlayers
           .filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null
                     && playerPos[normName(p.name)] === 'WR')
-          .sort((a, b) => (b['receiving_YDS'] || 0) - (a['receiving_YDS'] || 0))
-          .slice(0, 5)
-          .map(r => ({ name: r.name, rec: r['receiving_REC'] || 0, recYd: r['receiving_YDS'] || 0, recTd: r['receiving_TD'] || 0 }));
+          .sort((a, b) => (b['receiving_YDS'] || 0) - (a['receiving_YDS'] || 0));
+        if (wrList.length > 0) {
+          players = [
+            {
+              rec:   wrList.reduce((s, p) => s + (p['receiving_REC'] || 0), 0),
+              recYd: wrList.reduce((s, p) => s + (p['receiving_YDS'] || 0), 0),
+              recTd: wrList.reduce((s, p) => s + (p['receiving_TD']  || 0), 0),
+            },
+            ...wrList.map(r => ({
+              name:  r.name,
+              rec:   r['receiving_REC'] || 0,
+              recYd: r['receiving_YDS'] || 0,
+              recTd: r['receiving_TD']  || 0,
+            })),
+          ];
+        }
         break;
       }
       case 'TE': {
         // Strict: only players whose position in cached_players is 'TE'.
-        // A WR must never appear here. Returns empty if cached_players has no data yet.
-        players = weekPlayers
+        const teList = weekPlayers
           .filter(p => p['receiving_YDS'] != null && p['passing_YDS'] == null
                     && playerPos[normName(p.name)] === 'TE')
-          .sort((a, b) => (b['receiving_YDS'] || 0) - (a['receiving_YDS'] || 0))
-          .slice(0, 5)
-          .map(r => ({ name: r.name, rec: r['receiving_REC'] || 0, recYd: r['receiving_YDS'] || 0, recTd: r['receiving_TD'] || 0 }));
+          .sort((a, b) => (b['receiving_YDS'] || 0) - (a['receiving_YDS'] || 0));
+        if (teList.length > 0) {
+          players = [
+            {
+              rec:   teList.reduce((s, p) => s + (p['receiving_REC'] || 0), 0),
+              recYd: teList.reduce((s, p) => s + (p['receiving_YDS'] || 0), 0),
+              recTd: teList.reduce((s, p) => s + (p['receiving_TD']  || 0), 0),
+            },
+            ...teList.map(r => ({
+              name:  r.name,
+              rec:   r['receiving_REC'] || 0,
+              recYd: r['receiving_YDS'] || 0,
+              recTd: r['receiving_TD']  || 0,
+            })),
+          ];
+        }
         break;
       }
       case 'DEF': {
