@@ -1092,9 +1092,23 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     load();
   }, [league?.id, userId]);
 
-  const draftedIds = new Set(allPicks.map((p: any) => p.player_data?.id).filter(Boolean));
+  // Key drafted units by school||unitType rather than by id.
+  // The draft page stores FULL_POOL entries whose ids include the player name
+  // (e.g. "alabama-qb-ty-simpson"), while the player-pool API generates
+  // aggregate ids ("alabama-qb"). Using school+unitType as the key is reliable
+  // regardless of which path created the pick.
+  const draftedKeys = new Set(
+    allPicks
+      .map((p: any) => {
+        const d = p.player_data;
+        return d?.school && d?.unitType ? `${d.school}||${d.unitType}` : null;
+      })
+      .filter(Boolean) as string[],
+  );
 
-  const visiblePool = availFilter === 'Available' ? pool.filter(p => !draftedIds.has(p.id)) : pool;
+  const visiblePool = availFilter === 'Available'
+    ? pool.filter(p => !draftedKeys.has(`${p.school}||${p.unitType}`))
+    : pool;
 
   const freeAgents = visiblePool
     .filter(p => posFilter === 'ALL' || p.unitType === posFilter)
@@ -1162,7 +1176,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         player={viewing}
         onBack={() => setViewing(null)}
         onAdd={() => { setViewing(null); setAdding(viewing); }}
-        canAdd={!!userId && !draftedIds.has(viewing.id)}
+        canAdd={!!userId && !draftedKeys.has(`${viewing.school}||${viewing.unitType}`)}
       />
     );
   }
@@ -1299,7 +1313,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
       {freeAgents.map(p => {
         const name      = p.playerName || p.school;
         const posColor  = UNIT_COLORS[p.unitType] || C.muted;
-        const isDrafted = draftedIds.has(p.id);
+        const isDrafted = draftedKeys.has(`${p.school}||${p.unitType}`);
         return (
           <div key={p.id} onClick={() => setViewing(p)} style={{
             display: 'grid', gridTemplateColumns: '1fr 60px 60px 80px', gap: 8, alignItems: 'center',
