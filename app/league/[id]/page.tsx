@@ -1140,7 +1140,10 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         (p.playerName ?? '').toLowerCase().includes(q) ||
         p.unitType.toLowerCase().includes(q);
     })
-    .sort((a, b) => a.adp - b.adp);
+    .sort((a, b) => {
+      const diff = b.projectedPoints - a.projectedPoints;
+      return diff !== 0 ? diff : a.adp - b.adp;
+    });
 
   const ROSTER_MIN    = 9;
   const emptySlots    = Math.max(0, ROSTER_MIN - myPicks.length);

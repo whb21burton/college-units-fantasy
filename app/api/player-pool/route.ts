@@ -132,8 +132,11 @@ export async function GET() {
       });
     }
 
-    // Sort by ADP ascending
-    pool.sort((a, b) => a.adp - b.adp);
+    // Sort by projectedPoints desc; ADP ascending as tiebreaker
+    pool.sort((a, b) => {
+      const diff = b.projectedPoints - a.projectedPoints;
+      return diff !== 0 ? diff : a.adp - b.adp;
+    });
 
     return NextResponse.json(pool, {
       headers: { 'Cache-Control': 'no-store' },
