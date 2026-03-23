@@ -857,6 +857,29 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
 
   const colTemplate = `32px 1fr 64px 44px${cols.map(() => ' 64px').join('')}`;
 
+  // Scoring constants (mirror sportsDataService.ts)
+  const S = { passYd: 0.05, passTd: 4, int: -2, rushYd: 0.05, rushTd: 6, recYd: 0.05, recTd: 6 };
+  function playerFpts(p: any, ut: string): number {
+    if (ut === 'QB') return (p.passYd||0)*S.passYd + (p.passTd||0)*S.passTd + (p.int||0)*S.int + (p.rushYd||0)*S.rushYd + (p.rushTd||0)*S.rushTd;
+    if (ut === 'RB') return (p.rushYd||0)*S.rushYd + (p.rushTd||0)*S.rushTd + (p.recYd||0)*S.recYd;
+    if (ut === 'WR' || ut === 'TE') return (p.recYd||0)*S.recYd + (p.recTd||0)*S.recTd;
+    if (ut === 'K')  return p.pts || 0;
+    return 0;
+  }
+
+  // Top contributors: all named players sorted by fantasy pts desc
+  const contributors = sortedPlayers
+    .map((p: any) => ({ ...p, fpts: playerFpts(p, player.unitType) }))
+    .sort((a: any, b: any) => b.fpts - a.fpts);
+
+  const topN = player.unitType === 'QB' ? 1 : 3;
+  const topContributors = contributors.slice(0, topN);
+  const totalFpts = contributors.reduce((s: number, p: any) => s + p.fpts, 0);
+
+  const rankColors = ['#d4a828', '#9ca3af', '#b87333']; // gold, silver, bronze
+  const rankLabels = (ut: string, idx: number) =>
+    ut === 'QB' ? 'STARTER' : `${ut}${idx + 1}`;
+
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
       <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.sub, fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 500, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
@@ -900,6 +923,87 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
           )}
         </div>
       </div>
+
+      {/* Top Contributors */}
+      {!loading && topContributors.length > 0 && player.unitType !== 'DEF' && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: C.gold }}>★</span> Top Contributors
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${topN}, 1fr)`, gap: 10 }}>
+            {topContributors.map((p: any, idx: number) => {
+              const rc    = rankColors[idx];
+              const pct   = totalFpts > 0 ? Math.round((p.fpts / totalFpts) * 100) : 0;
+              const jersey = jerseyMap[p.name];
+              const statLine = (() => {
+                if (player.unitType === 'QB')       return `${p.passYd||0} YDS · ${p.passTd||0} TD`;
+                if (player.unitType === 'RB')       return `${p.rushYd||0} YDS · ${p.rushTd||0} TD`;
+                if (player.unitType === 'WR' || player.unitType === 'TE') return `${p.recYd||0} YDS · ${p.recTd||0} TD`;
+                if (player.unitType === 'K')        return `${p.pts||0} PTS`;
+                return '';
+              })();
+              return (
+                <div key={p.name} style={{
+                  background: C.surf, border: `1px solid ${rc}33`,
+                  borderRadius: 12, padding: '14px 14px 12px',
+                  position: 'relative', overflow: 'hidden',
+                }}>
+                  {/* top accent bar */}
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${rc}, transparent)` }} />
+
+                  {/* rank badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{
+                      fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700,
+                      letterSpacing: 1, padding: '2px 8px', borderRadius: 20,
+                      background: rc + '22', border: `1px solid ${rc}55`, color: rc,
+                      textTransform: 'uppercase',
+                    }}>
+                      {rankLabels(player.unitType, idx)}
+                    </span>
+                    {jersey && (
+                      <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.muted }}>#{jersey}</span>
+                    )}
+                  </div>
+
+                  {/* name */}
+                  <div style={{
+                    fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 700,
+                    color: C.text, overflow: 'hidden', textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap', marginBottom: 6,
+                  }}>
+                    {p.name}
+                  </div>
+
+                  {/* fpts */}
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+                    <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: rc, lineHeight: 1 }}>
+                      {p.fpts.toFixed(1)}
+                    </span>
+                    <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: .5 }}>FPTS</span>
+                  </div>
+
+                  {/* stat line */}
+                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, marginBottom: 10 }}>
+                    {statLine}
+                  </div>
+
+                  {/* contribution bar */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, color: C.muted, letterSpacing: .5 }}>CONTRIBUTION</span>
+                      <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, color: rc }}>{pct}%</span>
+                    </div>
+                    <div style={{ height: 4, background: C.surf3, borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: rc, borderRadius: 2, transition: 'width .4s ease' }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Game Logs */}
       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>Game Logs</div>

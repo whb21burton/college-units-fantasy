@@ -7,6 +7,7 @@
  */
 import { NextResponse } from 'next/server';
 import { getSchoolWeekGameLog } from '@/lib/sportsDataReader';
+import { createAdminClient } from '@/lib/supabase-server';
 import type { UnitType } from '@/lib/playerPool';
 
 export const dynamic = 'force-dynamic';
@@ -22,9 +23,26 @@ export async function GET(req: Request) {
   }
 
   try {
-    const weeks = await getSchoolWeekGameLog(school, unitType, season);
+    const admin = createAdminClient();
+
+    const [weeks, playersRes] = await Promise.all([
+      getSchoolWeekGameLog(school, unitType, season),
+      admin
+        .from('cached_players')
+        .select('player_name, jersey_number')
+        .eq('school', school)
+        .eq('position', unitType),   // position stored as 'QB','RB','WR','TE','K'
+    ]);
+
+    const jerseyMap: Record<string, string> = {};
+    for (const p of playersRes.data ?? []) {
+      if (p.player_name && p.jersey_number != null) {
+        jerseyMap[p.player_name] = String(p.jersey_number);
+      }
+    }
+
     return NextResponse.json(
-      { school, unitType, weeks, jerseyMap: {} },
+      { school, unitType, weeks, jerseyMap },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (err: any) {
