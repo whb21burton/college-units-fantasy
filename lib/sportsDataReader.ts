@@ -184,11 +184,13 @@ export async function getSchoolWeekGameLog(
 
   // Build lookup maps
   const scheduleByWeek: Record<number, { opponent: string; gameId: string }> = {};
+  const gameIdToWeek:   Record<string, number> = {};
   for (const row of scheduleRows.data ?? []) {
     scheduleByWeek[row.week] = {
       opponent: row.home_team === school ? row.away_team : row.home_team,
       gameId:   row.game_id,
     };
+    if (row.game_id) gameIdToWeek[row.game_id] = row.week;
   }
 
   const unitPtsByWeek: Record<number, number> = {};
@@ -201,15 +203,17 @@ export async function getSchoolWeekGameLog(
     }
   }
 
-  // Build player-stat lookup: week → player entries
+  // Build player-stat lookup: week → player entries.
+  // Use game_id → week mapping (cached_schedule week is reliable; cached_stats week is not).
   const playersByWeek: Record<number, Record<string, any>> = {};
   for (const row of playerStatRows.data ?? []) {
-    if (!playersByWeek[row.week]) playersByWeek[row.week] = {};
-    const key = `${row.player_name}||${row.stat_type.split('_')[0]}`;
-    if (!playersByWeek[row.week][row.player_name]) {
-      playersByWeek[row.week][row.player_name] = { name: row.player_name };
+    const wk = row.game_id ? (gameIdToWeek[row.game_id] ?? null) : null;
+    if (!wk) continue; // skip rows we can't reliably assign to a week
+    if (!playersByWeek[wk]) playersByWeek[wk] = {};
+    if (!playersByWeek[wk][row.player_name]) {
+      playersByWeek[wk][row.player_name] = { name: row.player_name };
     }
-    playersByWeek[row.week][row.player_name][row.stat_type] = row.value;
+    playersByWeek[wk][row.player_name][row.stat_type] = row.value;
   }
 
   return Array.from({ length: TOTAL_WEEKS }, (_, i) => {
