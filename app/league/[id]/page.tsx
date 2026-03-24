@@ -1458,10 +1458,9 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
       </div>
 
       {/* Column headers */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px 36px 80px', gap: 8, padding: '4px 12px', marginBottom: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 36px 80px', gap: 8, padding: '4px 12px', marginBottom: 4 }}>
         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>PLAYER</div>
         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>PROJ</div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>ADP</div>
         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>RK</div>
         <div />
       </div>
@@ -1479,7 +1478,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         const posRank   = posRankMap.get(`${p.school}||${p.unitType}`) ?? null;
         return (
           <div key={p.id} onClick={() => setViewing(p)} style={{
-            display: 'grid', gridTemplateColumns: '1fr 60px 60px 36px 80px', gap: 8, alignItems: 'center',
+            display: 'grid', gridTemplateColumns: '1fr 60px 36px 80px', gap: 8, alignItems: 'center',
             background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10,
             padding: '10px 14px', marginBottom: 5, cursor: 'pointer',
             boxShadow: '0 1px 4px rgba(0,0,0,0.25)', transition: 'border-color .15s',
@@ -1500,7 +1499,6 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
               </div>
             </div>
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.gold, textAlign: 'right' }}>{weeklyProj(p.projectedPoints).toFixed(1)}</div>
-            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.adp.toFixed(1)}</div>
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700, color: posRank === 1 ? C.gold : C.muted, textAlign: 'right' }}>
               {posRank != null ? `#${posRank}` : ''}
             </div>

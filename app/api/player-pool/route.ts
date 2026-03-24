@@ -55,6 +55,20 @@ export async function GET() {
       .is('player_name', null)
       .limit(100000);
 
+    // Fetch QB and K starters from cached_players (depth_chart_position=1 preferred)
+    const { data: starterRows } = await admin
+      .from('cached_players')
+      .select('school, position, player_name, depth_chart_position')
+      .in('position', ['QB', 'K'])
+      .order('depth_chart_position', { ascending: true, nullsFirst: false });
+
+    // Build starter map: "school||unitType" → playerName (first = depth_chart_position 1)
+    const starterMap: Record<string, string> = {};
+    for (const p of starterRows ?? []) {
+      const key = `${p.school}||${p.position}`;
+      if (!(key in starterMap)) starterMap[key] = p.player_name;
+    }
+
     if (error) throw error;
 
     // Aggregate per-week average from live data, keyed by school||unitType.
@@ -121,11 +135,15 @@ export async function GET() {
       arr.forEach(({ school, pts, seasonTotal }, rank) => {
         const conf = schoolConf[school];
         if (!conf) return;
+        const starterName = (unitType === 'QB' || unitType === 'K')
+          ? (starterMap[`${school}||${unitType}`] ?? undefined)
+          : undefined;
         pool.push({
           id:              uid(school, unitType),
           school,
           conference:      conf,
           unitType,
+          playerName:      starterName,
           tier:            tierFromRank(rank, arr.length),
           adp:             adpMap.get(`${school}||${unitType}`) ?? rank + 1,
           projectedPoints: Math.round(pts),
