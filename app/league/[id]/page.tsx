@@ -106,19 +106,37 @@ function buildUnitRankMaps(picks: any[]): Record<string, Record<string, number>>
   return maps;
 }
 
+/** Build global unit rank maps from player-pool API data (all schools, all unit types). */
+function buildPoolRankMaps(pool: { school: string; unitType: string; projectedPoints: number }[]): Record<string, Record<string, number>> {
+  const byType: Record<string, { school: string; pts: number }[]> = {};
+  for (const p of pool) {
+    if (!p.school || !p.unitType) continue;
+    if (!byType[p.unitType]) byType[p.unitType] = [];
+    byType[p.unitType].push({ school: p.school, pts: p.projectedPoints ?? 0 });
+  }
+  const maps: Record<string, Record<string, number>> = {};
+  for (const [ut, units] of Object.entries(byType)) {
+    const sorted = [...units].sort((a, b) => b.pts - a.pts);
+    maps[ut] = {};
+    sorted.forEach(({ school }, idx) => { maps[ut][school] = idx + 1; });
+  }
+  return maps;
+}
+
 /** Renders the 3-line player info block used in every roster/matchup row. */
 function PlayerInfoLines({
-  school, unitType, playerName, ctx, ep, align, seasonPts, unitRankMap,
+  school, unitType, playerName, ctx, ep, align, seasonPts, unitRankMaps,
 }: {
   school: string; unitType: string; playerName?: string;
   ctx: MatchupCtx; ep: { pts: number; isActual: boolean; base: number; storedMult: number | null };
   align?: 'left' | 'right';
   seasonPts?: number;
-  unitRankMap?: Record<string, number>;
+  unitRankMaps?: Record<string, Record<string, number>>;
 }) {
   const opponent   = ctx?.opponentMap[school] ?? null;
-  const schoolRank = unitRankMap ? (unitRankMap[school] ?? null) : null;
-  const oppRank    = unitRankMap && opponent ? (unitRankMap[opponent] ?? null) : null;
+  // School's rank within its own unit type; opponent's rank within DEF
+  const schoolRank = unitRankMaps?.[unitType]?.[school] ?? null;
+  const oppRank    = opponent ? (unitRankMaps?.['DEF']?.[opponent] ?? null) : null;
 
   const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? 999) : null;
 
@@ -130,8 +148,9 @@ function PlayerInfoLines({
   const name = playerName ? playerName : `${school} ${unitType} Unit`;
 
   // Line 2: show matchup if opponent found, BYE if no game this week, or just school
+  // Format: "Georgia Tech (RB #4) vs Colorado (DEF #18)" — NR if no data
   const matchupLine = opponent
-    ? `${school}${schoolRank ? ` (#${schoolRank})` : ''} vs ${opponent}${oppRank ? ` (#${oppRank})` : ''}`
+    ? `${school} (${unitType} ${schoolRank != null ? `#${schoolRank}` : 'NR'}) vs ${opponent} (DEF ${oppRank != null ? `#${oppRank}` : 'NR'})`
     : ctx && !opponent
       ? `${school} · BYE`
       : school;
@@ -2052,7 +2071,7 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView }
       ep={ep}
       align={align}
       seasonPts={pick.player_data?.projectedPoints ?? 0}
-      unitRankMap={unitRankMaps?.[pick.player_data?.unitType ?? '']}
+      unitRankMaps={unitRankMaps}
     />
   );
   const score = (
@@ -2078,11 +2097,16 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView }
 
 function MatchupTab({ league, userId }: { league: any; userId: string | null }) {
   const [picks,         setPicks]         = useState<any[]>([]);
+  const [pool,          setPool]          = useState<any[]>([]);
   const [week,          setWeek]          = useState(1);
   const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
   const [gameStats,     setGameStats]     = useState<GameStats>(null);
   const [loading,       setLoading]       = useState(true);
   const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
+
+  useEffect(() => {
+    fetch('/api/player-pool').then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!league?.id) return;
@@ -2102,7 +2126,7 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   const draftOrder: any[] = league?.settings?.draft_order || [];
   const numTeams = draftOrder.length;
 
-  const unitRankMaps = useMemo(() => buildUnitRankMaps(picks), [picks]);
+  const unitRankMaps = useMemo(() => buildPoolRankMaps(pool), [pool]);
 
   const myEntry    = draftOrder.find((t: any) => t.userId === userId);
   const mySlotIdx  = myEntry ? myEntry.slot - 1 : -1;
@@ -2241,6 +2265,7 @@ function canFillSlot(unitType: string, slotLabel: string): boolean {
 function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const [myPicks,       setMyPicks]       = useState<any[]>([]);
   const [allPicks,      setAllPicks]      = useState<any[]>([]);
+  const [pool,          setPool]          = useState<any[]>([]);
   const [lineups,       setLineups]       = useState<Record<string, (string | null)[]>>({});
   const [week,          setWeek]          = useState(1);
   const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
@@ -2256,6 +2281,10 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const TOTAL_WEEKS    = 14;
   const PLAYOFF_START  = 12;
   const isCommissioner = league?.commissioner_id === userId;
+
+  useEffect(() => {
+    fetch('/api/player-pool').then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setGameStats(null);
@@ -2322,7 +2351,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league?.id, userId]);
 
-  const unitRankMaps = useMemo(() => buildUnitRankMaps(allPicks), [allPicks]);
+  const unitRankMaps = useMemo(() => buildPoolRankMaps(pool), [pool]);
 
   const draftOrder: any[] = league?.settings?.draft_order || [];
   const myEntry           = draftOrder.find((t: any) => t.userId === userId);
@@ -2514,7 +2543,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                   ctx={matchupCtx}
                   ep={ep}
                   seasonPts={pick?.player_data?.projectedPoints ?? 0}
-                  unitRankMap={unitRankMaps[pick?.player_data?.unitType ?? '']}
+                  unitRankMaps={unitRankMaps}
                 />
               ) : (
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
@@ -2588,7 +2617,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                     ctx={matchupCtx}
                     ep={bep}
                     seasonPts={pick.player_data?.projectedPoints ?? 0}
-                    unitRankMap={unitRankMaps[pick.player_data?.unitType ?? '']}
+                    unitRankMaps={unitRankMaps}
                   />
                 </div>
 
@@ -2642,6 +2671,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
   const [gameStats,     setGameStats]     = useState<GameStats>(null);
   const [allPicks,      setAllPicks]      = useState<any[]>([]);
+  const [pool,          setPool]          = useState<any[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [tradeOffer,    setTradeOffer]    = useState<Set<string>>(new Set());
   const [tradeRequest,  setTradeRequest]  = useState<Set<string>>(new Set());
@@ -2654,6 +2684,10 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   const isCommissioner     = league?.commissioner_id === userId;
   const myEntry            = draftOrder.find((t: any) => t.userId === userId);
   const mySlotIdx          = myEntry ? myEntry.slot - 1 : -1;
+
+  useEffect(() => {
+    fetch('/api/player-pool').then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setGameStats(null);
@@ -2681,7 +2715,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
     load();
   }, [league?.id, userId]);
 
-  const unitRankMaps = useMemo(() => buildUnitRankMaps(allPicks), [allPicks]);
+  const unitRankMaps = useMemo(() => buildPoolRankMaps(pool), [pool]);
 
   function getTeamPicks(team: any): any[] {
     if (numTeams === 0) return [];
@@ -2939,7 +2973,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                     ctx={matchupCtx}
                     ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats)}
                     seasonPts={pick.player_data?.projectedPoints ?? 0}
-                    unitRankMap={unitRankMaps[pick.player_data?.unitType ?? '']}
+                    unitRankMaps={unitRankMaps}
                                 />
                 ) : <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>}
               </div>
@@ -2973,7 +3007,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                       ctx={matchupCtx}
                       ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats)}
                       seasonPts={pick.player_data?.projectedPoints ?? 0}
-                      unitRankMap={unitRankMaps[pick.player_data?.unitType ?? '']}
+                      unitRankMaps={unitRankMaps}
                                     />
                   </div>
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts.toFixed(1)}</div>
