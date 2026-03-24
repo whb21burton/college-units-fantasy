@@ -74,7 +74,7 @@ export async function GET() {
     }
 
     // Build complete pool: every CONFERENCES school × every unit type, no gaps
-    type Entry = { school: string; unitType: UnitType; pts: number; isLive: boolean };
+    type Entry = { school: string; unitType: UnitType; pts: number; seasonTotal: number; isLive: boolean };
     const allEntries: Entry[] = [];
 
     for (const schools of Object.values(CONFERENCES)) {
@@ -82,24 +82,25 @@ export async function GET() {
         for (const unitType of UNIT_TYPES) {
           const key = `${school}||${unitType}`;
           if (key in liveSums) {
-            // Project from actual avg: (sum / weeksPlayed) * 14
+            // Project from actual avg for display; keep raw sum for ranking
             const avgPerWeek = liveSums[key] / liveCounts[key];
-            allEntries.push({ school, unitType, pts: avgPerWeek * TOTAL_WEEKS, isLive: true });
+            allEntries.push({ school, unitType, pts: avgPerWeek * TOTAL_WEEKS, seasonTotal: liveSums[key], isLive: true });
           } else {
             // Fall back to FULL_POOL static 14-week season projection
-            allEntries.push({ school, unitType, pts: fullPoolMap[key] ?? 0, isLive: false });
+            const fp = fullPoolMap[key] ?? 0;
+            allEntries.push({ school, unitType, pts: fp, seasonTotal: fp, isLive: false });
           }
         }
       }
     }
 
-    // Group by unit type; within each group sort live-data first, then by pts desc
+    // Group by unit type; within each group sort live-data first, then by seasonTotal desc
     const byUnit: Record<UnitType, Entry[]> = { QB: [], RB: [], WR: [], TE: [], DEF: [], K: [] };
     for (const entry of allEntries) byUnit[entry.unitType].push(entry);
     for (const arr of Object.values(byUnit)) {
       arr.sort((a, b) => {
         if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-        return b.pts - a.pts;
+        return b.seasonTotal - a.seasonTotal;
       });
     }
 
@@ -108,7 +109,7 @@ export async function GET() {
       .flatMap(([unitType, arr]) => arr.map(u => ({ ...u, unitType })))
       .sort((a, b) => {
         if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-        return b.pts - a.pts;
+        return b.seasonTotal - a.seasonTotal;
       });
 
     const adpMap = new Map<string, number>();
@@ -117,7 +118,7 @@ export async function GET() {
     // Assemble DraftUnit[]
     const pool: DraftUnit[] = [];
     for (const [unitType, arr] of Object.entries(byUnit) as [UnitType, Entry[]][]) {
-      arr.forEach(({ school, pts }, rank) => {
+      arr.forEach(({ school, pts, seasonTotal }, rank) => {
         const conf = schoolConf[school];
         if (!conf) return;
         pool.push({
@@ -128,13 +129,14 @@ export async function GET() {
           tier:            tierFromRank(rank, arr.length),
           adp:             adpMap.get(`${school}||${unitType}`) ?? rank + 1,
           projectedPoints: Math.round(pts),
+          seasonTotal:     Math.round(seasonTotal),
         });
       });
     }
 
-    // Sort by projectedPoints desc; ADP ascending as tiebreaker
+    // Sort by seasonTotal desc (actual points); ADP ascending as tiebreaker
     pool.sort((a, b) => {
-      const diff = b.projectedPoints - a.projectedPoints;
+      const diff = (b.seasonTotal ?? 0) - (a.seasonTotal ?? 0);
       return diff !== 0 ? diff : a.adp - b.adp;
     });
 

@@ -11,6 +11,7 @@ export interface DraftUnit {
   tier: Tier;
   adp: number;         // average draft position (lower = better)
   projectedPoints: number;
+  seasonTotal?: number; // actual season fantasy points summed from cached_stats (used for ranking)
 }
 
 // ── Roster slots & caps ──────────────────────────────────────

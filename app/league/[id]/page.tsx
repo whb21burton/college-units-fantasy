@@ -106,13 +106,15 @@ function buildUnitRankMaps(picks: any[]): Record<string, Record<string, number>>
   return maps;
 }
 
-/** Build global unit rank maps from player-pool API data (all schools, all unit types). */
-function buildPoolRankMaps(pool: { school: string; unitType: string; projectedPoints: number }[]): Record<string, Record<string, number>> {
+/** Build global unit rank maps from player-pool API data (all schools, all unit types).
+ *  Ranks by seasonTotal (actual cached_stats sum) so live teams rank above projection-only teams. */
+function buildPoolRankMaps(pool: { school: string; unitType: string; projectedPoints: number; seasonTotal?: number }[]): Record<string, Record<string, number>> {
   const byType: Record<string, { school: string; pts: number }[]> = {};
   for (const p of pool) {
     if (!p.school || !p.unitType) continue;
     if (!byType[p.unitType]) byType[p.unitType] = [];
-    byType[p.unitType].push({ school: p.school, pts: p.projectedPoints ?? 0 });
+    // Use seasonTotal (actual sum) when available, fall back to projectedPoints
+    byType[p.unitType].push({ school: p.school, pts: p.seasonTotal ?? p.projectedPoints ?? 0 });
   }
   const maps: Record<string, Record<string, number>> = {};
   for (const [ut, units] of Object.entries(byType)) {
@@ -1276,7 +1278,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     byUnitType[p.unitType].push(p);
   }
   for (const arr of Object.values(byUnitType)) {
-    arr.sort((a, b) => b.projectedPoints - a.projectedPoints || a.adp - b.adp);
+    arr.sort((a, b) => ((b.seasonTotal ?? b.projectedPoints) - (a.seasonTotal ?? a.projectedPoints)) || a.adp - b.adp);
     arr.forEach((p, i) => posRankMap.set(`${p.school}||${p.unitType}`, i + 1));
   }
 
