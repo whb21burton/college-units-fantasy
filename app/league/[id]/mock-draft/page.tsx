@@ -134,8 +134,11 @@ export default function MockDraftPage() {
     Array.from({ length: 12 }, emptyRoster)
   );
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [effMap,    setEffMap]    = useState<Record<string, TeamEfficiency>>({});
-  const [poolData,  setPoolData]  = useState<DraftUnit[]>([]);
+  const [effMap,       setEffMap]       = useState<Record<string, TeamEfficiency>>({});
+  const [poolData,     setPoolData]     = useState<DraftUnit[]>([]);
+  const [viewingUnit,  setViewingUnit]  = useState<DraftUnit | null>(null);
+  const [unitStats,    setUnitStats]    = useState<any | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   useEffect(() => {
     // Fetch real player pool from CFBD API
@@ -159,6 +162,16 @@ export default function MockDraftPage() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!viewingUnit) { setUnitStats(null); return; }
+    setStatsLoading(true);
+    setUnitStats(null);
+    fetch(`/api/unit-stats?school=${encodeURIComponent(viewingUnit.school)}&unitType=${viewingUnit.unitType}&season=2025`)
+      .then(r => r.json())
+      .then(d => { setUnitStats(d); setStatsLoading(false); })
+      .catch(() => setStatsLoading(false));
+  }, [viewingUnit?.school, viewingUnit?.unitType]);
 
   const currentTeam = getTeamForPick(currentPickNum, numTeams);
   const isMyTurn = currentTeam === USER_TEAM;
@@ -336,6 +349,157 @@ export default function MockDraftPage() {
           </table>
         </div>
       </div>
+      {/* ── Unit Stats Panel ────────────────────────────────────── */}
+      {viewingUnit && (() => {
+        const S = { passYd: 0.05, passTd: 4, int: -2, rushYd: 0.05, rushTd: 6, recYd: 0.05, recTd: 6 };
+        const ut = viewingUnit.unitType;
+        const canPickPanel = isMyTurn && !draftComplete && (rosters[USER_TEAM][ut] || 0) < POSITION_CAPS[ut];
+        const weeks: any[] = unitStats?.weeks ?? [];
+        const completedWeeks = weeks.filter(w => w.completed);
+        const seasonTotal = completedWeeks.reduce((s: number, w: any) => s + (w.fantasyPoints ?? 0), 0);
+
+        const playerTotals: Record<string, any> = {};
+        for (const wk of completedWeeks) {
+          for (const p of wk.players ?? []) {
+            if (!p.name) continue;
+            if (!playerTotals[p.name]) playerTotals[p.name] = { name: p.name, fpts: 0, ...Object.fromEntries(Object.keys(p).filter(k => k !== 'name').map(k => [k, 0])) };
+            let wkFpts = 0;
+            if (ut === 'QB') wkFpts = (p.passYd||0)*S.passYd + (p.passTd||0)*S.passTd + (p.int||0)*S.int + (p.rushYd||0)*S.rushYd + (p.rushTd||0)*S.rushTd;
+            else if (ut === 'RB') wkFpts = (p.rushYd||0)*S.rushYd + (p.rushTd||0)*S.rushTd + (p.recYd||0)*S.recYd;
+            else if (ut === 'WR' || ut === 'TE') wkFpts = (p.recYd||0)*S.recYd + (p.recTd||0)*S.recTd;
+            playerTotals[p.name].fpts += wkFpts;
+            for (const k of Object.keys(p)) { if (k !== 'name' && typeof p[k] === 'number') playerTotals[p.name][k] = (playerTotals[p.name][k] || 0) + p[k]; }
+          }
+        }
+        const topPlayers = Object.values(playerTotals).sort((a: any, b: any) => b.fpts - a.fpts).slice(0, 3);
+
+        const statCols: { key: string; label: string }[] = ut === 'QB'
+          ? [{ key: 'passYd', label: 'PASS YDS' }, { key: 'passTd', label: 'TD' }, { key: 'int', label: 'INT' }, { key: 'rushYd', label: 'RSH YDS' }]
+          : ut === 'RB'
+          ? [{ key: 'rushAtt', label: 'ATT' }, { key: 'rushYd', label: 'YDS' }, { key: 'rushTd', label: 'TD' }, { key: 'rec', label: 'REC' }, { key: 'recYd', label: 'REC YDS' }]
+          : ut === 'WR' || ut === 'TE'
+          ? [{ key: 'rec', label: 'REC' }, { key: 'recYd', label: 'YDS' }, { key: 'recTd', label: 'TD' }]
+          : ut === 'DEF'
+          ? [{ key: 'sacks', label: 'SACK' }, { key: 'ints', label: 'INT' }, { key: 'fumRec', label: 'FUM' }, { key: 'defTd', label: 'TD' }]
+          : [{ key: 'pts', label: 'PTS' }];
+
+        const accentColors = [C.gold, C.sub, C.muted];
+
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(5,8,15,0.65)' }} onClick={() => setViewingUnit(null)}>
+            <div onClick={e => e.stopPropagation()} style={{
+              position: 'absolute', top: 0, right: 0, width: 420, height: '100vh',
+              background: C.surf, borderLeft: `1px solid ${C.surf3}`,
+              display: 'flex', flexDirection: 'column', overflowY: 'hidden',
+            }}>
+              {/* Header */}
+              <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.surf3}`, flexShrink: 0, background: C.surf2 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <div style={{ padding: '2px 8px', borderRadius: 4, background: `${POS_COLORS[ut]}22`, color: POS_COLORS[ut], fontSize: 9, fontWeight: 700, letterSpacing: 1, flexShrink: 0 }}>{ut}</div>
+                      <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 15, letterSpacing: 1, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {viewingUnit.school}{viewingUnit.playerName ? ` · ${viewingUnit.playerName}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: C.sub, letterSpacing: .5 }}>{viewingUnit.conference} · {viewingUnit.tier} · {viewingUnit.projectedPoints} proj pts/season</div>
+                    {completedWeeks.length > 0 && <div style={{ fontSize: 10, color: C.gold, marginTop: 3 }}>{seasonTotal.toFixed(1)} actual pts · {completedWeeks.length} games</div>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
+                    <button onClick={() => setViewingUnit(null)} style={{ background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '4px 10px', color: C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+                    <button
+                      onClick={() => { if (canPickPanel) { makePick(viewingUnit); setViewingUnit(null); } }}
+                      disabled={!canPickPanel}
+                      style={{
+                        padding: '6px 14px', borderRadius: 6, fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 1,
+                        border: canPickPanel ? `1px solid ${C.gold}88` : `1px solid ${C.surf3}`,
+                        background: canPickPanel ? `${C.gold}22` : 'transparent',
+                        color: canPickPanel ? C.gold : C.surf3,
+                        cursor: canPickPanel ? 'pointer' : 'default',
+                        boxShadow: canPickPanel ? `0 0 10px ${C.gold}33` : 'none',
+                      }}
+                    >DRAFT</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
+                {statsLoading && (
+                  <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontSize: 11, letterSpacing: 1 }}>Loading stats...</div>
+                )}
+
+                {!statsLoading && unitStats && (
+                  <>
+                    {/* Game Log */}
+                    <div style={{ fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }}>Game Log</div>
+                    <div style={{ overflowX: 'auto', marginBottom: 20 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+                        <thead>
+                          <tr style={{ background: C.surf2 }}>
+                            {['WK', 'OPP', 'FPTS', 'ODR', ...statCols.map(c => c.label)].map(h => (
+                              <th key={h} style={{ padding: '5px 6px', color: C.muted, fontWeight: 400, letterSpacing: 1, textAlign: 'right', borderBottom: `1px solid ${C.surf3}`, whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {weeks.map((wk: any) => {
+                            const p0 = wk.players?.[0];
+                            const odr = wk.multiplier != null ? wk.multiplier.toFixed(2) : '—';
+                            return (
+                              <tr key={wk.week} style={{ borderBottom: `1px solid ${C.surf3}22`, opacity: wk.completed ? 1 : 0.4 }}>
+                                <td style={{ padding: '5px 6px', color: C.muted, textAlign: 'right' }}>{wk.week}</td>
+                                <td style={{ padding: '5px 6px', color: C.sub, textAlign: 'right', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wk.opponent ? (wk.opponent.length > 10 ? wk.opponent.slice(0, 10) + '…' : wk.opponent) : '—'}</td>
+                                <td style={{ padding: '5px 6px', color: wk.completed ? C.gold : C.muted, textAlign: 'right', fontWeight: 700 }}>{wk.completed ? (wk.fantasyPoints ?? 0).toFixed(1) : '—'}</td>
+                                <td style={{ padding: '5px 6px', color: C.sub, textAlign: 'right' }}>{wk.completed ? odr + '×' : '—'}</td>
+                                {statCols.map(col => (
+                                  <td key={col.key} style={{ padding: '5px 6px', color: C.text, textAlign: 'right' }}>
+                                    {wk.completed && p0 != null ? (p0[col.key] ?? 0) : '—'}
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Top Contributors */}
+                    {topPlayers.length > 0 && ut !== 'DEF' && ut !== 'K' && (
+                      <>
+                        <div style={{ fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }}>Top Contributors</div>
+                        {topPlayers.map((p: any, idx: number) => {
+                          const accent = accentColors[idx];
+                          const statLine = ut === 'QB'
+                            ? `${Math.round(p.passYd||0)} pass yds · ${Math.round(p.passTd||0)} TD · ${Math.round(p.rushYd||0)} rush yds`
+                            : ut === 'RB'
+                            ? `${Math.round(p.rushYd||0)} rush yds · ${Math.round(p.rushTd||0)} TD · ${Math.round(p.recYd||0)} rec yds`
+                            : `${Math.round(p.recYd||0)} rec yds · ${Math.round(p.recTd||0)} TD`;
+                          return (
+                            <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 7, marginBottom: 6, borderLeft: `3px solid ${accent}` }}>
+                              <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 13, color: accent, flexShrink: 0, width: 22, textAlign: 'right' }}>#{idx + 1}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                                <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>{statLine}</div>
+                              </div>
+                              <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 13, color: accent, flexShrink: 0 }}>{p.fpts.toFixed(1)}</div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    )}
+
+                    {completedWeeks.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontSize: 11 }}>No games played yet this season.</div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Player Pool */}
       <div style={{ width: 320, background: C.surf, borderLeft: `1px solid ${C.surf3}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
         <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.surf3}` }}>
@@ -352,31 +516,42 @@ export default function MockDraftPage() {
           )}
           {filteredAvailable.slice(0, 80).map((unit, i) => {
             const overCap = (rosters[USER_TEAM][unit.unitType] || 0) >= POSITION_CAPS[unit.unitType];
+            const canPick = isMyTurn && !overCap && !draftComplete;
             return (
-              <div key={unit.id} className="pick-row" onClick={() => isMyTurn && !overCap && makePick(unit)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${C.surf3}22`, opacity: overCap ? 0.35 : 1, background: 'transparent', transition: 'background .1s', cursor: isMyTurn && !overCap ? 'pointer' : 'default' }}>
-                <div style={{ width: 20, fontSize: 10, color: C.muted, flexShrink: 0, textAlign: 'right' }}>{i + 1}</div>
-                <div style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, background: `${POS_COLORS[unit.unitType]}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, fontWeight: 700 }}>{unit.unitType}</div>
+              <div key={unit.id} className="pick-row" onClick={() => setViewingUnit(unit)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}22`, opacity: overCap ? 0.35 : 1, background: viewingUnit?.id === unit.id ? C.surf2 : 'transparent', transition: 'background .1s', cursor: 'pointer' }}>
+                {/* DRAFT button — LEFT */}
+                <button
+                  onClick={e => { e.stopPropagation(); if (canPick) makePick(unit); }}
+                  disabled={!canPick}
+                  style={{
+                    padding: '5px 7px', borderRadius: 5, flexShrink: 0, minWidth: 46,
+                    border: canPick ? `1px solid ${C.gold}88` : `1px solid ${C.surf3}`,
+                    background: canPick ? `${C.gold}18` : 'transparent',
+                    color: canPick ? C.gold : C.surf3,
+                    fontFamily: "'Anton', sans-serif", fontSize: 9, letterSpacing: 1,
+                    cursor: canPick ? 'pointer' : 'default',
+                    boxShadow: canPick ? `0 0 8px ${C.gold}33` : 'none',
+                    transition: 'all .15s',
+                  }}
+                >DRAFT</button>
+                <div style={{ width: 18, fontSize: 10, color: C.muted, flexShrink: 0, textAlign: 'right' }}>{i + 1}</div>
+                <div style={{ width: 26, height: 26, borderRadius: 5, flexShrink: 0, background: `${POS_COLORS[unit.unitType]}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, fontWeight: 700 }}>{unit.unitType}</div>
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{unit.school}{unit.playerName && <span style={{ color: C.sub, fontWeight: 400 }}> · {unit.playerName}</span>}</div>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 5, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, padding: '1px 5px', background: `${POS_COLORS[unit.unitType]}18`, borderRadius: 3 }}>{unit.tier}</span>
                     <span style={{ fontSize: 9, color: C.muted }}>{unit.projectedPoints} pts</span>
                     {effMap[unit.school] && (() => {
                       const eff = effMap[unit.school];
                       return (
                         <>
-                          <span title={`OFF ${eff.off_percentile}th percentile`} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: effBadgeBg(eff.off_multiplier), color: '#fff', fontWeight: 700, letterSpacing: .5 }}>
-                            OFF {eff.off_multiplier.toFixed(2)}×
-                          </span>
-                          <span title={`DEF ${eff.def_percentile}th percentile`} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: effBadgeBg(eff.def_multiplier), color: '#fff', fontWeight: 700, letterSpacing: .5 }}>
-                            DEF {eff.def_multiplier.toFixed(2)}×
-                          </span>
+                          <span title={`OFF ${eff.off_percentile}th percentile`} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: effBadgeBg(eff.off_multiplier), color: '#fff', fontWeight: 700, letterSpacing: .5 }}>OFF {eff.off_multiplier.toFixed(2)}×</span>
+                          <span title={`DEF ${eff.def_percentile}th percentile`} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: effBadgeBg(eff.def_multiplier), color: '#fff', fontWeight: 700, letterSpacing: .5 }}>DEF {eff.def_multiplier.toFixed(2)}×</span>
                         </>
                       );
                     })()}
                   </div>
                 </div>
-                <div style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>{unit.projectedPoints} pts</div>
               </div>
             );
           })}
