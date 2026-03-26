@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       league_size:     body.league_size ?? 8,
       draft_type:      body.draft_type ?? 'snake',
       salary_cap:      body.salary_cap ?? 200,
+      conference_filter: isPublic ? (body.conference_filter ?? 'ALL') : 'ALL',
       is_public:       isPublic,
       league_type:     body.league_type ?? 'season',
       week:            body.week ?? null,

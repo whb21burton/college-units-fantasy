@@ -26,10 +26,11 @@ export function CreateLeagueWizard() {
   const [error, setError]     = useState<string | null>(null);
   const [createdLeague, setCreatedLeague] = useState<{ id: string; invite_code: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [isPublic,    setIsPublic]    = useState(false);
-  const [isAdmin,     setIsAdmin]     = useState(false);
-  const [leagueType,  setLeagueType]  = useState<'season' | 'weekly'>('season');
-  const [week,        setWeek]        = useState<number>(1);
+  const [isPublic,         setIsPublic]         = useState(false);
+  const [isAdmin,          setIsAdmin]          = useState(false);
+  const [leagueType,       setLeagueType]       = useState<'season' | 'weekly'>('season');
+  const [week,             setWeek]             = useState<number>(1);
+  const [conferenceFilter, setConferenceFilter] = useState<string>('ALL');
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -57,15 +58,19 @@ export function CreateLeagueWizard() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name:        form.name.trim(),
-        buy_in:      form.buy_in,
-        league_size: form.league_size,
-        draft_type:  leagueType === 'season' ? form.draft_type : 'snake',
-        salary_cap:  form.salary_cap,
-        is_public:   isPublic,   // server enforces admin-only; just pass intent
-        league_type: leagueType,
-        week:        leagueType === 'weekly' ? week : null,
-        team_name:   form.team_name.trim() || 'My Team',
+        name:              form.name.trim(),
+        buy_in:            form.buy_in,
+        league_size:       form.league_size,
+        // Public season leagues: draft_type derived from conference selection
+        draft_type:        leagueType === 'season'
+          ? (isPublic ? (conferenceFilter === 'ALL' ? 'salary' : 'snake') : form.draft_type)
+          : 'snake',
+        salary_cap:        form.salary_cap,
+        is_public:         isPublic,
+        conference_filter: isPublic ? conferenceFilter : 'ALL',
+        league_type:       leagueType,
+        week:              leagueType === 'weekly' ? week : null,
+        team_name:         form.team_name.trim() || 'My Team',
       }),
     });
 
@@ -280,6 +285,40 @@ export function CreateLeagueWizard() {
               </div>
             )}
 
+            {/* Conference Pool — only for admin public season leagues */}
+            {isPublic && isAdmin && leagueType === 'season' && (
+              <>
+                <Spacer />
+                <FieldLabel>Conference Pool</FieldLabel>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <ToggleBtn active={conferenceFilter === 'ALL'} onClick={() => setConferenceFilter('ALL')}>
+                    <div style={{ fontSize: 18, marginBottom: 4 }}>🌎</div>
+                    <strong>All D1 Schools</strong>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Salary cap · $200 budget</div>
+                  </ToggleBtn>
+                  <ToggleBtn active={conferenceFilter !== 'ALL'} onClick={() => { if (conferenceFilter === 'ALL') setConferenceFilter('SEC'); }}>
+                    <div style={{ fontSize: 18, marginBottom: 4 }}>🏟️</div>
+                    <strong>One Conference</strong>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Snake draft · pick below</div>
+                  </ToggleBtn>
+                </div>
+                {conferenceFilter !== 'ALL' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 6 }}>
+                    {(['SEC', 'Big Ten', 'ACC', 'Big 12', 'Pac-12', 'Independent'] as const).map(conf => (
+                      <ToggleBtn key={conf} active={conferenceFilter === conf} onClick={() => setConferenceFilter(conf)}>
+                        {conf}
+                      </ToggleBtn>
+                    ))}
+                  </div>
+                )}
+                <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(212,168,40,.06)', border: '1px solid rgba(212,168,40,.15)', borderRadius: 6, fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.sub }}>
+                  {conferenceFilter === 'ALL'
+                    ? '💰 Salary cap draft — $200 budget, players priced by position rank'
+                    : `🐍 Snake draft — ${conferenceFilter} schools only`}
+                </div>
+              </>
+            )}
+
             {leagueType === 'weekly' && (
               <>
                 <Spacer />
@@ -294,7 +333,8 @@ export function CreateLeagueWizard() {
               </>
             )}
 
-            {leagueType === 'season' && (
+            {/* Manual draft type only for private season leagues */}
+            {leagueType === 'season' && !isPublic && (
               <>
                 <Spacer />
                 <FieldLabel>Draft Type</FieldLabel>
@@ -397,7 +437,9 @@ export function CreateLeagueWizard() {
               ['League Size',  `${form.league_size} teams`],
               ['Buy-In',       form.buy_in === 0 ? 'Free' : `$${form.buy_in} per team · $${form.buy_in * form.league_size} total pot`],
               ['Visibility',   isPublic ? '🌐 Public — listed in leagues browser' : '🔒 Private — invite link only'],
-              ...(leagueType === 'season'
+              ...(isPublic && leagueType === 'season'
+                ? [['Conference Pool', conferenceFilter === 'ALL' ? '🌎 All D1 · Salary Cap ($200)' : `🏟️ ${conferenceFilter} · Snake Draft`]]
+                : leagueType === 'season'
                 ? [['Draft Type', form.draft_type === 'snake' ? '🐍 Snake Draft' : `💰 Salary Cap ($${form.salary_cap})`]]
                 : [['Scoring',   '1st: 80% · 2nd: 20% of prize pool']]),
               ['Your Team',   form.team_name],
@@ -562,7 +604,7 @@ export function CreateLeagueWizard() {
             </span>
             <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10,
               color: C.muted, letterSpacing: 1, marginTop: 4 }}>
-              Draft opens once all spots are filled
+              {isPublic ? 'Draft starts immediately when players join!' : 'Draft opens once all spots are filled'}
             </div>
           </div>
 

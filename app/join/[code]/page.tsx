@@ -52,7 +52,8 @@ export default function JoinPage({ params }: { params: { code: string } }) {
     if (!teamName.trim() || teamName.trim().length < 2) { setError('Team name must be at least 2 characters.'); return; }
     if (!league) return;
     setJoining(true); setError(null);
-    if (memberCount >= league.league_size) { setError('This league is full.'); setJoining(false); return; }
+    // For private leagues enforce capacity before calling the API
+    if (!league.is_public && memberCount >= league.league_size) { setError('This league is full.'); setJoining(false); return; }
     if (league.status !== 'forming') { setError('This league has already started.'); setJoining(false); return; }
 
     // POST to /api/wallet/join-contest (atomically deducts balance)
@@ -75,7 +76,9 @@ export default function JoinPage({ params }: { params: { code: string } }) {
       return;
     }
 
-    router.push('/league/' + league.id + '?joined=1');
+    // Public leagues: API returns redirect pointing straight to the draft room
+    const dest = data.redirect ?? ('/league/' + league.id + '?joined=1');
+    router.push(dest);
   }
 
   const spotsLeft   = league ? league.league_size - memberCount : 0;
