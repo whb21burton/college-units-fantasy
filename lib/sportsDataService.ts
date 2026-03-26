@@ -304,9 +304,12 @@ export async function syncStats(week: number, season: number): Promise<number> {
       }
     }
 
-    // Build player-stat map: key = `school||playerName||category` → stats
+    // Build player-stat map: key = `gameId||school||playerName||category` → stats
+    // game_id is included so per-game filtering is exact and never mixes stats
+    // from different games played by the same school in the same week.
     const playerStatMap: Record<string, Record<string, any>> = {};
     for (const game of playerStats as any[]) {
+      const gId = String(game.id ?? '');
       for (const team of (game.teams ?? [])) {
         const school: string = team.school ?? team.team ?? '';
         if (!school) continue;
@@ -314,8 +317,9 @@ export async function syncStats(week: number, season: number): Promise<number> {
           for (const type of (cat.types ?? [])) {
             for (const athlete of (type.athletes ?? [])) {
               const name: string = athlete.name ?? '';
-              const key = `${school}||${name}||${cat.name}`;
-              if (!playerStatMap[key]) playerStatMap[key] = { school, name, category: cat.name };
+              if (!name) continue;
+              const key = `${gId}||${school}||${name}||${cat.name}`;
+              if (!playerStatMap[key]) playerStatMap[key] = { gameId: gId, school, name, category: cat.name };
               playerStatMap[key][type.name] = (playerStatMap[key][type.name] || 0) + (parseFloat(athlete.stat) || 0);
             }
           }
@@ -335,8 +339,9 @@ export async function syncStats(week: number, season: number): Promise<number> {
         const mult     = rankMult(oppRank);
         const ts       = teamStatMap[school] ?? {};
 
+        // Filter to this specific game+school so stats from other games never bleed in
         const schoolEntries = Object.values(playerStatMap)
-          .filter((e: any) => e.school === school);
+          .filter((e: any) => e.gameId === gameId && e.school === school);
 
         const addStatRow = (playerName: string | null, statType: string, value: number) => {
           statRows.push({
@@ -403,9 +408,26 @@ export async function syncStats(week: number, season: number): Promise<number> {
           addStatRow(null, 'unit_QB', 0);
         }
 
-        // RB (team rushing)
+        // RB (team rushing — includes all rushers: QBs, WRs, etc.)
         const rawRB = (ts.rushingYards || 0) * S.rushYd + (ts.rushingTDs || 0) * S.rushTd;
         addStatRow(null, 'unit_RB', Math.round(rawRB * mult * 10) / 10);
+
+        // Mismatch check: sum of ALL individual rushing yards stored vs team rushing yards.
+        // A >20% gap means some players' stat rows are missing from the API response.
+        const sumIndivRushYds = schoolEntries
+          .filter((e: any) => e.category === 'rushing')
+          .reduce((s: number, e: any) => s + (e.YDS || 0), 0);
+        const teamRushYds = ts.rushingYards || 0;
+        if (teamRushYds > 10) {
+          const gap = Math.abs(sumIndivRushYds - teamRushYds) / teamRushYds;
+          if (gap > 0.2) {
+            console.warn(
+              `[syncStats] RB player-row mismatch: ${school} game_id=${gameId} w${week} — ` +
+              `individual sum=${sumIndivRushYds} yds vs team total=${teamRushYds} yds ` +
+              `(${(gap * 100).toFixed(0)}% gap, unit_RB=${Math.round(rawRB * mult * 10) / 10} pts)`,
+            );
+          }
+        }
 
         // WR / TE (top-5 receivers excl. QBs, same score for both)
         const recvs = schoolEntries
@@ -435,8 +457,7 @@ export async function syncStats(week: number, season: number): Promise<number> {
     }
 
     // Split into player rows (player_name NOT NULL) and unit/team rows (player_name IS NULL).
-    // Player rows can be safely upserted — the unique key (game_id, school, player_name, stat_type)
-    // works correctly because player_name is never NULL.
+    // Player rows are upserted using (game_id, school, player_name, stat_type) as the conflict key.
     // Unit/team rows (unit_QB, unit_RB, game_mult, team_*) have player_name=NULL.
     // PostgreSQL UNIQUE treats NULL≠NULL, so upsert would INSERT duplicates every run.
     // Fix: DELETE existing NULL-player rows for these game_ids, then INSERT fresh.
@@ -444,13 +465,31 @@ export async function syncStats(week: number, season: number): Promise<number> {
     const unitRows   = statRows.filter(r => r.player_name === null);
 
     const gameIds = Array.from(new Set(completedGames.map((g: any) => String(g.id))));
+    const schools = Array.from(new Set(completedGames.flatMap((g: any) => [g.homeTeam, g.awayTeam])));
+
     if (gameIds.length > 0) {
+      // Delete unit/team rows (player_name IS NULL) so we can re-insert fresh
       const { error: delErr } = await admin
         .from('cached_stats')
         .delete()
         .in('game_id', gameIds)
         .is('player_name', null);
       if (delErr) throw delErr;
+
+      // Delete any legacy player rows with game_id=NULL for these school+week+season combos.
+      // These were written before game_id was added to the key and are now invisible to
+      // sportsDataReader.ts (which requires game_id for reliable week lookup).
+      if (schools.length > 0) {
+        const { error: delNullErr } = await admin
+          .from('cached_stats')
+          .delete()
+          .in('school', schools)
+          .eq('week', week)
+          .eq('season', season)
+          .is('game_id', null)
+          .not('player_name', 'is', null);
+        if (delNullErr) console.warn('[syncStats] Failed to delete legacy null-game_id rows:', delNullErr.message);
+      }
     }
 
     const BATCH = 500;
