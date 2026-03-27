@@ -121,7 +121,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       const poolRes = await fetch(`/api/player-pool${confParam}`);
       if (poolRes.ok) {
         const data = await poolRes.json();
-        setPool(data.units ?? []);
+        setPool(Array.isArray(data) ? data : []);
       }
 
       // Load existing lineup for this week if any

@@ -234,8 +234,6 @@ const TABS: { key: Tab; label: string }[] = [
 const WEEKLY_TABS: { key: Tab; label: string }[] = [
   { key: 'lineup',      label: 'Lineup'      },
   { key: 'leaderboard', label: 'Leaderboard' },
-  { key: 'players',     label: 'Players'     },
-  { key: 'ranks',       label: 'Ranks'       },
 ];
 
 export default function LeaguePage({ params }: { params: { id: string } }) {
@@ -326,12 +324,14 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  // Auto-switch to Matchup tab when draft completes
+  // Auto-switch tabs based on league type / status
   useEffect(() => {
-    if (league?.status === 'active' && activeTab === 'draft') {
+    if (league?.league_type === 'weekly') {
+      setActiveTab('lineup');
+    } else if (league?.status === 'active' && activeTab === 'draft') {
       setActiveTab('matchup');
     }
-  }, [league?.status]);
+  }, [league?.league_type, league?.status]);
 
   const isCommissioner = userId === league?.commissioner_id;
   const myMember       = members.find((m: any) => m.user_id === userId);
