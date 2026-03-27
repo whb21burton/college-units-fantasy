@@ -23,6 +23,7 @@ type League = {
   status: string;
   invite_code: string;
   conference_filter: string;
+  commissioner_id: string;
   member_count: number;
 };
 
@@ -34,6 +35,7 @@ export default function PublicLeaguesPage() {
   const [filter,     setFilter]     = useState<'all' | 'free' | 'paid'>('all');
   const [confFilter, setConfFilter] = useState<string>('All Conferences');
   const [joining,    setJoining]    = useState<string | null>(null);
+  const [deleting,   setDeleting]   = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: u } }) => setUser(u ?? null));
@@ -44,7 +46,7 @@ export default function PublicLeaguesPage() {
       setLoading(true);
       const { data, error } = await supabase
         .from('leagues')
-        .select('id, name, buy_in, league_size, draft_type, league_type, week, status, invite_code, conference_filter')
+        .select('id, name, buy_in, league_size, draft_type, league_type, week, status, invite_code, conference_filter, commissioner_id')
         .eq('is_public', true)
         .eq('status', 'forming')
         .order('created_at', { ascending: false });
@@ -72,6 +74,22 @@ export default function PublicLeaguesPage() {
   async function handleJoin(league: League) {
     if (!user) { router.push('/'); return; }
     router.push(`/join/${league.invite_code}`);
+  }
+
+  async function handleDelete(league: League) {
+    if (!confirm(`Delete "${league.name}" permanently? This cannot be undone.`)) return;
+    setDeleting(league.id);
+    try {
+      const res = await fetch(`/api/leagues/${league.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setLeagues(prev => prev.filter(l => l.id !== league.id));
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error ?? 'Failed to delete league.');
+      }
+    } finally {
+      setDeleting(null);
+    }
   }
 
   const displayed = leagues.filter(l => {
@@ -173,10 +191,11 @@ export default function PublicLeaguesPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {displayed.map(league => {
-              const spotsLeft = league.league_size - league.member_count;
-              const isFull    = spotsLeft <= 0;
-              const pctFull   = Math.min(1, league.member_count / league.league_size);
-              const confLabel = league.conference_filter === 'ALL' ? null : league.conference_filter;
+              const spotsLeft   = league.league_size - league.member_count;
+              const isFull      = spotsLeft <= 0;
+              const pctFull     = Math.min(1, league.member_count / league.league_size);
+              const confLabel   = league.conference_filter === 'ALL' ? null : league.conference_filter;
+              const isMyLeague  = user?.id === league.commissioner_id;
 
               return (
                 <div
@@ -249,8 +268,8 @@ export default function PublicLeaguesPage() {
                         </div>
                       </div>
 
-                      {/* Right: join button */}
-                      <div style={{ flexShrink: 0 }}>
+                      {/* Right: action buttons */}
+                      <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                         <button
                           onClick={() => { setJoining(league.id); handleJoin(league).finally(() => setJoining(null)); }}
                           disabled={isFull || joining === league.id}
@@ -265,6 +284,22 @@ export default function PublicLeaguesPage() {
                         >
                           {joining === league.id ? '...' : isFull ? 'Full' : league.buy_in > 0 ? `Join $${league.buy_in}` : 'Join Free'}
                         </button>
+                        {isMyLeague && (
+                          <button
+                            onClick={() => handleDelete(league)}
+                            disabled={deleting === league.id}
+                            style={{
+                              padding: '6px 14px',
+                              background: 'rgba(231,76,60,.1)', border: '1px solid rgba(231,76,60,.35)',
+                              borderRadius: 8, cursor: 'pointer',
+                              fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 600,
+                              color: C.red, letterSpacing: 0.3,
+                              opacity: deleting === league.id ? 0.5 : 1,
+                            }}
+                          >
+                            {deleting === league.id ? 'Deleting…' : 'Delete'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

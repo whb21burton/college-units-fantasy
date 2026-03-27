@@ -396,6 +396,17 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     await loadData();
   }
 
+  async function deleteLeague() {
+    if (!isCommissioner || !league) return;
+    if (!confirm(`Delete "${league.name}" permanently? This cannot be undone.`)) return;
+    const res = await fetch(`/api/leagues/${league.id}`, { method: 'DELETE' });
+    if (res.ok) router.push('/');
+    else {
+      const d = await res.json().catch(() => ({}));
+      alert(d.error ?? 'Failed to delete league.');
+    }
+  }
+
   if (loading) return (
     <div style={{ height: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 3, fontSize: 13 }}>Loading league...</div>
@@ -591,6 +602,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               onAddCpu={addCpu}
               onRemoveCpu={removeCpu}
               onResetDraft={resetDraft}
+              onDeleteLeague={deleteLeague}
             />
           )}
           {activeTab === 'matchup' && (
@@ -683,12 +695,13 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
 }
 
 /* ── Draft Tab ──────────────────────────────────────────────── */
-function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, inviteUrl, copied, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu, onResetDraft }: {
+function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, inviteUrl, copied, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu, onResetDraft, onDeleteLeague }: {
   league: any; members: any[]; userId: string | null;
   spotsLeft: number; isFull: boolean; isCommissioner: boolean;
   inviteUrl: string; copied: boolean; cpuTeams: string[];
   onCopy: () => void; onStartDraft: () => void; onMockDraft: () => void;
   onAddCpu: () => void; onRemoveCpu: (i: number) => void; onResetDraft: () => void;
+  onDeleteLeague: () => void;
 }) {
   const size = league?.league_size || 0;
 
@@ -722,10 +735,16 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
           style={{ padding: '9px 18px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: C.sub, transition: 'all .15s' }}
         >Mock Draft</button>
         {isCommissioner && (
-          <button
-            onClick={onResetDraft}
-            style={{ padding: '9px 18px', background: 'rgba(231,76,60,.1)', border: '1px solid rgba(231,76,60,.3)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: '#e74c3c', transition: 'all .15s' }}
-          >Reset Draft</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onResetDraft}
+              style={{ padding: '9px 18px', background: 'rgba(231,76,60,.1)', border: '1px solid rgba(231,76,60,.3)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: '#e74c3c', transition: 'all .15s' }}
+            >Reset Draft</button>
+            <button
+              onClick={onDeleteLeague}
+              style={{ padding: '9px 18px', background: 'rgba(231,76,60,.18)', border: '1px solid rgba(231,76,60,.5)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: '#f03a5a', transition: 'all .15s' }}
+            >Delete League</button>
+          </div>
         )}
       </div>
 
@@ -897,6 +916,12 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
   const topContributors = contributors.slice(0, topN);
   const totalFpts = contributors.reduce((s: number, p: any) => s + p.fpts, 0);
 
+  // For QB/K units, prefer the actual player name from stats over player_data (which may be stale/wrong)
+  const statsPlayerName = (player.unitType === 'QB' || player.unitType === 'K') && !loading
+    ? topContributors[0]?.name ?? null
+    : null;
+  const headerName = statsPlayerName || player.playerName || player.school;
+
   const rankColors = ['#d4a828', '#9ca3af', '#b87333']; // gold, silver, bronze
   const rankLabels = (ut: string, idx: number) =>
     ut === 'QB' ? 'STARTER' : `${ut}${idx + 1}`;
@@ -926,7 +951,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
           }}>{player.unitType}</div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 18, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {player.playerName || player.school}
+              {headerName}
             </div>
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub, marginTop: 2 }}>{player.school} · {player.conference} · {player.tier}</div>
           </div>
