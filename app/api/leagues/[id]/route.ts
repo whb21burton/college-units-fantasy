@@ -5,6 +5,8 @@ import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
+const ADMIN_EMAIL = 'whb21burton@gmail.com';
+
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } },
@@ -26,7 +28,9 @@ export async function DELETE(
       .single();
 
     if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 });
-    if (league.commissioner_id !== user.id) {
+
+    const isAdmin = user.email === ADMIN_EMAIL;
+    if (league.commissioner_id !== user.id && !isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
