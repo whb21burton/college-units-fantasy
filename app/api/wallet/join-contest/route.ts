@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     // Load league
     const { data: league } = await admin
       .from('leagues')
-      .select('id, name, buy_in, league_size, status, is_public, draft_type, settings')
+      .select('id, name, buy_in, league_size, status, is_public, draft_type, league_type, settings')
       .eq('id', league_id)
       .single();
 
@@ -176,7 +176,10 @@ export async function POST(req: NextRequest) {
         },
       }).eq('id', league_id);
 
-      return NextResponse.json({ success: true, newBalance: null, leagueId: league.id, redirect: `/league/${league.id}/draft` });
+      const dest = league.league_type === 'weekly'
+        ? `/league/${league.id}/lineup`
+        : `/league/${league.id}/draft`;
+      return NextResponse.json({ success: true, newBalance: null, leagueId: league.id, redirect: dest });
     }
 
     return NextResponse.json({ success: true, newBalance: null });

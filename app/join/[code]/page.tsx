@@ -76,8 +76,11 @@ export default function JoinPage({ params }: { params: { code: string } }) {
       return;
     }
 
-    // Public leagues: API returns redirect pointing straight to the draft room
-    const dest = data.redirect ?? ('/league/' + league.id + '?joined=1');
+    // API returns redirect; fall back based on league type
+    const defaultDest = league.league_type === 'weekly'
+      ? '/league/' + league.id + '/lineup'
+      : '/league/' + league.id + '?joined=1';
+    const dest = data.redirect ?? defaultDest;
     router.push(dest);
   }
 

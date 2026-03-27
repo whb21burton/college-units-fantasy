@@ -29,13 +29,14 @@ type League = {
 
 export default function PublicLeaguesPage() {
   const router  = useRouter();
-  const [leagues,    setLeagues]    = useState<League[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [user,       setUser]       = useState<any>(null);
-  const [filter,     setFilter]     = useState<'all' | 'free' | 'paid'>('all');
-  const [confFilter, setConfFilter] = useState<string>('All Conferences');
-  const [joining,    setJoining]    = useState<string | null>(null);
-  const [deleting,   setDeleting]   = useState<string | null>(null);
+  const [leagues,     setLeagues]     = useState<League[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [user,        setUser]        = useState<any>(null);
+  const [leagueMode,  setLeagueMode]  = useState<'season' | 'weekly'>('season');
+  const [filter,      setFilter]      = useState<'all' | 'free' | 'paid'>('all');
+  const [confFilter,  setConfFilter]  = useState<string>('All Conferences');
+  const [joining,     setJoining]     = useState<string | null>(null);
+  const [deleting,    setDeleting]    = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: u } }) => setUser(u ?? null));
@@ -93,6 +94,8 @@ export default function PublicLeaguesPage() {
   }
 
   const displayed = leagues.filter(l => {
+    if (leagueMode === 'season' && l.league_type === 'weekly') return false;
+    if (leagueMode === 'weekly' && l.league_type !== 'weekly') return false;
     if (filter === 'free' && l.buy_in !== 0) return false;
     if (filter === 'paid' && l.buy_in === 0) return false;
     if (confFilter !== 'All Conferences') {
@@ -117,6 +120,28 @@ export default function PublicLeaguesPage() {
           <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, color: C.sub, marginTop: 8 }}>
             Public leagues open to all players. Join now — draft starts immediately.
           </p>
+        </div>
+
+        {/* Season / Weekly top-level toggle */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 20, justifyContent: 'center', background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10, padding: 4, width: 'fit-content', margin: '0 auto 20px' }}>
+          {(['season', 'weekly'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setLeagueMode(mode)}
+              style={{
+                padding: '9px 28px', borderRadius: 7,
+                border: 'none',
+                background: leagueMode === mode ? 'linear-gradient(135deg,#f5a623,#ffd166)' : 'transparent',
+                color: leagueMode === mode ? C.bg : C.sub,
+                fontFamily: "'Space Grotesk',sans-serif",
+                fontSize: 13, fontWeight: 700, letterSpacing: 0.5,
+                cursor: 'pointer', transition: 'all .15s',
+                textTransform: 'capitalize',
+              }}
+            >
+              {mode === 'season' ? '🏆 Season Leagues' : '⚡ Weekly DFS'}
+            </button>
+          ))}
         </div>
 
         {/* Buy-in filter pills */}

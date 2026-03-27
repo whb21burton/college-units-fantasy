@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
-import { WeeklyLeaguePage } from '@/components/league/WeeklyLeaguePage';
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
@@ -222,7 +221,7 @@ function effectivePts(
   return { pts: base * mult, isActual: false, base, storedMult: null };
 }
 
-type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'ranks';
+type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'ranks' | 'lineup' | 'leaderboard';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'draft',   label: 'Draft'    },
@@ -230,6 +229,13 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'league',  label: 'League'   },
   { key: 'players', label: 'Players'  },
   { key: 'ranks',   label: 'Ranks'    },
+];
+
+const WEEKLY_TABS: { key: Tab; label: string }[] = [
+  { key: 'lineup',      label: 'Lineup'      },
+  { key: 'leaderboard', label: 'Leaderboard' },
+  { key: 'players',     label: 'Players'     },
+  { key: 'ranks',       label: 'Ranks'       },
 ];
 
 export default function LeaguePage({ params }: { params: { id: string } }) {
@@ -334,12 +340,16 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const spotsLeft      = (league?.league_size || 0) - totalOccupied;
   const isFull         = spotsLeft <= 0;
 
-  // Replace Draft tab with Matchup tab once league is active
-  const computedTabs = TABS.map(t =>
-    t.key === 'draft' && league?.status === 'active'
-      ? { key: 'matchup' as Tab, label: 'Matchup' }
-      : t
-  );
+  const isWeekly = league?.league_type === 'weekly';
+
+  // Replace Draft tab with Matchup tab once league is active (season leagues only)
+  const computedTabs = isWeekly
+    ? WEEKLY_TABS
+    : TABS.map(t =>
+        t.key === 'draft' && league?.status === 'active'
+          ? { key: 'matchup' as Tab, label: 'Matchup' }
+          : t
+      );
   const inviteUrl      = league ? appUrl + '/join/' + league.invite_code : '';
   const userInitial    = (userEmail || 'U').charAt(0).toUpperCase();
 
@@ -412,11 +422,6 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 3, fontSize: 13 }}>Loading league...</div>
     </div>
   );
-
-  // ── Weekly Pick'em leagues get their own dedicated page ──
-  if (league?.league_type === 'weekly') {
-    return <WeeklyLeaguePage leagueId={params.id} />;
-  }
 
   return (
     <div className="layout-root" style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
@@ -620,11 +625,11 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           {activeTab === 'players' && (
             <WaiverTab league={league} userId={userId} />
           )}
-          {activeTab !== 'draft' && activeTab !== 'matchup' && activeTab !== 'team' && activeTab !== 'league' && activeTab !== 'ranks' && activeTab !== 'players' && (
-            <PlaceholderTab
-              label={computedTabs.find(t => t.key === activeTab)?.label || ''}
-              icon="🏈"
-            />
+          {activeTab === 'lineup' && (
+            <WeeklyLineupTab leagueId={params.id} router={router} />
+          )}
+          {activeTab === 'leaderboard' && (
+            <WeeklyLeaderboardTab leagueId={params.id} />
           )}
         </div>
       </div>
@@ -690,6 +695,156 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           </div>
         </div>
       </aside>
+    </div>
+  );
+}
+
+/* ── Weekly Lineup Tab ──────────────────────────────────────── */
+function WeeklyLineupTab({ leagueId, router }: { leagueId: string; router: any }) {
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <div style={{
+        background: C.surf, border: '1px solid ' + C.surf3,
+        borderRadius: 12, padding: '32px 28px', textAlign: 'center',
+      }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🏈</div>
+        <div style={{ fontFamily: "'Anton',sans-serif", fontSize: 22, color: C.text, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+          Build Your Lineup
+        </div>
+        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, color: C.sub, marginBottom: 24, lineHeight: 1.6 }}>
+          Pick 9 starters within a $200 salary cap.<br />
+          QB · RB×2 · WR×2 · TE · FLEX · DEF · K
+        </div>
+        <button
+          onClick={() => router.push(`/league/${leagueId}/lineup`)}
+          style={{
+            padding: '14px 36px',
+            background: 'linear-gradient(135deg,#f5a623,#ffd166)',
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+            fontFamily: "'Anton',sans-serif", fontSize: 15, letterSpacing: 2,
+            color: C.bg, textTransform: 'uppercase',
+          }}
+        >
+          Open Lineup Builder →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Weekly Leaderboard Tab ─────────────────────────────────── */
+function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
+  const [data,    setData]    = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [week,    setWeek]    = useState<number | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/lineup/leaderboard?league_id=${leagueId}`)
+      .then(r => r.json())
+      .then(d => {
+        setData(d);
+        if (d.weeks?.length) setWeek(d.weeks[d.weeks.length - 1]);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [leagueId]);
+
+  if (loading) return (
+    <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 2, fontSize: 12 }}>
+      Loading leaderboard…
+    </div>
+  );
+
+  const members = data?.members ?? [];
+  const weeks   = data?.weeks ?? [];
+
+  const weekScores = week
+    ? members.map((m: any) => ({ ...m, displayScore: (m.weeklyScores?.[week] ?? 0) }))
+             .sort((a: any, b: any) => b.displayScore - a.displayScore)
+    : members;
+
+  return (
+    <div style={{ maxWidth: 620 }}>
+      {/* Week selector */}
+      {weeks.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setWeek(null)}
+            style={{
+              padding: '5px 12px', borderRadius: 6,
+              background: week === null ? 'rgba(245,166,35,.15)' : C.surf2,
+              border: `1px solid ${week === null ? C.gold : C.surf3}`,
+              color: week === null ? C.gold : C.sub,
+              fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, cursor: 'pointer',
+            }}
+          >TOTAL</button>
+          {weeks.map((w: number) => (
+            <button
+              key={w}
+              onClick={() => setWeek(w)}
+              style={{
+                padding: '5px 12px', borderRadius: 6,
+                background: week === w ? 'rgba(245,166,35,.15)' : C.surf2,
+                border: `1px solid ${week === w ? C.gold : C.surf3}`,
+                color: week === w ? C.gold : C.sub,
+                fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, cursor: 'pointer',
+              }}
+            >WK {w}</button>
+          ))}
+        </div>
+      )}
+
+      {members.length === 0 ? (
+        <div style={{
+          background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 12,
+          padding: '40px 28px', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
+          <div style={{ fontFamily: "'Anton',sans-serif", fontSize: 16, color: C.sub, textTransform: 'uppercase' }}>
+            No lineups submitted yet
+          </div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.muted, marginTop: 8 }}>
+            Members need to submit their weekly lineup first
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid ' + C.surf3, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>TEAM</span>
+            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>
+              {week ? `WK ${week} PTS` : 'TOTAL PTS'}
+            </span>
+          </div>
+          {(week ? weekScores : members).map((m: any, i: number) => {
+            const pts = week ? m.displayScore : m.total;
+            return (
+              <div
+                key={m.user_id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 20px', borderBottom: '1px solid ' + C.surf3,
+                  background: i === 0 ? 'rgba(245,166,35,.04)' : 'transparent',
+                }}
+              >
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                  background: i === 0 ? 'linear-gradient(135deg,#f5a623,#ffd166)' : C.surf3,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'Anton,sans-serif', fontSize: 12,
+                  color: i === 0 ? C.bg : C.sub,
+                }}>{i + 1}</div>
+                <div style={{ flex: 1, fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 600, color: C.text }}>
+                  {m.team_name}
+                </div>
+                <div style={{ fontFamily: "'Anton',sans-serif", fontSize: 16, color: pts > 0 ? C.gold : C.muted }}>
+                  {pts.toFixed(1)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
