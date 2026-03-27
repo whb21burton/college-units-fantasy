@@ -195,7 +195,7 @@ export default function PublicLeaguesPage() {
               const isFull      = spotsLeft <= 0;
               const pctFull     = Math.min(1, league.member_count / league.league_size);
               const confLabel   = league.conference_filter === 'ALL' ? null : league.conference_filter;
-              const isMyLeague  = user?.id === league.commissioner_id;
+              const isMyLeague  = !!user;
 
               return (
                 <div
