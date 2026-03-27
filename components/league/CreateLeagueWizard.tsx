@@ -285,37 +285,60 @@ export function CreateLeagueWizard() {
               </div>
             )}
 
-            {/* Conference Pool — only for admin public season leagues */}
-            {isPublic && isAdmin && leagueType === 'season' && (
+            {/* Conference Pool — for all admin public leagues */}
+            {isPublic && isAdmin && (
               <>
                 <Spacer />
-                <FieldLabel>Conference Pool</FieldLabel>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                  <ToggleBtn active={conferenceFilter === 'ALL'} onClick={() => setConferenceFilter('ALL')}>
-                    <div style={{ fontSize: 18, marginBottom: 4 }}>🌎</div>
-                    <strong>All D1 Schools</strong>
-                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Salary cap · $200 budget</div>
-                  </ToggleBtn>
-                  <ToggleBtn active={conferenceFilter !== 'ALL'} onClick={() => { if (conferenceFilter === 'ALL') setConferenceFilter('SEC'); }}>
-                    <div style={{ fontSize: 18, marginBottom: 4 }}>🏟️</div>
-                    <strong>One Conference</strong>
-                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Snake draft · pick below</div>
-                  </ToggleBtn>
-                </div>
-                {conferenceFilter !== 'ALL' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 6 }}>
-                    {(['SEC', 'Big Ten', 'ACC', 'Big 12', 'Pac-12', 'Independent'] as const).map(conf => (
-                      <ToggleBtn key={conf} active={conferenceFilter === conf} onClick={() => setConferenceFilter(conf)}>
-                        {conf}
+                <FieldLabel>Conference</FieldLabel>
+                {leagueType === 'season' ? (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                      <ToggleBtn active={conferenceFilter === 'ALL'} onClick={() => setConferenceFilter('ALL')}>
+                        <div style={{ fontSize: 18, marginBottom: 4 }}>🌎</div>
+                        <strong>All D1 Schools</strong>
+                        <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Salary cap · $200 budget</div>
                       </ToggleBtn>
-                    ))}
-                  </div>
+                      <ToggleBtn active={conferenceFilter !== 'ALL'} onClick={() => { if (conferenceFilter === 'ALL') setConferenceFilter('SEC'); }}>
+                        <div style={{ fontSize: 18, marginBottom: 4 }}>🏟️</div>
+                        <strong>One Conference</strong>
+                        <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Snake draft · pick below</div>
+                      </ToggleBtn>
+                    </div>
+                    {conferenceFilter !== 'ALL' && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 6 }}>
+                        {(['SEC', 'Big Ten', 'ACC', 'Big 12', 'Pac-12', 'Independent'] as const).map(conf => (
+                          <ToggleBtn key={conf} active={conferenceFilter === conf} onClick={() => setConferenceFilter(conf)}>
+                            {conf}
+                          </ToggleBtn>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(212,168,40,.06)', border: '1px solid rgba(212,168,40,.15)', borderRadius: 6, fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.sub }}>
+                      {conferenceFilter === 'ALL'
+                        ? '💰 Salary cap draft — $200 budget, players priced by position rank'
+                        : `🐍 Snake draft — ${conferenceFilter} schools only`}
+                    </div>
+                  </>
+                ) : (
+                  /* Weekly league: flat conference picker */
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                      <ToggleBtn active={conferenceFilter === 'ALL'} onClick={() => setConferenceFilter('ALL')}>
+                        🌎 All
+                      </ToggleBtn>
+                      {(['SEC', 'Big Ten', 'ACC', 'Big 12', 'Pac-12', 'Independent'] as const).map(conf => (
+                        <ToggleBtn key={conf} active={conferenceFilter === conf} onClick={() => setConferenceFilter(conf)}>
+                          {conf}
+                        </ToggleBtn>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(212,168,40,.06)', border: '1px solid rgba(212,168,40,.15)', borderRadius: 6, fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.sub }}>
+                      {conferenceFilter === 'ALL'
+                        ? '🌎 All conferences — players from every D1 school'
+                        : `🏟️ ${conferenceFilter} schools only`}
+                    </div>
+                  </>
                 )}
-                <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(212,168,40,.06)', border: '1px solid rgba(212,168,40,.15)', borderRadius: 6, fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.sub }}>
-                  {conferenceFilter === 'ALL'
-                    ? '💰 Salary cap draft — $200 budget, players priced by position rank'
-                    : `🐍 Snake draft — ${conferenceFilter} schools only`}
-                </div>
               </>
             )}
 
@@ -441,7 +464,10 @@ export function CreateLeagueWizard() {
                 ? [['Conference Pool', conferenceFilter === 'ALL' ? '🌎 All D1 · Salary Cap ($200)' : `🏟️ ${conferenceFilter} · Snake Draft`]]
                 : leagueType === 'season'
                 ? [['Draft Type', form.draft_type === 'snake' ? '🐍 Snake Draft' : `💰 Salary Cap ($${form.salary_cap})`]]
-                : [['Scoring',   '1st: 80% · 2nd: 20% of prize pool']]),
+                : [
+                    ['Scoring',    '1st: 80% · 2nd: 20% of prize pool'],
+                    ['Conference', isPublic ? (conferenceFilter === 'ALL' ? '🌎 All Conferences' : `🏟️ ${conferenceFilter}`) : '—'],
+                  ]),
               ['Your Team',   form.team_name],
               ...(leagueType === 'season'
                 ? [['Season', 'Weeks 1–10 regular season · 6-team playoff (Wks 11–13)']]
