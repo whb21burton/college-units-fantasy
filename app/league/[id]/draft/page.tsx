@@ -21,11 +21,18 @@ const PICK_TIME     = 90;
 const SALARY_BUDGET = 200;
 
 /** Price a unit by its position rank in the full original pool (stable throughout draft). */
-function positionRankPrice(unit: DraftUnit, allUnits: DraftUnit[]): number {
+function positionRankPrice(unit: DraftUnit, allUnits: DraftUnit[], isConference = false): number {
   const peers = [...allUnits]
     .filter(u => u.unitType === unit.unitType)
     .sort((a, b) => (b.seasonTotal ?? b.projectedPoints) - (a.seasonTotal ?? a.projectedPoints));
   const rank = peers.findIndex(u => u.id === unit.id) + 1; // 1-based
+  if (isConference) {
+    if (rank <= 3)  return 50;
+    if (rank <= 6)  return 40;
+    if (rank <= 9)  return 30;
+    if (rank <= 12) return 20;
+    return 10;
+  }
   if (rank <= 10) return 50;
   if (rank <= 20) return 40;
   if (rank <= 30) return 30;
@@ -104,7 +111,8 @@ export default function DraftPage() {
   const round         = numTeams > 0 ? Math.floor(currentPickNum / numTeams) : 0;
   const pickInRound   = numTeams > 0 ? (currentPickNum % numTeams) + 1 : 1;
 
-  const isSalaryDraft = league?.draft_type === 'salary';
+  const isSalaryDraft  = league?.draft_type === 'salary';
+  const isConference   = !!(league?.conference_filter && league.conference_filter !== 'ALL');
   const pickTime      = isSalaryDraft ? 60 : PICK_TIME;
   // Keep ref in sync so timer callbacks (closures) always see the current pickTime
   pickTimeRef.current = pickTime;
@@ -309,7 +317,7 @@ export default function DraftPage() {
     const nt      = numTeams || members.length;
     const r       = nt > 0 ? Math.floor(picks.length / nt) : 0;
     const pickNum = picks.length;
-    const cost    = isSalaryDraft ? positionRankPrice(unit, fullPool) : null;
+    const cost    = isSalaryDraft ? positionRankPrice(unit, fullPool, isConference) : null;
 
     const newPick = {
       id: crypto.randomUUID(), league_id: leagueId, user_id: userId,
@@ -346,7 +354,7 @@ export default function DraftPage() {
 
   function handlePickClick(unit: DraftUnit) {
     if (!isMyTurn || (myRoster[unit.unitType] ?? 0) >= POSITION_CAPS[unit.unitType] || draftDone) return;
-    if (isSalaryDraft && positionRankPrice(unit, fullPool) > myBudgetLeft) return;
+    if (isSalaryDraft && positionRankPrice(unit, fullPool, isConference) > myBudgetLeft) return;
     insertPick(unit);
   }
 
@@ -626,7 +634,7 @@ export default function DraftPage() {
       {viewingUnit && (() => {
         const S = { passYd: 0.05, passTd: 4, int: -2, rushYd: 0.05, rushTd: 6, recYd: 0.05, recTd: 6 };
         const ut = viewingUnit.unitType;
-        const price        = isSalaryDraft ? positionRankPrice(viewingUnit, fullPool) : null;
+        const price        = isSalaryDraft ? positionRankPrice(viewingUnit, fullPool, isConference) : null;
         const canPickPanel = isMyTurn && !draftDone && (myRoster[ut] ?? 0) < POSITION_CAPS[ut]
           && (!isSalaryDraft || (price ?? 0) <= myBudgetLeft);
         const weeks: any[] = unitStats?.weeks ?? [];
@@ -812,7 +820,7 @@ export default function DraftPage() {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {filtered.slice(0, 100).map((unit, i) => {
             const overCap  = (myRoster[unit.unitType] ?? 0) >= POSITION_CAPS[unit.unitType];
-            const unitPrice = isSalaryDraft ? positionRankPrice(unit, fullPool) : null;
+            const unitPrice = isSalaryDraft ? positionRankPrice(unit, fullPool, isConference) : null;
             const overBudget = isSalaryDraft && (unitPrice ?? 0) > myBudgetLeft;
             const canPick  = isMyTurn && !overCap && !draftDone && !overBudget;
             return (

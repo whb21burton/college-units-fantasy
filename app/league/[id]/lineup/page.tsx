@@ -47,11 +47,18 @@ const POS_COLOR: Record<string, string> = {
   K:   '#e9c46a',
 };
 
-function positionRankPrice(unit: DraftUnit, allUnits: DraftUnit[]): number {
+function positionRankPrice(unit: DraftUnit, allUnits: DraftUnit[], isConference = false): number {
   const peers = [...allUnits]
     .filter(u => u.unitType === unit.unitType)
     .sort((a, b) => (b.seasonTotal ?? b.projectedPoints) - (a.seasonTotal ?? a.projectedPoints));
   const rank = peers.findIndex(u => u.id === unit.id) + 1;
+  if (isConference) {
+    if (rank <= 3)  return 50;
+    if (rank <= 6)  return 40;
+    if (rank <= 9)  return 30;
+    if (rank <= 12) return 20;
+    return 10;
+  }
   if (rank <= 10) return 50;
   if (rank <= 20) return 40;
   if (rank <= 30) return 30;
@@ -151,11 +158,13 @@ export default function LineupPage({ params }: { params: { id: string } }) {
   }, [params.id, week]);
 
   // Prices computed once for the full pool
+  const isConference = !!(league?.conference_filter && league.conference_filter !== 'ALL');
   const priceMap = useMemo(() => {
     const m: Record<string, number> = {};
-    pool.forEach(u => { m[u.id] = positionRankPrice(u, pool); });
+    pool.forEach(u => { m[u.id] = positionRankPrice(u, pool, isConference); });
     return m;
-  }, [pool]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pool, isConference]);
 
   // IDs already in lineup (to gray out in pool)
   const pickedIds = useMemo(() => {
