@@ -156,7 +156,10 @@ export default function DraftPage() {
       const existingPicks = pks ?? [];
       setPicks(existingPicks);
 
-      const livePool: DraftUnit[] = Array.isArray(poolRes) ? poolRes : [];
+      const rawPool: DraftUnit[] = Array.isArray(poolRes) ? poolRes : [];
+      const livePool = lg?.conference_filter && lg.conference_filter !== 'ALL'
+        ? rawPool.filter((u: DraftUnit) => u.conference === lg.conference_filter)
+        : rawPool;
       if (!cancelled) setFullPool(livePool); // store original pool for stable salary pricing
       const takenIds = new Set(existingPicks.map((p: any) => p.player_id));
       setAvail([...livePool].sort((a, b) => b.projectedPoints - a.projectedPoints).filter(u => !takenIds.has(u.id)));

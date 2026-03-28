@@ -24,6 +24,11 @@ function weeklyProj(seasonPts: number): number {
   return seasonPts / SEASON_GAMES;
 }
 
+function poolUrl(conf?: string | null): string {
+  if (!conf || conf === 'ALL') return '/api/player-pool';
+  return `/api/player-pool?conference=${encodeURIComponent(conf)}`;
+}
+
 type MatchupCtx = {
   opponentMap: Record<string, string>;
   rankMap:     Record<string, number>; // Elo rank (display only)
@@ -1390,7 +1395,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     async function load() {
       const [picksRes, poolRes] = await Promise.all([
         supabase.from('draft_picks').select('*').eq('league_id', league.id),
-        fetch('/api/player-pool').then(r => r.json()),
+        fetch(poolUrl(league?.conference_filter)).then(r => r.json()),
       ]);
       const all = picksRes.data || [];
       setAllPicks(all);
@@ -2285,7 +2290,7 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
 
   useEffect(() => {
-    fetch('/api/player-pool').then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
+    fetch(poolUrl(league?.conference_filter)).then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -2463,7 +2468,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const isCommissioner = league?.commissioner_id === userId;
 
   useEffect(() => {
-    fetch('/api/player-pool').then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
+    fetch(poolUrl(league?.conference_filter)).then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -2866,7 +2871,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   const mySlotIdx          = myEntry ? myEntry.slot - 1 : -1;
 
   useEffect(() => {
-    fetch('/api/player-pool').then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
+    fetch(poolUrl(league?.conference_filter)).then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
   useEffect(() => {

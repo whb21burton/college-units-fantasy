@@ -29,8 +29,11 @@ function uid(school: string, unitType: UnitType) {
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const confFilter = searchParams.get('conference') ?? null; // e.g. "SEC", null = all
+
     const admin = createAdminClient();
 
     // Build school→conference lookup from CONFERENCES constant
@@ -91,7 +94,8 @@ export async function GET() {
     type Entry = { school: string; unitType: UnitType; pts: number; seasonTotal: number; isLive: boolean };
     const allEntries: Entry[] = [];
 
-    for (const schools of Object.values(CONFERENCES)) {
+    for (const [conf, schools] of Object.entries(CONFERENCES) as [Conference, string[]][]) {
+      if (confFilter && conf !== confFilter) continue; // skip other conferences when filtered
       for (const school of schools) {
         for (const unitType of UNIT_TYPES) {
           const key = `${school}||${unitType}`;

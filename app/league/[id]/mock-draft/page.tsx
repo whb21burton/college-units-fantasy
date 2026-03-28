@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { supabase } from '@/lib/supabase-browser';
 import { POSITION_CAPS, ROSTER_SLOTS, type DraftUnit, type UnitType } from '@/lib/playerPool';
 import type { TeamEfficiency } from '@/types';
 
@@ -141,15 +142,18 @@ export default function MockDraftPage() {
   const [statsLoading, setStatsLoading] = useState(false);
 
   useEffect(() => {
-    // Fetch real player pool from CFBD API
-    fetch('/api/player-pool')
-      .then(r => r.json())
-      .then((data: DraftUnit[]) => {
-        const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => b.projectedPoints - a.projectedPoints);
-        setPoolData(sorted);
-        setAvailable(sorted);
-      })
-      .catch(() => {});
+    // Fetch league to get conference filter, then pool
+    async function loadPool() {
+      let confFilter: string | null = null;
+      const { data: lg } = await supabase.from('leagues').select('conference_filter').eq('id', leagueId).single();
+      if (lg?.conference_filter && lg.conference_filter !== 'ALL') confFilter = lg.conference_filter;
+      const url = confFilter ? `/api/player-pool?conference=${encodeURIComponent(confFilter)}` : '/api/player-pool';
+      const data: DraftUnit[] = await fetch(url).then(r => r.json()).catch(() => []);
+      const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => b.projectedPoints - a.projectedPoints);
+      setPoolData(sorted);
+      setAvailable(sorted);
+    }
+    loadPool();
     // Fetch current efficiency data for badges
     const season = new Date().getFullYear();
     fetch(`/api/efficiency?week=1&season=${season}`)
