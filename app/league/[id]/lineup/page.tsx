@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 
@@ -77,8 +77,6 @@ function pillStyle(bg: string, color: string): React.CSSProperties {
 
 export default function LineupPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const weekParam = searchParams.get('week');
 
   const [league,    setLeague]    = useState<any>(null);
   const [userId,    setUserId]    = useState<string | null>(null);
@@ -86,7 +84,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [saved,     setSaved]     = useState(false);
-  const [week,      setWeek]      = useState<number>(weekParam ? parseInt(weekParam, 10) : 1);
+  // week is always locked to the league's contest week — no user choice
+  const week = league?.week ?? 1;
   const [search,    setSearch]    = useState('');
   const [posFilter, setPosFilter] = useState<string>('ALL');
 
@@ -106,7 +105,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
 
       const { data: lg } = await supabase
         .from('leagues')
-        .select('id, name, league_type, status, conference_filter')
+        .select('id, name, league_type, status, conference_filter, week')
         .eq('id', params.id)
         .single();
       if (!lg || lg.league_type !== 'weekly') { router.push(`/league/${params.id}`); return; }
@@ -131,13 +130,14 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         setPool(Array.isArray(data) ? data : []);
       }
 
-      // Load existing lineup for this week if any
+      // Load existing lineup for this league's contest week
+      const contestWeek = lg.week ?? 1;
       const { data: existing } = await supabase
         .from('draft_picks')
         .select('*')
         .eq('league_id', params.id)
         .eq('user_id', user.id)
-        .eq('week', week)
+        .eq('week', contestWeek)
         .eq('entry_type', 'lineup');
 
       if (existing && existing.length > 0) {
@@ -155,7 +155,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
     }
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.id, week]);
+  }, [params.id]);
 
   // Prices computed once for the full pool
   const isConference = !!(league?.conference_filter && league.conference_filter !== 'ALL');
@@ -289,25 +289,14 @@ export default function LineupPage({ params }: { params: { id: string } }) {
           </div>
         </div>
 
-        {/* Week selector */}
+        {/* Contest week (locked — set when league was created) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Week</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {Array.from({ length: 14 }, (_, i) => i + 1).map(w => (
-              <button
-                key={w}
-                onClick={() => { setWeek(w); setSaved(false); setLineup(Object.fromEntries(SLOTS.map(s => [s.key, null]))); }}
-                style={{
-                  width: 28, height: 28,
-                  background: week === w ? 'rgba(245,166,35,.2)' : C.surf2,
-                  border: `1px solid ${week === w ? C.gold : C.surf3}`,
-                  borderRadius: 6, cursor: 'pointer',
-                  fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 600,
-                  color: week === w ? C.gold : C.sub,
-                }}
-              >{w}</button>
-            ))}
-          </div>
+          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Contest Week</span>
+          <div style={{
+            padding: '5px 14px', borderRadius: 8,
+            background: 'rgba(245,166,35,.15)', border: '1px solid ' + C.gold,
+            fontFamily: "'Anton',sans-serif", fontSize: 14, color: C.gold, letterSpacing: 1,
+          }}>Week {week}</div>
         </div>
       </div>
 

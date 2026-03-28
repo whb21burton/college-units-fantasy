@@ -383,8 +383,8 @@ export function CreateLeagueWizard() {
 
           <NavRow>
             <div />
-            <PrimaryBtn disabled={!canProceed1} onClick={() => setStep(2)}>
-              Next: Your Team →
+            <PrimaryBtn disabled={!canProceed1} onClick={() => setStep(isPublic ? 3 : 2)}>
+              {isPublic ? 'Next: Review →' : 'Next: Your Team →'}
             </PrimaryBtn>
           </NavRow>
         </div>
@@ -468,7 +468,7 @@ export function CreateLeagueWizard() {
                     ['Scoring',    '1st: 80% · 2nd: 20% of prize pool'],
                     ['Conference', isPublic ? (conferenceFilter === 'ALL' ? '🌎 All Conferences' : `🏟️ ${conferenceFilter}`) : '—'],
                   ]),
-              ['Your Team',   form.team_name],
+              ...(!isPublic ? [['Your Team', form.team_name]] : []),
               ...(leagueType === 'season'
                 ? [['Season', 'Weeks 1–10 regular season · 6-team playoff (Wks 11–13)']]
                 : []),
@@ -497,7 +497,7 @@ export function CreateLeagueWizard() {
           </Card>
 
           <NavRow>
-            <GhostBtn onClick={() => setStep(2)}>← Back</GhostBtn>
+            <GhostBtn onClick={() => setStep(isPublic ? 1 : 2)}>← Back</GhostBtn>
             <PrimaryBtn onClick={handleCreate} disabled={loading}>
               {loading ? '⏳ Creating...' : '🚀 Create League'}
             </PrimaryBtn>

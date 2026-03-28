@@ -47,27 +47,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: dbError?.message || 'Failed to create league' }, { status: 500 });
   }
 
-  // Add commissioner as first member
-  const { error: memberError } = await admin.from('league_members').insert({
-    league_id:  data.id,
-    user_id:    user.id,
-    team_name:  String(body.team_name ?? '').trim() || 'My Team',
-    draft_slot: 1,
-  });
-
-  if (memberError) {
-    // Retry once
-    const { error: retryError } = await admin.from('league_members').insert({
+  // Public leagues: commissioner is NOT auto-joined — they list it for others to find and join.
+  // Private leagues: commissioner is always member #1.
+  if (!isPublic) {
+    const { error: memberError } = await admin.from('league_members').insert({
       league_id:  data.id,
       user_id:    user.id,
       team_name:  String(body.team_name ?? '').trim() || 'My Team',
       draft_slot: 1,
     });
-    if (retryError) {
-      return NextResponse.json(
-        { error: 'League created but could not add you as a member.', ...data },
-        { status: 207 },
-      );
+
+    if (memberError) {
+      const { error: retryError } = await admin.from('league_members').insert({
+        league_id:  data.id,
+        user_id:    user.id,
+        team_name:  String(body.team_name ?? '').trim() || 'My Team',
+        draft_slot: 1,
+      });
+      if (retryError) {
+        return NextResponse.json(
+          { error: 'League created but could not add you as a member.', ...data },
+          { status: 207 },
+        );
+      }
     }
   }
 
