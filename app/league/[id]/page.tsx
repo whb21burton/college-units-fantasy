@@ -129,6 +129,19 @@ function buildPoolRankMaps(pool: { school: string; unitType: string; projectedPo
   return maps;
 }
 
+/** School logo with fallback initials circle. */
+function SchoolLogo({ school, posColor, logos, size = 32 }: { school: string; posColor: string; logos: Record<string, string>; size?: number }) {
+  const url = logos[school];
+  return url ? (
+    <img src={url} alt={school} style={{ width: size, height: size, objectFit: 'contain' }}
+      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+  ) : (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: posColor + '33', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 10, color: posColor }}>
+      {school.slice(0, 2).toUpperCase()}
+    </div>
+  );
+}
+
 /** Renders the 3-line player info block used in every roster/matchup row. */
 function PlayerInfoLines({
   school, unitType, playerName, ctx, ep, align, seasonPts, unitRankMaps,
@@ -2277,11 +2290,11 @@ function assignRoster(picks: any[]): { starters: (any | null)[]; bench: any[] } 
   return { starters, bench };
 }
 
-function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView }: { pick: any | null; align: 'left' | 'right'; ctx: MatchupCtx; gameStats: GameStats; unitRankMaps?: Record<string, Record<string, number>>; onView?: () => void }) {
+function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView, logos = {} }: { pick: any | null; align: 'left' | 'right'; ctx: MatchupCtx; gameStats: GameStats; unitRankMaps?: Record<string, Record<string, number>>; onView?: () => void; logos?: Record<string, string> }) {
   const isRight = align === 'right';
   if (!pick) return (
     <div style={{
-      display: 'flex', alignItems: 'center', minHeight: 44,
+      display: 'flex', alignItems: 'center', minHeight: 52,
       justifyContent: isRight ? 'flex-end' : 'flex-start',
       padding: '9px 14px', background: C.surf,
       borderRadius: isRight ? '8px 0 0 8px' : '0 8px 8px 0',
@@ -2292,12 +2305,23 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView }
       <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
     </div>
   );
-  const ep   = effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, ctx, gameStats);
-  const pts  = ep.pts.toFixed(1);
+
+  const school   = pick.player_data?.school ?? '';
+  const unitType = pick.player_data?.unitType ?? '';
+  const posColor = POS_COLORS[unitType] || C.muted;
+  const ep       = effectivePts(school, unitType, pick.player_data?.projectedPoints ?? 0, ctx, gameStats);
+  const pts      = ep.pts.toFixed(1);
+
+  const logoEl = (
+    <div style={{ width: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <SchoolLogo school={school} posColor={posColor} logos={logos} size={32} />
+    </div>
+  );
+
   const info = (
     <PlayerInfoLines
-      school={pick.player_data?.school ?? ''}
-      unitType={pick.player_data?.unitType ?? ''}
+      school={school}
+      unitType={unitType}
       playerName={pick.player_data?.playerName}
       ctx={ctx}
       ep={ep}
@@ -2307,7 +2331,7 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView }
     />
   );
   const score = (
-    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: isRight ? C.gold : C.sub, flexShrink: 0, minWidth: 46, textAlign: isRight ? 'right' : 'left' }}>
+    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: isRight ? C.gold : C.sub, flexShrink: 0, minWidth: 42, textAlign: isRight ? 'right' : 'left' }}>
       {pts}
     </div>
   );
@@ -2315,14 +2339,14 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView }
     <div onClick={onView} style={{
       display: 'flex', alignItems: 'center',
       justifyContent: isRight ? 'flex-end' : 'flex-start',
-      gap: 12, padding: '9px 14px', background: C.surf2,
+      gap: 8, padding: '9px 10px', background: C.surf2,
       borderRadius: isRight ? '8px 0 0 8px' : '0 8px 8px 0',
       border: '1px solid ' + C.surf3,
       borderRight: isRight ? 'none' : undefined,
       borderLeft: isRight ? undefined : 'none',
       cursor: onView ? 'pointer' : 'default',
     }}>
-      {isRight ? <>{info}{score}</> : <>{score}{info}</>}
+      {isRight ? <>{score}{logoEl}{info}</> : <>{info}{logoEl}{score}</>}
     </div>
   );
 }
@@ -2335,6 +2359,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   const [gameStats,     setGameStats]     = useState<GameStats>(null);
   const [loading,       setLoading]       = useState(true);
   const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
+  const [logos,         setLogos]         = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d ?? {})).catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch(poolUrl(league?.conference_filter)).then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
@@ -2452,11 +2481,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
         const color = POS_COLORS[label] || C.muted;
         return (
           <div key={i} className="matchup-row" style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
-            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} onView={myRoster.starters[i] ? () => setViewingPlayer(myRoster.starters[i]!.player_data) : undefined} />
+            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} logos={logos} onView={myRoster.starters[i] ? () => setViewingPlayer(myRoster.starters[i]!.player_data) : undefined} />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: color + '22', border: '1px solid ' + color + '44', borderLeft: 'none', borderRight: 'none' }}>
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color, fontWeight: 700 }}>{label}</span>
             </div>
-            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} onView={oppRoster.starters[i] ? () => setViewingPlayer(oppRoster.starters[i]!.player_data) : undefined} />
+            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} logos={logos} onView={oppRoster.starters[i] ? () => setViewingPlayer(oppRoster.starters[i]!.player_data) : undefined} />
           </div>
         );
       })}
@@ -2471,11 +2500,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
           </div>
           {Array.from({ length: benchLen }).map((_, i) => (
             <div key={i} className="matchup-row" style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
-              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} onView={myRoster.bench[i] ? () => setViewingPlayer(myRoster.bench[i]!.player_data) : undefined} />
+              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} logos={logos} onView={myRoster.bench[i] ? () => setViewingPlayer(myRoster.bench[i]!.player_data) : undefined} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.muted + '22', border: '1px solid ' + C.muted + '44', borderLeft: 'none', borderRight: 'none' }}>
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, fontWeight: 700 }}>BN</span>
               </div>
-              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} onView={oppRoster.bench[i] ? () => setViewingPlayer(oppRoster.bench[i]!.player_data) : undefined} />
+              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} logos={logos} onView={oppRoster.bench[i] ? () => setViewingPlayer(oppRoster.bench[i]!.player_data) : undefined} />
             </div>
           ))}
         </>
@@ -2509,10 +2538,15 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const [memberName,    setMemberName]    = useState<string>('');
   const [selectedBench, setSelectedBench] = useState<any | null>(null);
   const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
+  const [logos,         setLogos]         = useState<Record<string, string>>({});
 
   const TOTAL_WEEKS    = 14;
   const PLAYOFF_START  = 12;
   const isCommissioner = league?.commissioner_id === userId;
+
+  useEffect(() => {
+    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d ?? {})).catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch(poolUrl(league?.conference_filter)).then(r => r.json()).then(d => setPool(Array.isArray(d) ? d : [])).catch(() => {});
@@ -2765,6 +2799,13 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
               borderRadius: 20, letterSpacing: 0.3,
             }}>{label}</div>
 
+            {/* Logo */}
+            {pick && (
+              <div style={{ width: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <SchoolLogo school={pick.player_data?.school ?? ''} posColor={color} logos={logos} size={30} />
+              </div>
+            )}
+
             {/* Player info */}
             <div style={{ flex: 1, minWidth: 0 }} onClick={pick ? (e) => { e.stopPropagation(); setViewingPlayer(pick.player_data); } : undefined}>
               {pick ? (
@@ -2839,6 +2880,11 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                   color: col, background: col + '1a', border: '1px solid ' + col + '50',
                   borderRadius: 20, letterSpacing: 0.3,
                 }}>{pos || 'BN'}</div>
+
+                {/* Logo */}
+                <div style={{ width: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <SchoolLogo school={pick.player_data?.school ?? ''} posColor={col} logos={logos} size={30} />
+                </div>
 
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }} onClick={e => { e.stopPropagation(); setViewingPlayer(pick.player_data); }}>
