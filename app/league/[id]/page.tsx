@@ -1387,8 +1387,20 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   const [busy,        setBusy]        = useState(false);
   const [toast,       setToast]       = useState('');
   const [loading,     setLoading]     = useState(true);
+  const [logos,       setLogos]       = useState<Record<string, string>>({});
+  const [gameCtx,     setGameCtx]     = useState<{ opponentMap: Record<string,string>; gameTimeMap: Record<string,string>; homeMap: Record<string,boolean>; rankMap: Record<string,number> } | null>(null);
 
   const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
+
+  useEffect(() => {
+    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d ?? {})).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const week = league?.current_week ?? 1;
+    fetch(`/api/matchup-context?week=${week}&season=2025`)
+      .then(r => r.json()).then(d => setGameCtx(d)).catch(() => {});
+  }, [league?.current_week]);
 
   useEffect(() => {
     if (!league?.id || !userId) return;
@@ -1642,14 +1654,6 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search players…" style={{ flex: 1, minWidth: 140, background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '6px 12px', color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none' }} />
       </div>
 
-      {/* Column headers */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 36px 80px', gap: 8, padding: '4px 12px', marginBottom: 4 }}>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>PLAYER</div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>PROJ</div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>RK</div>
-        <div />
-      </div>
-
       {freeAgents.length === 0 && (
         <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
           {availFilter === 'Available' ? 'No available players found.' : 'No players found.'}
@@ -1661,47 +1665,90 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         const posColor  = UNIT_COLORS[p.unitType] || C.muted;
         const isDrafted = draftedKeys.has(`${p.school}||${p.unitType}`);
         const posRank   = posRankMap.get(`${p.school}||${p.unitType}`) ?? null;
+        const logoUrl   = logos[p.school];
+        const opponent  = gameCtx?.opponentMap?.[p.school];
+        const gameTime  = gameCtx?.gameTimeMap?.[p.school];
+        const isHome    = gameCtx?.homeMap?.[p.school];
+        const oppRank   = opponent ? (gameCtx?.rankMap?.[opponent] ?? null) : null;
+        const oppLabel  = opponent
+          ? `${isHome ? 'vs' : '@'} ${opponent.length > 12 ? opponent.split(' ').pop() : opponent}${oppRank ? ` (${oppRank})` : ''}`
+          : 'BYE';
+        const proj      = weeklyProj(p.projectedPoints).toFixed(1);
+
         return (
-          <div key={p.id} onClick={() => setViewing(p)} style={{
-            display: 'grid', gridTemplateColumns: '1fr 60px 36px 80px', gap: 8, alignItems: 'center',
-            background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10,
-            padding: '10px 14px', marginBottom: 5, cursor: 'pointer',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.25)', transition: 'border-color .15s',
-            opacity: isDrafted ? 0.45 : 1,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              {/* Pill badge */}
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                height: 22, minWidth: 38, padding: '0 8px', borderRadius: 20,
-                background: posColor + '22', border: '1px solid ' + posColor + '60',
-                fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700,
-                color: posColor, flexShrink: 0, letterSpacing: 0.3,
-              }}>{p.unitType}</div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, marginTop: 1 }}>{p.school} · {p.conference} · {p.tier}</div>
+          <div
+            key={p.id}
+            onClick={() => setViewing(p)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 0,
+              background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10,
+              marginBottom: 5, cursor: 'pointer', overflow: 'hidden',
+              opacity: isDrafted ? 0.45 : 1, transition: 'border-color .15s',
+            }}
+            onMouseEnter={e => { if (!isDrafted) (e.currentTarget as HTMLElement).style.borderColor = posColor + '66'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = C.surf3; }}
+          >
+            {/* Pos color stripe */}
+            <div style={{ width: 4, alignSelf: 'stretch', background: posColor, flexShrink: 0 }} />
+
+            {/* Logo */}
+            <div style={{ width: 48, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '0 6px' }}>
+              {logoUrl ? (
+                <img src={logoUrl} alt={p.school} style={{ width: 36, height: 36, objectFit: 'contain' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+              ) : (
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: posColor + '33', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 10, color: posColor }}>
+                  {p.school.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+            </div>
+
+            {/* Main info */}
+            <div style={{ flex: 1, minWidth: 0, padding: '8px 4px 8px 0' }}>
+              {/* Pos badge + name */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  height: 18, minWidth: 30, padding: '0 5px', borderRadius: 4,
+                  background: posColor, fontFamily: 'Anton,sans-serif', fontSize: 9,
+                  color: '#fff', flexShrink: 0, letterSpacing: 0.5,
+                }}>{p.unitType}</div>
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {name}
+                </div>
               </div>
+              {/* School + conf */}
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.3, marginBottom: 3 }}>
+                {p.unitType} · {p.school} {posRank ? `· #${posRank}` : ''}
+              </div>
+              {/* Game info */}
+              {gameCtx && (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: opponent ? C.muted : C.red, letterSpacing: 0.3 }}>
+                    {oppLabel}
+                  </span>
+                  {gameTime && (
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 0.3 }}>
+                      {gameTime}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.gold, textAlign: 'right' }}>{weeklyProj(p.projectedPoints).toFixed(1)}</div>
-            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700, color: posRank === 1 ? C.gold : C.muted, textAlign: 'right' }}>
-              {posRank != null ? `#${posRank}` : ''}
+
+            {/* Projected pts */}
+            <div style={{ textAlign: 'center', padding: '0 12px', flexShrink: 0 }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold }}>{proj}</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>proj</div>
             </div>
-            {isDrafted ? (
-              <div style={{
-                padding: '6px 0', background: C.surf2,
-                border: '1px solid ' + C.surf3, borderRadius: 8,
-                fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700,
-                color: C.muted, textAlign: 'center', letterSpacing: .3,
-              }}>DRAFTED</div>
-            ) : (
-              <button onClick={e => { e.stopPropagation(); setAdding(p); }} style={{
-                padding: '6px 0', background: 'rgba(21,198,120,.12)',
-                border: '1px solid rgba(21,198,120,.35)', borderRadius: 8,
-                fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700,
-                color: C.green, cursor: 'pointer', letterSpacing: .3,
-              }}>+ ADD</button>
-            )}
+
+            {/* Action */}
+            <div style={{ padding: '0 10px 0 4px', flexShrink: 0 }}>
+              {isDrafted ? (
+                <div style={{ padding: '5px 8px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.muted, textAlign: 'center' }}>DRAFTED</div>
+              ) : (
+                <button onClick={e => { e.stopPropagation(); setAdding(p); }} style={{ padding: '6px 10px', background: 'rgba(21,198,120,.12)', border: '1px solid rgba(21,198,120,.35)', borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700, color: C.green, cursor: 'pointer' }}>+ ADD</button>
+              )}
+            </div>
           </div>
         );
       })}

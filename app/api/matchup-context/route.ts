@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     const [scheduleRes, eloData, spRes] = await Promise.all([
       admin
         .from('cached_schedule')
-        .select('home_team, away_team')
+        .select('home_team, away_team, game_date')
         .eq('week', week)
         .eq('season', season),
       getElo({ query: { year: season, week } }).then((r: any) => r.data || []).catch(() => []),
@@ -72,17 +72,34 @@ export async function GET(req: Request) {
     if (Object.keys(defRankMap).length === 0) Object.assign(defRankMap, rankMap);
     if (Object.keys(offRankMap).length === 0) Object.assign(offRankMap, rankMap);
 
-    // ── Opponent map from cached_schedule (same source as game-stats) ──
-    const opponentMap: Record<string, string> = {};
+    // ── Opponent map + game time from cached_schedule ──────────────
+    const opponentMap:  Record<string, string> = {};
+    const gameTimeMap:  Record<string, string> = {}; // school → "Sat 3:30PM"
+    const homeMap:      Record<string, boolean> = {}; // school → isHome
+
     for (const g of scheduleRes.data ?? []) {
-      if (g.home_team && g.away_team) {
-        opponentMap[g.home_team] = g.away_team;
-        opponentMap[g.away_team] = g.home_team;
+      if (!g.home_team || !g.away_team) continue;
+      opponentMap[g.home_team] = g.away_team;
+      opponentMap[g.away_team] = g.home_team;
+      homeMap[g.home_team] = true;
+      homeMap[g.away_team] = false;
+
+      if (g.game_date) {
+        const d = new Date(g.game_date);
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const dayStr = days[d.getUTCDay()];
+        const hr = d.getUTCHours();
+        const mn = d.getUTCMinutes();
+        const h12 = ((hr % 12) || 12);
+        const ampm = hr < 12 ? 'AM' : 'PM';
+        const timeStr = `${dayStr} ${h12}:${mn.toString().padStart(2, '0')}${ampm}`;
+        gameTimeMap[g.home_team] = timeStr;
+        gameTimeMap[g.away_team] = timeStr;
       }
     }
 
     return NextResponse.json(
-      { week, season, opponentMap, rankMap, defRankMap, offRankMap },
+      { week, season, opponentMap, rankMap, defRankMap, offRankMap, gameTimeMap, homeMap },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (err: any) {
