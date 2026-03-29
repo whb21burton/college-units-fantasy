@@ -58,18 +58,37 @@ export async function GET(req: Request) {
       .is('player_name', null)
       .limit(100000);
 
-    // Fetch QB and K starters from cached_players (depth_chart_position=1 preferred)
-    const { data: starterRows } = await admin
-      .from('cached_players')
-      .select('school, position, player_name, depth_chart_position')
-      .in('position', ['QB', 'K'])
-      .order('depth_chart_position', { ascending: true, nullsFirst: false });
+    // Derive QB and K starters from actual game performance:
+    // top passer by cumulative passing_YDS, top kicker by cumulative kicking_PTS.
+    // This is more reliable than depth_chart_position which is always null in the DB.
+    const { data: playerStatRows } = await admin
+      .from('cached_stats')
+      .select('school, player_name, stat_type, value')
+      .eq('season', SEASON)
+      .in('stat_type', ['passing_YDS', 'kicking_PTS'])
+      .not('player_name', 'is', null);
 
-    // Build starter map: "school||unitType" → playerName (first = depth_chart_position 1)
+    const qbYards: Record<string, Record<string, number>> = {};
+    const kPts:    Record<string, Record<string, number>> = {};
+    for (const row of playerStatRows ?? []) {
+      if (!row.player_name || !row.school) continue;
+      if (row.stat_type === 'passing_YDS') {
+        if (!qbYards[row.school]) qbYards[row.school] = {};
+        qbYards[row.school][row.player_name] = (qbYards[row.school][row.player_name] ?? 0) + (row.value ?? 0);
+      } else {
+        if (!kPts[row.school]) kPts[row.school] = {};
+        kPts[row.school][row.player_name] = (kPts[row.school][row.player_name] ?? 0) + (row.value ?? 0);
+      }
+    }
+
     const starterMap: Record<string, string> = {};
-    for (const p of starterRows ?? []) {
-      const key = `${p.school}||${p.position}`;
-      if (!(key in starterMap)) starterMap[key] = p.player_name;
+    for (const [school, players] of Object.entries(qbYards)) {
+      const top = Object.entries(players).sort((a, b) => b[1] - a[1])[0];
+      if (top) starterMap[`${school}||QB`] = top[0];
+    }
+    for (const [school, players] of Object.entries(kPts)) {
+      const top = Object.entries(players).sort((a, b) => b[1] - a[1])[0];
+      if (top) starterMap[`${school}||K`] = top[0];
     }
 
     if (error) throw error;
