@@ -2312,34 +2312,38 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView, 
   const ep       = effectivePts(school, unitType, pick.player_data?.projectedPoints ?? 0, ctx, gameStats);
   const pts      = ep.pts.toFixed(1);
 
+  // Score sits on the INNER side (near the center pos badge), info on the OUTER side.
+  // Left cell:  [info(flex:1, left-align)] [logo] [score]
+  // Right cell: [score] [logo] [info(flex:1, right-align)]
   const logoEl = (
-    <div style={{ width: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <SchoolLogo school={school} posColor={posColor} logos={logos} size={32} />
+    <div style={{ width: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <SchoolLogo school={school} posColor={posColor} logos={logos} size={30} />
     </div>
   );
 
   const info = (
-    <PlayerInfoLines
-      school={school}
-      unitType={unitType}
-      playerName={pick.player_data?.playerName}
-      ctx={ctx}
-      ep={ep}
-      align={align}
-      seasonPts={pick.player_data?.projectedPoints ?? 0}
-      unitRankMaps={unitRankMaps}
-    />
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <PlayerInfoLines
+        school={school}
+        unitType={unitType}
+        playerName={pick.player_data?.playerName}
+        ctx={ctx}
+        ep={ep}
+        align={align}
+        seasonPts={pick.player_data?.projectedPoints ?? 0}
+        unitRankMaps={unitRankMaps}
+      />
+    </div>
   );
   const score = (
-    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: isRight ? C.gold : C.sub, flexShrink: 0, minWidth: 42, textAlign: isRight ? 'right' : 'left' }}>
+    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: isRight ? C.gold : C.sub, flexShrink: 0, minWidth: 46, textAlign: isRight ? 'left' : 'right' }}>
       {pts}
     </div>
   );
   return (
     <div onClick={onView} style={{
       display: 'flex', alignItems: 'center',
-      justifyContent: isRight ? 'flex-end' : 'flex-start',
-      gap: 8, padding: '9px 10px', background: C.surf2,
+      gap: 6, padding: '9px 8px', background: C.surf2,
       borderRadius: isRight ? '8px 0 0 8px' : '0 8px 8px 0',
       border: '1px solid ' + C.surf3,
       borderRight: isRight ? 'none' : undefined,
