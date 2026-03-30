@@ -78,12 +78,15 @@ function pillStyle(bg: string, color: string): React.CSSProperties {
 export default function LineupPage({ params }: { params: { id: string } }) {
   const router = useRouter();
 
-  const [league,    setLeague]    = useState<any>(null);
-  const [userId,    setUserId]    = useState<string | null>(null);
-  const [pool,      setPool]      = useState<DraftUnit[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [saving,    setSaving]    = useState(false);
-  const [saved,     setSaved]     = useState(false);
+  const [league,        setLeague]        = useState<any>(null);
+  const [userId,        setUserId]        = useState<string | null>(null);
+  const [pool,          setPool]          = useState<DraftUnit[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [saving,        setSaving]        = useState(false);
+  const [saved,         setSaved]         = useState(false);
+  const [submitted,     setSubmitted]     = useState(false);  // has a saved lineup
+  const [editing,       setEditing]       = useState(false);  // editing an existing lineup
+  const [firstGameTime, setFirstGameTime] = useState<string | null>(null);
   // week is always locked to the league's contest week — no user choice
   const week = league?.week ?? 1;
   const [search,    setSearch]    = useState('');
@@ -152,7 +155,15 @@ export default function LineupPage({ params }: { params: { id: string } }) {
           }
         }
         setLineup(restored);
+        setSubmitted(true); // already have a submitted lineup → show view mode
       }
+
+      // Fetch first game time for lock logic
+      const contestWeek2 = lg.week ?? 1;
+      fetch(`/api/matchup-context?week=${contestWeek2}&season=2025`)
+        .then(r => r.json())
+        .then(d => setFirstGameTime(d.firstGameTime ?? null))
+        .catch(() => {});
 
       setLoading(false);
     }
@@ -249,6 +260,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
 
       if (res.ok) {
         setSaved(true);
+        setSubmitted(true);
+        setEditing(false);
       } else {
         const d = await res.json().catch(() => ({}));
         alert(d.error ?? 'Failed to submit lineup.');
@@ -256,6 +269,95 @@ export default function LineupPage({ params }: { params: { id: string } }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  const isLocked    = firstGameTime ? new Date() >= new Date(firstGameTime) : false;
+  const showBuilder = !submitted || editing;
+
+  // ── Submitted view (read-only dashboard) ─────────────────────────────────
+  if (!loading && submitted && !editing) {
+    const lockLabel = firstGameTime
+      ? isLocked
+        ? 'Games in progress — lineup locked'
+        : `Locks at first kickoff: ${new Date(firstGameTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}`
+      : '';
+
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column' }}>
+        {/* Top bar */}
+        <div style={{ background: 'linear-gradient(180deg,#0d1827,#0c1422)', borderBottom: '1px solid ' + C.surf3, padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button onClick={() => router.push(`/league/${params.id}`)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase', padding: '4px 0', display: 'flex', alignItems: 'center', gap: 6 }}>← Back</button>
+            <div style={{ width: 1, height: 16, background: C.surf3 }} />
+            <div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 1 }}>{league?.name}</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Weekly DFS · Week {week}</div>
+            </div>
+          </div>
+          {isLocked ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: 'rgba(240,58,90,.12)', border: '1px solid rgba(240,58,90,.35)' }}>
+              <span style={{ fontSize: 12 }}>🔒</span>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.red, textTransform: 'uppercase' }}>Lineup Locked</span>
+            </div>
+          ) : (
+            <button onClick={() => setEditing(true)} style={{ padding: '8px 20px', background: 'linear-gradient(135deg,#f5a623,#ffd166)', border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 1.5, color: C.bg, cursor: 'pointer', textTransform: 'uppercase' }}>
+              ✏ Edit Lineup
+            </button>
+          )}
+        </div>
+
+        {/* Lock info banner */}
+        {lockLabel && (
+          <div style={{ padding: '8px 20px', background: isLocked ? 'rgba(240,58,90,.08)' : 'rgba(21,198,120,.07)', borderBottom: '1px solid ' + (isLocked ? 'rgba(240,58,90,.2)' : 'rgba(21,198,120,.2)'), fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: isLocked ? C.red : C.green, textAlign: 'center', textTransform: 'uppercase' }}>
+            {lockLabel}
+          </div>
+        )}
+
+        {/* Submitted lineup */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', maxWidth: 520, margin: '0 auto', width: '100%' }}>
+          {/* Status badge */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: isLocked ? C.red : C.green }} />
+              <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: isLocked ? C.red : C.green }}>
+                {isLocked ? 'Locked' : 'Submitted'}
+              </span>
+            </div>
+            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${totalSalary} / ${BUDGET}</span>
+          </div>
+
+          {/* Slot rows */}
+          {SLOTS.map(slot => {
+            const unit     = lineup[slot.key];
+            const price    = unit ? (priceMap[unit.id] ?? 0) : 0;
+            const posColor = unit ? (POS_COLOR[unit.unitType] ?? C.sub) : C.muted;
+            return (
+              <div key={slot.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4, background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8 }}>
+                <div style={{ width: 36, flexShrink: 0, fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: posColor }}>{slot.label}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {unit ? (
+                    <>
+                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{unit.playerName || unit.school}</div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.5, marginTop: 1 }}>{unit.school} · {unit.conference}</div>
+                    </>
+                  ) : (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Empty</div>
+                  )}
+                </div>
+                <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold, flexShrink: 0 }}>${price}</span>
+              </div>
+            );
+          })}
+
+          {/* Edit button at bottom if not locked */}
+          {!isLocked && (
+            <button onClick={() => setEditing(true)} style={{ width: '100%', marginTop: 16, padding: '13px 0', background: 'rgba(245,166,35,.12)', border: '1px solid rgba(245,166,35,.4)', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.gold, cursor: 'pointer', textTransform: 'uppercase' }}>
+              ✏ Edit Lineup
+            </button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   if (loading) return (

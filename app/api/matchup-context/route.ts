@@ -76,6 +76,7 @@ export async function GET(req: Request) {
     const opponentMap:  Record<string, string> = {};
     const gameTimeMap:  Record<string, string> = {}; // school → "Sat 3:30PM"
     const homeMap:      Record<string, boolean> = {}; // school → isHome
+    let firstGameTime:  string | null = null; // ISO timestamp of earliest game this week
 
     for (const g of scheduleRes.data ?? []) {
       if (!g.home_team || !g.away_team) continue;
@@ -85,6 +86,9 @@ export async function GET(req: Request) {
       homeMap[g.away_team] = false;
 
       if (g.game_date) {
+        // Track earliest game of the week for lineup lock logic
+        if (!firstGameTime || g.game_date < firstGameTime) firstGameTime = g.game_date;
+
         const d = new Date(g.game_date);
         const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const dayStr = days[d.getUTCDay()];
@@ -99,7 +103,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json(
-      { week, season, opponentMap, rankMap, defRankMap, offRankMap, gameTimeMap, homeMap },
+      { week, season, opponentMap, rankMap, defRankMap, offRankMap, gameTimeMap, homeMap, firstGameTime },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (err: any) {
