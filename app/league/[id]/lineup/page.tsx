@@ -118,7 +118,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         .eq('league_id', params.id)
         .eq('user_id', user.id)
         .single();
-      if (!m) { router.push(`/join`); return; }
+      if (!m) { router.push(`/leagues`); return; }
 
       // Load player pool
       const confParam = lg.conference_filter && lg.conference_filter !== 'ALL'
