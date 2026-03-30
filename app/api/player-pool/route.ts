@@ -32,7 +32,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const confFilter = searchParams.get('conference') ?? null; // e.g. "SEC", null = all
+    const confParam  = searchParams.get('conference') ?? null; // "SEC" or "SEC,ACC,Big Ten" or null = all
+    const confFilter = confParam; // kept as original name for compat
+    const confList   = confParam ? confParam.split(',').map(c => c.trim()).filter(Boolean) : null;
 
     const admin = createAdminClient();
 
@@ -114,7 +116,7 @@ export async function GET(req: Request) {
     const allEntries: Entry[] = [];
 
     for (const [conf, schools] of Object.entries(CONFERENCES) as [Conference, string[]][]) {
-      if (confFilter && conf !== confFilter) continue; // skip other conferences when filtered
+      if (confList && !confList.includes(conf)) continue; // skip conferences not in filter list
       for (const school of schools) {
         for (const unitType of UNIT_TYPES) {
           const key = `${school}||${unitType}`;

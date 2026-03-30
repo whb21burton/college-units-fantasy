@@ -3372,14 +3372,60 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting,      setDeleting]      = useState(false);
 
-  // League Settings fields
-  const [leagueName, setLeagueName] = useState<string>(league?.name || '');
-  const [leagueSize, setLeagueSize] = useState<number>(league?.league_size || 8);
+  // ── League Settings ──────────────────────────────────────────
+  const [leagueName,    setLeagueName]    = useState<string>(league?.name || '');
+  const [leagueSize,    setLeagueSize]    = useState<number>(league?.league_size || 8);
+  const [customSize,    setCustomSize]    = useState<string>(String(league?.league_size || 8));
+  const initConfs = league?.conference_filter && league.conference_filter !== 'ALL'
+    ? league.conference_filter.split(',') : [];
+  const [selectedConfs, setSelectedConfs] = useState<string[]>(initConfs);
 
-  // Team Settings fields
-  const [teamName, setTeamName] = useState<string>(myMember?.team_name || '');
+  // ── Team Settings ────────────────────────────────────────────
+  const [teamName,     setTeamName]     = useState<string>(myMember?.team_name || '');
+  const rosterObj = (myMember?.roster && typeof myMember.roster === 'object' && !Array.isArray(myMember.roster))
+    ? myMember.roster as Record<string, any> : {};
+  const [teamLogoUrl, setTeamLogoUrl]   = useState<string>(rosterObj.team_logo_url ?? '');
 
-  const canEdit = (commOnly: boolean) => commOnly ? isCommissioner : true;
+  // ── Roster Settings ──────────────────────────────────────────
+  const defaultStarters: Record<string, number> = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DEF: 1, K: 1 };
+  const [starterSlots, setStarterSlots] = useState<Record<string, number>>(
+    league?.settings?.starter_slots ?? defaultStarters
+  );
+  const [benchSpots, setBenchSpots]     = useState<number>(league?.settings?.bench_spots ?? 7);
+
+  // ── Draft Settings ───────────────────────────────────────────
+  const [draftType,      setDraftType]      = useState<string>(league?.draft_type ?? 'snake');
+  const [pickTimer,      setPickTimer]      = useState<number>(league?.settings?.pick_timer ?? 60);
+  const [salaryCap,      setSalaryCap]      = useState<number>(league?.salary_cap ?? 200);
+  const [draftOrderList, setDraftOrderList] = useState<any[]>(league?.settings?.draft_order ?? []);
+
+  const ALL_CONFS = ['SEC', 'Big Ten', 'Big 12', 'ACC', 'FBS Independents'];
+
+  function toggleConf(conf: string) {
+    setSelectedConfs(prev => prev.includes(conf) ? prev.filter(c => c !== conf) : [...prev, conf]);
+  }
+
+  function moveDraftOrder(idx: number, dir: -1 | 1) {
+    const next = idx + dir;
+    if (next < 0 || next >= draftOrderList.length) return;
+    const list = [...draftOrderList];
+    [list[idx], list[next]] = [list[next], list[idx]];
+    setDraftOrderList(list.map((t, i) => ({ ...t, slot: i + 1 })));
+  }
+
+  function randomizeDraftOrder() {
+    const shuffled = [...draftOrderList].sort(() => Math.random() - 0.5);
+    setDraftOrderList(shuffled.map((t, i) => ({ ...t, slot: i + 1 })));
+  }
+
+  function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 300_000) { alert('Image must be under 300 KB'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => setTeamLogoUrl(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  }
 
   async function deleteLeague() {
     if (deleteConfirm !== league?.name) return;
@@ -3390,21 +3436,42 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
 
   async function save() {
     setSaving(true);
-    if (section === 'league' && isCommissioner) {
-      await supabase.from('leagues')
-        .update({ name: leagueName.trim(), league_size: leagueSize })
-        .eq('id', league.id);
+    try {
+      if (section === 'league' && isCommissioner) {
+        const sz = Math.max(2, Math.min(20, parseInt(customSize, 10) || leagueSize));
+        const confFilter = selectedConfs.length > 0 ? selectedConfs.join(',') : 'ALL';
+        await supabase.from('leagues')
+          .update({ name: leagueName.trim(), league_size: sz, conference_filter: confFilter })
+          .eq('id', league.id);
+      }
+      if (section === 'team' && userId && myMember) {
+        await supabase.from('league_members')
+          .update({ team_name: teamName.trim(), roster: { ...rosterObj, team_logo_url: teamLogoUrl } })
+          .eq('id', myMember.id);
+      }
+      if (section === 'roster' && isCommissioner) {
+        await supabase.from('leagues')
+          .update({ settings: { ...(league.settings ?? {}), starter_slots: starterSlots, bench_spots: benchSpots } })
+          .eq('id', league.id);
+      }
+      if (section === 'draft' && isCommissioner) {
+        await supabase.from('leagues')
+          .update({
+            draft_type: draftType,
+            salary_cap: salaryCap,
+            settings: { ...(league.settings ?? {}), pick_timer: pickTimer, draft_order: draftOrderList },
+          })
+          .eq('id', league.id);
+      }
+      onUpdate();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } finally {
+      setSaving(false);
     }
-    if (section === 'team' && userId && myMember) {
-      await supabase.from('league_members')
-        .update({ team_name: teamName.trim() })
-        .eq('id', myMember.id);
-    }
-    onUpdate();
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   }
+
+  const canEdit = (commOnly: boolean) => commOnly ? isCommissioner : true;
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '10px 13px',
@@ -3521,7 +3588,8 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
 
             {/* ── League Settings ── */}
             {section === 'league' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+                {/* League name */}
                 <div>
                   <label style={labelStyle}>League Name</label>
                   <input
@@ -3533,36 +3601,61 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
                     onBlur={e  => (e.target as HTMLInputElement).style.borderColor = C.surf3}
                   />
                 </div>
+
+                {/* Teams count */}
                 <div>
-                  <label style={labelStyle}>Teams</label>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <label style={labelStyle}>Max Teams</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     {[4, 6, 8, 10, 12, 14].map(n => (
-                      <OptionBtn key={n} value={n} current={leagueSize} onClick={() => isCommissioner && setLeagueSize(n)}>
+                      <OptionBtn key={n} value={n} current={parseInt(customSize, 10) || leagueSize} onClick={() => { if (isCommissioner) { setLeagueSize(n); setCustomSize(String(n)); } }}>
                         {n}
                       </OptionBtn>
                     ))}
+                    <input
+                      type="number" min={2} max={20}
+                      value={customSize}
+                      onChange={e => { setCustomSize(e.target.value); setLeagueSize(parseInt(e.target.value, 10) || leagueSize); }}
+                      disabled={!isCommissioner}
+                      placeholder="Custom"
+                      style={{ ...inputStyle, width: 74, padding: '8px 10px', fontSize: 12 }}
+                    />
                   </div>
-                  {!isCommissioner && (
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 6 }}>Only the commissioner can change these settings.</div>
-                  )}
                 </div>
+
+                {/* Conference filter */}
                 <div>
-                  <label style={labelStyle}>Waiver Type</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {['Free Agent', 'FAAB Bidding', 'Rolling'].map(type => (
-                      <OptionBtn key={type} value={type} current="FAAB Bidding" onClick={() => {}}>
-                        {type}
-                      </OptionBtn>
-                    ))}
+                  <label style={labelStyle}>Available Conferences</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {/* All conferences toggle */}
+                    <div
+                      onClick={() => isCommissioner && setSelectedConfs([])}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, background: selectedConfs.length === 0 ? 'rgba(212,168,40,.12)' : C.surf2, border: '1px solid ' + (selectedConfs.length === 0 ? C.gold : C.surf3), cursor: isCommissioner ? 'pointer' : 'default', transition: 'all .15s' }}
+                    >
+                      <div style={{ width: 16, height: 16, borderRadius: 4, border: '2px solid ' + (selectedConfs.length === 0 ? C.gold : C.surf3), background: selectedConfs.length === 0 ? C.gold : 'none', flexShrink: 0 }} />
+                      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: selectedConfs.length === 0 ? C.gold : C.sub }}>All Conferences (FBS)</span>
+                    </div>
+                    {ALL_CONFS.map(conf => {
+                      const checked = selectedConfs.includes(conf);
+                      return (
+                        <div
+                          key={conf}
+                          onClick={() => isCommissioner && toggleConf(conf)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, background: checked ? 'rgba(212,168,40,.08)' : C.surf2, border: '1px solid ' + (checked ? 'rgba(212,168,40,.4)' : C.surf3), cursor: isCommissioner ? 'pointer' : 'default', transition: 'all .15s' }}
+                        >
+                          <div style={{ width: 16, height: 16, borderRadius: 4, border: '2px solid ' + (checked ? C.gold : C.surf3), background: checked ? C.gold : 'none', flexShrink: 0 }} />
+                          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: checked ? C.gold : C.sub }}>{conf}</span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 6 }}>Waiver wire coming soon.</div>
+                  {!isCommissioner && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 6 }}>Only the commissioner can change these settings.</div>}
                 </div>
               </div>
             )}
 
             {/* ── Team Settings ── */}
             {section === 'team' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
                 <div>
                   <label style={labelStyle}>Team Name</label>
                   <input
@@ -3576,12 +3669,34 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
                 </div>
                 <div>
                   <label style={labelStyle}>Team Logo</label>
-                  <div style={{
-                    width: 80, height: 80, borderRadius: 12, background: C.surf3,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    border: '2px dashed ' + C.muted, cursor: 'not-allowed',
-                  }}>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center', letterSpacing: .5 }}>Coming<br/>Soon</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                    {/* Preview */}
+                    <div style={{ width: 72, height: 72, borderRadius: 10, background: C.surf3, border: '1px solid ' + C.surf3, overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {teamLogoUrl ? (
+                        <img src={teamLogoUrl} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.muted }}>{(teamName || '?').slice(0, 2).toUpperCase()}</span>
+                      )}
+                    </div>
+                    {/* Upload + URL */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <label style={{ display: 'inline-block', padding: '8px 14px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 7, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.sub, textAlign: 'center' }}>
+                        📁 Upload Image (max 300 KB)
+                        <input type="file" accept="image/*" onChange={handleLogoFile} style={{ display: 'none' }} />
+                      </label>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>— OR paste an image URL —</div>
+                      <input
+                        value={teamLogoUrl}
+                        onChange={e => setTeamLogoUrl(e.target.value)}
+                        placeholder="https://..."
+                        style={{ ...inputStyle, fontSize: 11 }}
+                        onFocus={e => (e.target as HTMLInputElement).style.borderColor = C.gold}
+                        onBlur={e  => (e.target as HTMLInputElement).style.borderColor = C.surf3}
+                      />
+                      {teamLogoUrl && (
+                        <button onClick={() => setTeamLogoUrl('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red, textAlign: 'left', padding: 0, letterSpacing: .5 }}>✕ Remove logo</button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3589,37 +3704,33 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
 
             {/* ── Roster Settings ── */}
             {section === 'roster' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
                 <div>
                   <label style={labelStyle}>Starter Slots</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {[
-                      { pos: 'QB',  slots: 1 },
-                      { pos: 'RB',  slots: 2 },
-                      { pos: 'WR',  slots: 2 },
-                      { pos: 'TE',  slots: 1 },
-                      { pos: 'DEF', slots: 1 },
-                      { pos: 'K',   slots: 1 },
-                    ].map(({ pos, slots }) => (
-                      <div key={pos} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', background: C.surf2, borderRadius: 8, border: '1px solid ' + C.surf3 }}>
-                        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, letterSpacing: .5 }}>{pos}</span>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          {[1, 2, 3].map(n => (
-                            <OptionBtn key={n} value={n === slots ? n : -1} current={slots} onClick={() => {}}>
-                              {n}
-                            </OptionBtn>
-                          ))}
+                    {(['QB', 'RB', 'WR', 'TE', 'FLEX', 'DEF', 'K'] as const).map(pos => {
+                      const maxSlots = { QB: 3, RB: 4, WR: 4, TE: 3, FLEX: 3, DEF: 2, K: 2 }[pos] ?? 3;
+                      const cur = starterSlots[pos] ?? 1;
+                      return (
+                        <div key={pos} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', background: C.surf2, borderRadius: 8, border: '1px solid ' + C.surf3 }}>
+                          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, letterSpacing: .5, width: 44 }}>{pos}</span>
+                          <div style={{ display: 'flex', gap: 5 }}>
+                            {Array.from({ length: maxSlots }, (_, i) => i + 1).map(n => (
+                              <OptionBtn key={n} value={n} current={cur} onClick={() => isCommissioner && setStarterSlots(prev => ({ ...prev, [pos]: n }))}>
+                                {n}
+                              </OptionBtn>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 8 }}>Custom roster slots coming soon.</div>
                 </div>
                 <div>
                   <label style={labelStyle}>Bench Spots</label>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    {[4, 5, 6, 7, 8].map(n => (
-                      <OptionBtn key={n} value={n === 7 ? n : -1} current={7} onClick={() => {}}>
+                    {[3, 4, 5, 6, 7, 8].map(n => (
+                      <OptionBtn key={n} value={n} current={benchSpots} onClick={() => isCommissioner && setBenchSpots(n)}>
                         {n}
                       </OptionBtn>
                     ))}
@@ -3665,51 +3776,90 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
 
             {/* ── Draft Settings ── */}
             {section === 'draft' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+                {/* Draft type */}
                 <div>
                   <label style={labelStyle}>Draft Type</label>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    {[{ v: 'snake', l: '🐍 Snake', sub: 'Serpentine order' }, { v: 'linear', l: '→ Linear', sub: 'Same order every round' }].map(({ v, l, sub }) => (
-                      <button key={v} style={{
-                        flex: 1, padding: '12px 0', borderRadius: 8, cursor: 'pointer',
-                        background: v === 'snake' ? 'rgba(212,168,40,0.1)' : C.surf2,
-                        border: '1px solid ' + (v === 'snake' ? C.gold : C.surf3),
-                        color: v === 'snake' ? C.gold : C.sub,
-                        fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1,
+                    {[{ v: 'snake', l: '🐍 Snake', sub: 'Serpentine order' }, { v: 'linear', l: '→ Linear', sub: 'Same order each round' }, { v: 'auction', l: '🏦 Auction', sub: 'Bid on each player' }].map(({ v, l, sub }) => (
+                      <button key={v} onClick={() => isCommissioner && setDraftType(v)} style={{
+                        flex: 1, padding: '10px 0', borderRadius: 8, cursor: isCommissioner ? 'pointer' : 'default',
+                        background: v === draftType ? 'rgba(212,168,40,0.12)' : C.surf2,
+                        border: '1px solid ' + (v === draftType ? C.gold : C.surf3),
+                        color: v === draftType ? C.gold : C.sub,
+                        fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1,
+                        transition: 'all .15s',
                       }}>
                         {l}
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: v === 'snake' ? 'rgba(212,168,40,0.7)' : C.muted, marginTop: 3 }}>{sub}</div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: v === draftType ? 'rgba(212,168,40,0.7)' : C.muted, marginTop: 3 }}>{sub}</div>
                       </button>
                     ))}
                   </div>
                 </div>
+
+                {/* Pick timer */}
                 <div>
-                  <label style={labelStyle}>Pick Timer</label>
+                  <label style={labelStyle}>Seconds Per Pick</label>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {[{ l: '30s', v: 30 }, { l: '60s', v: 60 }, { l: '90s', v: 90 }, { l: '2 min', v: 120 }, { l: '∞', v: 0 }].map(({ l, v }) => (
-                      <OptionBtn key={v} value={v === 60 ? v : -1} current={60} onClick={() => {}}>
+                      <OptionBtn key={v} value={v} current={pickTimer} onClick={() => isCommissioner && setPickTimer(v)}>
                         {l}
                       </OptionBtn>
                     ))}
                   </div>
                 </div>
+
+                {/* Auction salary cap (only when auction) */}
+                {draftType === 'auction' && (
+                  <div>
+                    <label style={labelStyle}>Auction Budget Per Team ($)</label>
+                    <input
+                      type="number" min={50} max={1000} step={50}
+                      value={salaryCap}
+                      onChange={e => setSalaryCap(parseInt(e.target.value, 10) || 200)}
+                      disabled={!isCommissioner}
+                      style={{ ...inputStyle, width: 120 }}
+                    />
+                  </div>
+                )}
+
+                {/* Draft order */}
                 <div>
                   <label style={labelStyle}>Draft Order</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {['Randomize', 'Manual'].map(t => (
-                      <OptionBtn key={t} value={t === 'Randomize' ? t : ''} current="Randomize" onClick={() => {}}>
-                        {t}
-                      </OptionBtn>
-                    ))}
-                  </div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 6 }}>Full draft settings customization coming soon.</div>
+                  {draftOrderList.length > 0 ? (
+                    <>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+                        {draftOrderList.map((team: any, idx: number) => (
+                          <div key={team.userId ?? idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 7 }}>
+                            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.gold, width: 18, textAlign: 'center' }}>{idx + 1}</span>
+                            <span style={{ flex: 1, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>{team.teamName ?? team.userId}</span>
+                            {isCommissioner && (
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button onClick={() => moveDraftOrder(idx, -1)} disabled={idx === 0} style={{ width: 22, height: 22, background: C.surf3, border: 'none', borderRadius: 4, cursor: idx === 0 ? 'default' : 'pointer', color: idx === 0 ? C.muted : C.sub, fontSize: 11 }}>↑</button>
+                                <button onClick={() => moveDraftOrder(idx, 1)} disabled={idx === draftOrderList.length - 1} style={{ width: 22, height: 22, background: C.surf3, border: 'none', borderRadius: 4, cursor: idx === draftOrderList.length - 1 ? 'default' : 'pointer', color: idx === draftOrderList.length - 1 ? C.muted : C.sub, fontSize: 11 }}>↓</button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {isCommissioner && (
+                        <button onClick={randomizeDraftOrder} style={{ padding: '7px 16px', background: 'rgba(212,168,40,.1)', border: '1px solid rgba(212,168,40,.35)', borderRadius: 7, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.gold }}>
+                          🎲 Randomize Order
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, letterSpacing: .5, padding: '10px 0' }}>
+                      Draft order is set automatically when the draft starts. Members must join first.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Footer save button — only for sections with saveable data */}
-          {(section === 'league' || section === 'team') && canEdit(section === 'league') && (
+          {/* Footer save button */}
+          {(['league', 'team', 'roster', 'draft'].includes(section)) && canEdit(section !== 'team') && (
             <div style={{ padding: '14px 28px', borderTop: '1px solid ' + C.surf3, flexShrink: 0 }}>
               <button
                 onClick={save}
