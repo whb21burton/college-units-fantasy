@@ -144,8 +144,11 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         const restored: Record<string, DraftUnit | null> = {};
         SLOTS.forEach(s => { restored[s.key] = null; });
         for (const pick of existing) {
-          if (pick.slot && restored[pick.slot] !== undefined && pick.player_data) {
-            restored[pick.slot] = pick.player_data as DraftUnit;
+          // slot is stored inside player_data._slot (avoids PostgREST schema cache issues)
+          const slot = pick.player_data?._slot ?? pick.slot;
+          if (slot && restored[slot] !== undefined && pick.player_data) {
+            const { _slot: _s, _salary: _sal, ...unitData } = pick.player_data;
+            restored[slot] = unitData as DraftUnit;
           }
         }
         setLineup(restored);

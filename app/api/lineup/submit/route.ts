@@ -121,17 +121,18 @@ export async function POST(req: NextRequest) {
       .eq('week', week)
       .eq('entry_type', 'lineup');
 
-    const rows = picks.map(p => ({
+    // Store slot + salary inside player_data to avoid schema cache issues
+    // with the separately-added 'slot' column.
+    // Use random pick_numbers to avoid the legacy unique(league_id, pick_number) constraint.
+    const rows = picks.map((p, i) => ({
       league_id,
-      user_id:      user.id,
-      unit_id:      p.unit_id,
-      round:        0,
-      pick_number:  0,
+      user_id:     user.id,
+      player_id:   p.unit_id,
+      player_data: { ...(p.player_data ?? {}), _slot: p.slot, _salary: p.salary_cost },
+      round:       0,
+      pick_number: Math.floor(Math.random() * 1_000_000_000) + i,
       week,
-      entry_type:   'lineup',
-      salary_cost:  p.salary_cost,
-      slot:         p.slot,
-      player_data:  p.player_data ?? null,
+      entry_type:  'lineup',
     }));
 
     const { error: insertErr } = await admin.from('draft_picks').insert(rows);
