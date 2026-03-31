@@ -644,7 +644,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
             <WaiverTab league={league} userId={userId} />
           )}
           {activeTab === 'lineup' && (
-            <WeeklyLineupTab leagueId={params.id} router={router} />
+            <WeeklyLineupTab leagueId={params.id} router={router} userId={userId} league={league} />
           )}
           {activeTab === 'leaderboard' && (
             <WeeklyLeaderboardTab leagueId={params.id} />
@@ -717,35 +717,161 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   );
 }
 
+const LINEUP_SLOTS = [
+  { key: 'QB',   label: 'QB'   },
+  { key: 'RB1',  label: 'RB'   },
+  { key: 'RB2',  label: 'RB'   },
+  { key: 'WR1',  label: 'WR'   },
+  { key: 'WR2',  label: 'WR'   },
+  { key: 'TE',   label: 'TE'   },
+  { key: 'FLEX', label: 'FLEX' },
+  { key: 'DEF',  label: 'DEF'  },
+  { key: 'K',    label: 'K'    },
+];
+
+const LINEUP_POS_COLOR: Record<string, string> = {
+  QB: '#e05c2a', RB: '#2a9d8f', WR: '#3a86ff',
+  TE: '#8338ec', DEF: '#2b9348', K: '#e9c46a',
+};
+
 /* ── Weekly Lineup Tab ──────────────────────────────────────── */
-function WeeklyLineupTab({ leagueId, router }: { leagueId: string; router: any }) {
+function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: string; router: any; userId: string | null; league: any }) {
+  const [picks,         setPicks]         = useState<any[] | null>(null);
+  const [firstGameTime, setFirstGameTime] = useState<string | null>(null);
+  const [loading,       setLoading]       = useState(true);
+
+  const week = league?.week ?? 1;
+
+  useEffect(() => {
+    if (!userId) { setLoading(false); return; }
+    async function load() {
+      setLoading(true);
+      const [picksRes, ctxRes] = await Promise.all([
+        supabase
+          .from('draft_picks')
+          .select('*')
+          .eq('league_id', leagueId)
+          .eq('user_id', userId!)
+          .eq('week', week)
+          .eq('entry_type', 'lineup'),
+        fetch(`/api/matchup-context?week=${week}&season=2025`)
+          .then(r => r.json()).catch(() => ({})),
+      ]);
+      setPicks(picksRes.data ?? []);
+      setFirstGameTime(ctxRes.firstGameTime ?? null);
+      setLoading(false);
+    }
+    load();
+  }, [leagueId, userId, week]);
+
+  if (loading) return (
+    <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 2, fontSize: 12 }}>
+      Loading lineup…
+    </div>
+  );
+
+  const isLocked = firstGameTime ? new Date() >= new Date(firstGameTime) : false;
+
+  // No lineup submitted yet
+  if (!picks || picks.length === 0) {
+    return (
+      <div style={{ maxWidth: 560 }}>
+        <div style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 12, padding: '32px 28px', textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🏈</div>
+          <div style={{ fontFamily: "'Anton',sans-serif", fontSize: 22, color: C.text, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+            Build Your Lineup
+          </div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, color: C.sub, marginBottom: 24, lineHeight: 1.6 }}>
+            Pick 9 starters within a $200 salary cap.<br />
+            QB · RB×2 · WR×2 · TE · FLEX · DEF · K
+          </div>
+          {isLocked ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 20px', borderRadius: 8, background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)' }}>
+              <span>🔒</span>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.red, textTransform: 'uppercase' }}>Lineup Locked — Submissions Closed</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => router.push(`/league/${leagueId}/lineup`)}
+              style={{ padding: '14px 36px', background: 'linear-gradient(135deg,#f5a623,#ffd166)', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: "'Anton',sans-serif", fontSize: 15, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' }}
+            >
+              Open Lineup Builder →
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Restore lineup map from saved picks
+  const lineupMap: Record<string, any> = {};
+  let totalSalary = 0;
+  for (const pick of picks) {
+    const slot = pick.player_data?._slot ?? pick.slot;
+    if (slot) {
+      const { _slot: _s, _salary: _sal, ...unitData } = pick.player_data ?? {};
+      lineupMap[slot] = unitData;
+      totalSalary += pick.player_data?._salary ?? 0;
+    }
+  }
+
+  const lockLabel = firstGameTime
+    ? isLocked
+      ? 'Games in progress — lineup locked'
+      : `Locks at first kickoff: ${new Date(firstGameTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}`
+    : '';
+
   return (
-    <div style={{ maxWidth: 560 }}>
-      <div style={{
-        background: C.surf, border: '1px solid ' + C.surf3,
-        borderRadius: 12, padding: '32px 28px', textAlign: 'center',
-      }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>🏈</div>
-        <div style={{ fontFamily: "'Anton',sans-serif", fontSize: 22, color: C.text, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-          Build Your Lineup
+    <div style={{ maxWidth: 520 }}>
+      {/* Status row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: isLocked ? C.red : C.green }} />
+          <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: isLocked ? C.red : C.green }}>
+            {isLocked ? 'Locked' : 'Submitted'}
+          </span>
         </div>
-        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, color: C.sub, marginBottom: 24, lineHeight: 1.6 }}>
-          Pick 9 starters within a $200 salary cap.<br />
-          QB · RB×2 · WR×2 · TE · FLEX · DEF · K
+        <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${totalSalary} / $200</span>
+      </div>
+
+      {/* Lock banner */}
+      {lockLabel && (
+        <div style={{ padding: '7px 12px', marginBottom: 10, borderRadius: 6, background: isLocked ? 'rgba(240,58,90,.08)' : 'rgba(21,198,120,.07)', border: '1px solid ' + (isLocked ? 'rgba(240,58,90,.2)' : 'rgba(21,198,120,.2)'), fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: isLocked ? C.red : C.green, textAlign: 'center', textTransform: 'uppercase' }}>
+          {lockLabel}
         </div>
+      )}
+
+      {/* Slot rows */}
+      {LINEUP_SLOTS.map(slot => {
+        const unit     = lineupMap[slot.key];
+        const price    = unit?.price ?? unit?.salary ?? 0;
+        const posColor = unit ? (LINEUP_POS_COLOR[unit.unitType] ?? C.sub) : C.muted;
+        return (
+          <div key={slot.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4, background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8 }}>
+            <div style={{ width: 36, flexShrink: 0, fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: posColor }}>{slot.label}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {unit ? (
+                <>
+                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{unit.playerName || unit.school}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.5, marginTop: 1 }}>{unit.school} · {unit.conference}</div>
+                </>
+              ) : (
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Empty</div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Edit button */}
+      {!isLocked && (
         <button
           onClick={() => router.push(`/league/${leagueId}/lineup`)}
-          style={{
-            padding: '14px 36px',
-            background: 'linear-gradient(135deg,#f5a623,#ffd166)',
-            border: 'none', borderRadius: 8, cursor: 'pointer',
-            fontFamily: "'Anton',sans-serif", fontSize: 15, letterSpacing: 2,
-            color: C.bg, textTransform: 'uppercase',
-          }}
+          style={{ width: '100%', marginTop: 12, padding: '12px 0', background: 'rgba(245,166,35,.1)', border: '1px solid rgba(245,166,35,.35)', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.gold, cursor: 'pointer', textTransform: 'uppercase' }}
         >
-          Open Lineup Builder →
+          ✏ Edit Lineup
         </button>
-      </div>
+      )}
     </div>
   );
 }
