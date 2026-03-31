@@ -235,19 +235,12 @@ export default function LineupPage({ params }: { params: { id: string } }) {
     if (!isComplete) return;
     setSaving(true);
     try {
+      // slot (s.label) = position label used for validation counts (RB, RB, WR, WR…)
+      // slot_key (s.key) = unique slot identifier for restoration (RB1, RB2, WR1, WR2…)
       const picks = SLOTS.map(s => ({
         unit_id:     lineup[s.key]!.id,
-        slot:        s.key.replace(/\d+$/, '') === 'RB' || s.key.replace(/\d+$/, '') === 'WR'
-                       ? s.key.replace(/\d$/, '')
-                       : s.key,  // normalize RB1/RB2 → RB for backend slot tracking
-        salary_cost: priceMap[lineup[s.key]!.id] ?? 0,
-        player_data: lineup[s.key],
-      }));
-
-      // Fix: submit with the proper slot label (backend needs: QB/RB/WR/TE/FLEX/DEF/K × counts)
-      const normalizedPicks = SLOTS.map(s => ({
-        unit_id:     lineup[s.key]!.id,
-        slot:        s.label,  // QB, RB, WR, TE, FLEX, DEF, K
+        slot:        s.label,      // QB / RB / WR / TE / FLEX / DEF / K — for count validation
+        slot_key:    s.key,        // RB1 / RB2 / WR1 / WR2 etc — stored in _slot for restoration
         salary_cost: priceMap[lineup[s.key]!.id] ?? 0,
         player_data: lineup[s.key],
       }));
@@ -255,13 +248,11 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       const res = await fetch('/api/lineup/submit', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ league_id: params.id, week, picks: normalizedPicks }),
+        body:    JSON.stringify({ league_id: params.id, week, picks }),
       });
 
       if (res.ok) {
-        setSaved(true);
-        setSubmitted(true);
-        setEditing(false);
+        router.push(`/league/${params.id}`);
       } else {
         const d = await res.json().catch(() => ({}));
         alert(d.error ?? 'Failed to submit lineup.');

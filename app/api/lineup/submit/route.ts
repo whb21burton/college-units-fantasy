@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     const { league_id, week, picks } = body as {
       league_id?: string;
       week?: number;
-      picks?: Array<{ unit_id: string; slot: string; salary_cost: number; player_data?: any }>;
+      picks?: Array<{ unit_id: string; slot: string; slot_key?: string; salary_cost: number; player_data?: any }>;
     };
 
     if (!league_id || !week || !picks?.length) {
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
       league_id,
       user_id:     user.id,
       player_id:   p.unit_id,
-      player_data: { ...(p.player_data ?? {}), _slot: p.slot, _salary: p.salary_cost },
+      player_data: { ...(p.player_data ?? {}), _slot: p.slot_key ?? p.slot, _salary: p.salary_cost },
       round:       0,
       pick_number: Math.floor(Math.random() * 1_000_000_000) + i,
       week,
