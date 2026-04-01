@@ -634,10 +634,18 @@ export function CreateLeagueWizard() {
             </div>
           </div>
 
-          <div style={{ marginTop: 20 }}>
+          <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <PrimaryBtn onClick={() => router.push(`/league/${createdLeague.id}`)}>
               Go to League Dashboard →
             </PrimaryBtn>
+            {isPublic && (
+              <button
+                onClick={() => router.push(`/leagues?t=${Date.now()}`)}
+                style={{ padding: '10px 0', background: 'transparent', border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: "'Oswald',sans-serif", fontSize: 11, letterSpacing: 1.5, color: C.sub, textTransform: 'uppercase' }}
+              >
+                View in Contest Lobby →
+              </button>
+            )}
           </div>
         </div>
       )}

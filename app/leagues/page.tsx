@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 
 const C = {
@@ -662,6 +662,9 @@ function EnterModal({
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function PublicLeaguesPage() {
   const router = useRouter();
+  // ?t= param used as a cache-bust signal — any change re-triggers the load effect
+  const searchParams = useSearchParams();
+  const cacheBust = searchParams.get('t');
 
   const [leagues,      setLeagues]      = useState<League[]>([]);
   const [loading,      setLoading]      = useState(true);
@@ -708,7 +711,7 @@ export default function PublicLeaguesPage() {
         .from('leagues')
         .select('id, name, buy_in, league_size, draft_type, league_type, week, status, invite_code, conference_filter, commissioner_id, created_at, draft_start_time')
         .eq('is_public', true)
-        .in('status', ['forming', 'drafting'])
+        .in('status', ['forming', 'drafting', 'active'])
         .order('created_at', { ascending: false });
 
       if (error || !data) { setLoading(false); return; }
@@ -733,7 +736,9 @@ export default function PublicLeaguesPage() {
       setLoading(false);
     }
     load();
-  }, []);
+  // cacheBust changes whenever ?t= changes, triggering a fresh fetch
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheBust]);
 
   const displayed = leagues.filter(l => {
     if (search && !l.name.toLowerCase().includes(search.toLowerCase())) return false;

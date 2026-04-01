@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
+  console.log('[leagues/create] is_public=%s league_type=%s conference_filter=%s', isPublic, body.league_type ?? 'season', isPublic ? (body.conference_filter ?? 'ALL') : 'ALL');
+
   const { data, error: dbError } = await admin
     .from('leagues')
     .insert({

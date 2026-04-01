@@ -2,6 +2,8 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 // POST /api/leagues
 // Creates a new league + adds commissioner as first member
 export async function POST(req: NextRequest) {
@@ -95,5 +97,7 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ data, error: null });
+  return NextResponse.json({ data, error: null }, {
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
