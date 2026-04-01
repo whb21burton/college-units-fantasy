@@ -31,6 +31,7 @@ export function CreateLeagueWizard() {
   const [leagueType,       setLeagueType]       = useState<'season' | 'weekly'>('season');
   const [week,             setWeek]             = useState<number>(1);
   const [conferenceFilter, setConferenceFilter] = useState<string>('ALL');
+  const [isCapped,         setIsCapped]         = useState<boolean>(true);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -70,6 +71,7 @@ export function CreateLeagueWizard() {
         conference_filter: isPublic ? conferenceFilter : 'ALL',
         league_type:       leagueType,
         week:              leagueType === 'weekly' ? week : null,
+        is_capped:         leagueType === 'weekly' ? isCapped : true,
         team_name:         form.team_name.trim() || 'My Team',
       }),
     });
@@ -188,6 +190,24 @@ export function CreateLeagueWizard() {
               <div style={{ padding: '10px 14px', background: 'rgba(245,166,35,.06)', border: '1px solid rgba(245,166,35,.2)', borderRadius: 8, fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.sub, marginBottom: 4 }}>
                 ⚡ High-margin weekly contest — 1st gets 80%, 2nd gets 20%. Repeatable every week!
               </div>
+            )}
+            {isPublic && leagueType === 'weekly' && (
+              <>
+                <Spacer />
+                <FieldLabel>Contest Format</FieldLabel>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <ToggleBtn active={isCapped} onClick={() => setIsCapped(true)}>
+                    <div style={{ fontSize: 18, marginBottom: 4 }}>🧢</div>
+                    <strong>Capped</strong>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Limited contestants</div>
+                  </ToggleBtn>
+                  <ToggleBtn active={!isCapped} onClick={() => setIsCapped(false)}>
+                    <div style={{ fontSize: 18, marginBottom: 4 }}>∞</div>
+                    <strong>No Cap</strong>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Unlimited contestants</div>
+                  </ToggleBtn>
+                </div>
+              </>
             )}
 
             <Spacer />

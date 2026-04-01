@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       is_public:       isPublic,
       league_type:     body.league_type ?? 'season',
       week:            body.week ?? null,
+      is_capped:       body.is_capped !== false,
       invite_code:     '',
       status:          'forming',
     })

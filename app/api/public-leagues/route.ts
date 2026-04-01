@@ -29,8 +29,9 @@ export async function GET() {
   try {
     const { data, error } = await admin
       .from('leagues')
-      .select('id, name, buy_in, league_size, draft_type, league_type, week, status, invite_code, conference_filter, commissioner_id, created_at, draft_start_time')
+      .select('id, name, buy_in, league_size, draft_type, league_type, week, status, invite_code, conference_filter, commissioner_id, created_at, draft_start_time, is_capped, is_featured')
       .eq('is_public', true)
+      .eq('league_type', 'weekly')
       .in('status', ['forming', 'drafting', 'active'])
       .order('created_at', { ascending: false });
 
@@ -51,6 +52,7 @@ export async function GET() {
       const { data, error } = await admin
         .from('leagues')
         .select('id, name, buy_in, league_size, draft_type, status, invite_code, commissioner_id, created_at')
+        .eq('league_type', 'weekly')
         .in('status', ['forming', 'drafting', 'active'])
         .order('created_at', { ascending: false })
         .limit(50);

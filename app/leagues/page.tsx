@@ -39,6 +39,8 @@ type League = {
   created_at: string;
   draft_start_time: string | null;
   member_count: number;
+  is_capped: boolean | null;
+  is_featured: boolean | null;
 };
 
 type Member = {
@@ -58,12 +60,11 @@ const STYLE_OPTIONS = [
 ] as const;
 
 const TYPE_OPTIONS = [
-  { value: 'all',       label: 'All'                   },
-  { value: 'featured',  label: '⭐ Featured'            },
-  { value: 'season',    label: 'Season Leagues'        },
-  { value: 'weekly',    label: "Weekly Pick'em"        },
-  { value: 'h2h',       label: 'Head to Head'          },
-  { value: 'gpp',       label: 'Guaranteed Prize Pool' },
+  { value: 'all',      label: 'All'           },
+  { value: 'capped',   label: '🧢 Capped'    },
+  { value: 'nocap',    label: '∞ No Cap'     },
+  { value: 'featured', label: '⭐ Featured'  },
+  { value: 'h2h',      label: '1v1'          },
 ] as const;
 
 function formatStartTime(league: League): string {
@@ -116,7 +117,7 @@ function styleLabel(cf: string): string {
 }
 
 function isFeatured(l: League): boolean {
-  return l.league_type === 'weekly' && l.buy_in > 0;
+  return l.is_featured === true;
 }
 
 function isGPP(l: League): boolean {
@@ -671,6 +672,8 @@ function PublicLeaguesContent() {
   const [user,         setUser]         = useState<any>(null);
   const [walletBal,    setWalletBal]    = useState<number>(0);
   const [joining,      setJoining]      = useState<string | null>(null);
+  const [isAdmin,      setIsAdmin]      = useState(false);
+  const [deleting,     setDeleting]     = useState<string | null>(null);
 
   // Detail modal
   const [detailLeague, setDetailLeague] = useState<League | null>(null);
@@ -697,6 +700,7 @@ function PublicLeaguesContent() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: u } }) => {
       setUser(u ?? null);
+      setIsAdmin(u?.email === 'whb21burton@gmail.com');
       if (u) {
         supabase.from('wallets').select('balance').eq('user_id', u.id).single()
           .then(({ data }) => { if (data) setWalletBal(data.balance ?? 0); });
@@ -735,11 +739,10 @@ function PublicLeaguesContent() {
       const cf = l.conference_filter === 'ALL' ? 'ALL' : l.conference_filter;
       if (cf !== styleFilter) return false;
     }
-    if (typeFilter === 'season'   && l.league_type !== 'season')  return false;
-    if (typeFilter === 'weekly'   && l.league_type !== 'weekly')  return false;
-    if (typeFilter === 'h2h'      && l.league_size !== 2)         return false;
+    if (typeFilter === 'capped'   && l.is_capped === false)       return false;
+    if (typeFilter === 'nocap'    && l.is_capped !== false)        return false;
     if (typeFilter === 'featured' && !isFeatured(l))              return false;
-    if (typeFilter === 'gpp'      && !isGPP(l))                   return false;
+    if (typeFilter === 'h2h'      && l.league_size !== 2)         return false;
     const fMin = fieldMin ? parseInt(fieldMin) : null;
     const fMax = fieldMax ? parseInt(fieldMax) : null;
     if (fMin !== null && l.league_size < fMin) return false;
@@ -755,6 +758,22 @@ function PublicLeaguesContent() {
   function openEnter(league: League) {
     if (!user) { router.push('/'); return; }
     setEnterLeague(league);
+  }
+
+  async function deleteLeague(league: League) {
+    if (!confirm(`Delete "${league.name}"? This cannot be undone.`)) return;
+    setDeleting(league.id);
+    try {
+      const res = await fetch(`/api/leagues/${league.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setLeagues(prev => prev.filter(l => l.id !== league.id));
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error ?? 'Failed to delete league.');
+      }
+    } finally {
+      setDeleting(null);
+    }
   }
 
   function SideRow({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -858,8 +877,8 @@ function PublicLeaguesContent() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Column headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr 90px 90px 100px 110px 100px 92px', background: C.hdrBg, borderBottom: '1px solid ' + C.surf3, padding: '0 12px', flexShrink: 0 }}>
-            {['', 'Contest', 'Style', 'Entry Fee', 'Total Prizes', 'Entries', 'Live/Start', ''].map((h, i) => (
+          <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr 90px 90px 100px 110px 100px 92px 32px', background: C.hdrBg, borderBottom: '1px solid ' + C.surf3, padding: '0 12px', flexShrink: 0 }}>
+            {['', 'Contest', 'Style', 'Entry Fee', 'Total Prizes', 'Entries', 'Live/Start', '', ''].map((h, i) => (
               <div key={i} style={{ padding: '9px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.hdrText, textTransform: 'uppercase', textAlign: i >= 3 ? 'right' : 'left' }}>{h}</div>
             ))}
           </div>
@@ -880,28 +899,34 @@ function PublicLeaguesContent() {
                 const isFull   = league.member_count >= league.league_size;
                 const prize    = totalPrize(league);
                 const gpp      = isGPP(league);
-                const featured = isFeatured(league);
                 const entColor = isFull ? C.red : nearFull ? C.orange : C.green;
 
                 return (
                   <div
                     key={league.id}
                     onClick={() => openDetail(league)}
-                    style={{ display: 'grid', gridTemplateColumns: '24px 1fr 90px 90px 100px 110px 100px 92px', background: idx % 2 === 0 ? C.rowA : C.rowB, borderBottom: '1px solid rgba(30,45,71,.5)', padding: '0 12px', alignItems: 'center', transition: 'background .1s', cursor: 'pointer' }}
+                    style={{ display: 'grid', gridTemplateColumns: '24px 1fr 90px 90px 100px 110px 100px 92px 32px', background: idx % 2 === 0 ? C.rowA : C.rowB, borderBottom: '1px solid rgba(30,45,71,.5)', padding: '0 12px', alignItems: 'center', transition: 'background .1s', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = C.hover)}
                     onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 0 ? C.rowA : C.rowB)}
                   >
-                    <div style={{ padding: '12px 4px 12px 0', fontSize: 12, color: featured ? C.gold : 'transparent' }}>⭐</div>
+                    <div style={{ padding: '12px 4px 12px 0', fontSize: 12, color: league.is_featured ? C.gold : 'transparent' }}>⭐</div>
 
                     <div style={{ padding: '10px 8px', minWidth: 0 }}>
                       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 700, color: C.gold, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{league.name}</div>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <span style={tagStyle(league.league_type === 'weekly' ? 'rgba(245,166,35,.15)' : 'rgba(122,144,176,.12)', league.league_type === 'weekly' ? '#f5a623' : C.sub)}>
-                          {league.league_type === 'weekly' ? '⚡ Weekly' : '🏆 Season'}{league.week ? ` · Wk ${league.week}` : ''}
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <span style={tagStyle('rgba(245,166,35,.15)', '#f5a623')}>
+                          ⚡ Weekly{league.week ? ` · Wk ${league.week}` : ''}
                         </span>
-                        {league.league_type === 'season' && (
-                          <span style={tagStyle('rgba(122,144,176,.1)', C.muted)}>{league.draft_type === 'snake' ? '🐍 Snake' : '💰 Salary'}</span>
+                        {league.league_size === 2 && (
+                          <span style={tagStyle('rgba(58,134,255,.15)', '#3a86ff')}>1v1</span>
                         )}
+                        {league.is_featured && (
+                          <span style={tagStyle('rgba(212,168,40,.15)', '#d4a828')}>⭐ Featured</span>
+                        )}
+                        {league.is_capped === false
+                          ? <span style={tagStyle('rgba(46,204,113,.12)', '#2ecc71')}>∞ No Cap</span>
+                          : <span style={tagStyle('rgba(74,93,122,.12)', '#7a90b0')}>🧢 Capped</span>
+                        }
                       </div>
                     </div>
 
@@ -934,6 +959,20 @@ function PublicLeaguesContent() {
                       >
                         {joining === league.id ? '…' : isFull ? 'Full' : 'Enter'}
                       </button>
+                    </div>
+                    <div style={{ padding: '10px 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {isAdmin && (
+                        <button
+                          onClick={e => { e.stopPropagation(); deleteLeague(league); }}
+                          disabled={deleting === league.id}
+                          title="Delete league"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e74c3c', fontSize: 14, padding: '2px 4px', opacity: deleting === league.id ? 0.4 : 0.6, transition: 'opacity .12s' }}
+                          onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+                          onMouseLeave={e => { e.currentTarget.style.opacity = deleting === league.id ? '0.4' : '0.6'; }}
+                        >
+                          {deleting === league.id ? '…' : '🗑️'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
