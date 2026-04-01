@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 
@@ -660,7 +660,7 @@ function EnterModal({
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function PublicLeaguesPage() {
+function PublicLeaguesContent() {
   const router = useRouter();
   // ?t= param used as a cache-bust signal — any change re-triggers the load effect
   const searchParams = useSearchParams();
@@ -982,6 +982,14 @@ export default function PublicLeaguesPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function PublicLeaguesPage() {
+  return (
+    <Suspense fallback={<div style={{ background: '#05080f', minHeight: '100vh' }} />}>
+      <PublicLeaguesContent />
+    </Suspense>
   );
 }
 
