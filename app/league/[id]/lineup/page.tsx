@@ -5,54 +5,61 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
-  bg:    '#070a12',
-  surf:  '#0c1422',
-  surf2: '#111d30',
-  surf3: '#1a2b40',
-  gold:  '#f5a623',
-  text:  '#e4edf7',
-  sub:   '#7a92aa',
-  muted: '#3e5470',
-  green: '#15c678',
-  red:   '#f03a5a',
+  bg:      '#05080f',
+  lPanel:  '#0c1220',
+  rPanel:  '#0a0e18',
+  surf:    '#0c1220',
+  surf2:   '#111d30',
+  surf3:   '#1e2d47',
+  gold:    '#d4a828',
+  goldLt:  '#f0c94a',
+  text:    '#e8edf5',
+  sub:     '#7a90b0',
+  muted:   '#4a5d7a',
+  green:   '#2ecc71',
+  orange:  '#f39c12',
+  red:     '#e74c3c',
+  purple:  '#8338ec',
+  blue:    '#3a86ff',
+  hdrBg:   '#1e2d47',
+  hdrText: '#7a90b0',
 };
 
 const BUDGET = 200;
 
-type LineupSlot = {
-  key: string;
-  label: string;
-  accepts: string[];
-};
+type LineupSlot = { key: string; label: string; accepts: string[] };
 
 const SLOTS: LineupSlot[] = [
-  { key: 'QB',   label: 'QB',   accepts: ['QB']            },
-  { key: 'RB1',  label: 'RB',   accepts: ['RB']            },
-  { key: 'RB2',  label: 'RB',   accepts: ['RB']            },
-  { key: 'WR1',  label: 'WR',   accepts: ['WR']            },
-  { key: 'WR2',  label: 'WR',   accepts: ['WR']            },
-  { key: 'TE',   label: 'TE',   accepts: ['TE']            },
+  { key: 'QB',   label: 'QB',   accepts: ['QB']             },
+  { key: 'RB1',  label: 'RB',   accepts: ['RB']             },
+  { key: 'RB2',  label: 'RB',   accepts: ['RB']             },
+  { key: 'WR1',  label: 'WR',   accepts: ['WR']             },
+  { key: 'WR2',  label: 'WR',   accepts: ['WR']             },
+  { key: 'TE',   label: 'TE',   accepts: ['TE']             },
   { key: 'FLEX', label: 'FLEX', accepts: ['RB', 'WR', 'TE'] },
-  { key: 'DEF',  label: 'DEF',  accepts: ['DEF']           },
-  { key: 'K',    label: 'K',    accepts: ['K']             },
+  { key: 'DEF',  label: 'DEF',  accepts: ['DEF']            },
+  { key: 'K',    label: 'K',    accepts: ['K']              },
 ];
 
 const POS_COLOR: Record<string, string> = {
-  QB:  '#e05c2a',
-  RB:  '#2a9d8f',
-  WR:  '#3a86ff',
-  TE:  '#8338ec',
-  DEF: '#2b9348',
-  K:   '#e9c46a',
+  QB:   '#e05c2a',
+  RB:   '#2ecc71',
+  WR:   '#d4a828',
+  TE:   '#f39c12',
+  DEF:  '#8338ec',
+  K:    '#7a90b0',
+  FLEX: '#3a86ff',
 };
 
-function positionRankPrice(unit: DraftUnit, allUnits: DraftUnit[], isConference = false): number {
-  const peers = [...allUnits]
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function positionRankPrice(unit: DraftUnit, allUnits: DraftUnit[], isConf: boolean): number {
+  const peers = allUnits
     .filter(u => u.unitType === unit.unitType)
     .sort((a, b) => (b.seasonTotal ?? b.projectedPoints) - (a.seasonTotal ?? a.projectedPoints));
   const rank = peers.findIndex(u => u.id === unit.id) + 1;
-  if (isConference) {
+  if (isConf) {
     if (rank <= 3)  return 50;
     if (rank <= 6)  return 40;
     if (rank <= 9)  return 30;
@@ -66,39 +73,83 @@ function positionRankPrice(unit: DraftUnit, allUnits: DraftUnit[], isConference 
   return 10;
 }
 
-function pillStyle(bg: string, color: string): React.CSSProperties {
-  return {
-    display: 'inline-flex', alignItems: 'center',
-    padding: '2px 8px', borderRadius: 20,
-    background: bg, color,
-    fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
-  };
+function oppLabel(school: string, opponentMap: Record<string, string>, homeMap: Record<string, boolean>): string {
+  const opp = opponentMap[school];
+  if (!opp) return 'BYE';
+  const isHome = homeMap[school] ?? true;
+  const short = opp.length > 10 ? opp.slice(0, 10).toUpperCase() : opp.toUpperCase();
+  return isHome ? `vs ${short}` : `@ ${short}`;
 }
 
+function fppg(unit: DraftUnit): string {
+  const pts = unit.projectedPoints ?? 0;
+  return (pts / 14).toFixed(1);
+}
+
+function formatCountdown(isoTime: string | null): string {
+  if (!isoTime) return '—';
+  const diff = new Date(isoTime).getTime() - Date.now();
+  if (diff <= 0) return 'LIVE';
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  const s = Math.floor((diff % 60_000) / 1000);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatDate(isoTime: string | null): string {
+  if (!isoTime) return '';
+  const d = new Date(isoTime);
+  const mo = d.getMonth() + 1;
+  const dy = d.getDate();
+  const hr = d.getHours();
+  const mn = d.getMinutes();
+  const h12 = (hr % 12) || 12;
+  const ampm = hr < 12 ? 'am' : 'pm';
+  return `${mo}/${dy} • ${h12}:${String(mn).padStart(2, '0')} ${ampm}`;
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
 export default function LineupPage({ params }: { params: { id: string } }) {
   const router = useRouter();
 
+  // Core state
   const [league,        setLeague]        = useState<any>(null);
+  const [memberCount,   setMemberCount]   = useState(0);
   const [userId,        setUserId]        = useState<string | null>(null);
   const [pool,          setPool]          = useState<DraftUnit[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
-  const [saved,         setSaved]         = useState(false);
-  const [submitted,     setSubmitted]     = useState(false);  // has a saved lineup
-  const [editing,       setEditing]       = useState(false);  // editing an existing lineup
+  const [submitted,     setSubmitted]     = useState(false);
+  const [editing,       setEditing]       = useState(false);
   const [firstGameTime, setFirstGameTime] = useState<string | null>(null);
-  // week is always locked to the league's contest week — no user choice
-  const week = league?.week ?? 1;
-  const [search,    setSearch]    = useState('');
-  const [posFilter, setPosFilter] = useState<string>('ALL');
+  const [opponentMap,   setOpponentMap]   = useState<Record<string, string>>({});
+  const [homeMap,       setHomeMap]       = useState<Record<string, boolean>>({});
 
-  // slot key → picked unit
+  const week = league?.week ?? 1;
+
+  // Filters
+  const [search,          setSearch]          = useState('');
+  const [posFilter,       setPosFilter]       = useState<string>('ALL');
+  const [confPillFilter,  setConfPillFilter]  = useState<string>('all');
+
+  // Toast
+  const [toast, setToast] = useState<string>('');
+
+  // Ticker for countdown
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Lineup state
   const [lineup, setLineup] = useState<Record<string, DraftUnit | null>>(() => {
     const init: Record<string, DraftUnit | null> = {};
     SLOTS.forEach(s => { init[s.key] = null; });
     return init;
   });
 
+  // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       setLoading(true);
@@ -108,33 +159,48 @@ export default function LineupPage({ params }: { params: { id: string } }) {
 
       const { data: lg } = await supabase
         .from('leagues')
-        .select('id, name, league_type, status, conference_filter, week')
+        .select('id, name, league_type, status, conference_filter, week, buy_in, league_size')
         .eq('id', params.id)
         .single();
       if (!lg || lg.league_type !== 'weekly') { router.push(`/league/${params.id}`); return; }
       setLeague(lg);
 
-      // Check membership
       const { data: m } = await supabase
         .from('league_members')
         .select('id')
         .eq('league_id', params.id)
         .eq('user_id', user.id)
         .single();
-      if (!m) { router.push(`/leagues`); return; }
+      if (!m) { router.push('/leagues'); return; }
 
-      // Load player pool
+      // Member count
+      supabase
+        .from('league_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('league_id', params.id)
+        .then(({ count }) => setMemberCount(count ?? 0));
+
+      // Player pool
       const confParam = lg.conference_filter && lg.conference_filter !== 'ALL'
-        ? `?conference=${encodeURIComponent(lg.conference_filter)}`
-        : '';
+        ? `?conference=${encodeURIComponent(lg.conference_filter)}` : '';
       const poolRes = await fetch(`/api/player-pool${confParam}`);
       if (poolRes.ok) {
-        const data = await poolRes.json();
-        setPool(Array.isArray(data) ? data : []);
+        const d = await poolRes.json();
+        setPool(Array.isArray(d) ? d : []);
       }
 
-      // Load existing lineup for this league's contest week
+      // Matchup context for opponent display
       const contestWeek = lg.week ?? 1;
+      fetch(`/api/matchup-context?week=${contestWeek}&season=2025`)
+        .then(r => r.json())
+        .then(d => {
+          setOpponentMap(d.opponentMap ?? {});
+          setHomeMap(d.homeMap ?? {});
+          setFirstGameTime(d.firstGameTime ?? null);
+        })
+        .catch(() => {});
+
+      // Load existing lineup
       const { data: existing } = await supabase
         .from('draft_picks')
         .select('*')
@@ -147,7 +213,6 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         const restored: Record<string, DraftUnit | null> = {};
         SLOTS.forEach(s => { restored[s.key] = null; });
         for (const pick of existing) {
-          // slot is stored inside player_data._slot (avoids PostgREST schema cache issues)
           const slot = pick.player_data?._slot ?? pick.slot;
           if (slot && restored[slot] !== undefined && pick.player_data) {
             const { _slot: _s, _salary: _sal, ...unitData } = pick.player_data;
@@ -155,15 +220,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
           }
         }
         setLineup(restored);
-        setSubmitted(true); // already have a submitted lineup → show view mode
+        setSubmitted(true);
       }
-
-      // Fetch first game time for lock logic
-      const contestWeek2 = lg.week ?? 1;
-      fetch(`/api/matchup-context?week=${contestWeek2}&season=2025`)
-        .then(r => r.json())
-        .then(d => setFirstGameTime(d.firstGameTime ?? null))
-        .catch(() => {});
 
       setLoading(false);
     }
@@ -171,16 +229,44 @@ export default function LineupPage({ params }: { params: { id: string } }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
-  // Prices computed once for the full pool
+  // ── Derived ─────────────────────────────────────────────────────────────────
   const isConference = !!(league?.conference_filter && league.conference_filter !== 'ALL');
+
   const priceMap = useMemo(() => {
     const m: Record<string, number> = {};
     pool.forEach(u => { m[u.id] = positionRankPrice(u, pool, isConference); });
     return m;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pool, isConference]);
 
-  // IDs already in lineup (to gray out in pool)
+  const rankByPos = useMemo(() => {
+    const groups: Record<string, DraftUnit[]> = {};
+    pool.forEach(u => {
+      if (!groups[u.unitType]) groups[u.unitType] = [];
+      groups[u.unitType].push(u);
+    });
+    for (const arr of Object.values(groups)) {
+      arr.sort((a, b) => (b.seasonTotal ?? 0) - (a.seasonTotal ?? 0));
+    }
+    const map: Record<string, number> = {};
+    for (const arr of Object.values(groups)) arr.forEach((u, i) => { map[u.id] = i + 1; });
+    return map;
+  }, [pool]);
+
+  const availableConfs = useMemo(() => {
+    const seen: Record<string, true> = {};
+    pool.forEach(u => { seen[u.conference] = true; });
+    return Object.keys(seen).sort();
+  }, [pool]);
+
+  const confSchoolCounts = useMemo(() => {
+    const counts: Record<string, Set<string>> = {};
+    pool.forEach(u => {
+      if (!counts[u.conference]) counts[u.conference] = new Set();
+      counts[u.conference].add(u.school);
+    });
+    return Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, v.size]));
+  }, [pool]);
+
   const pickedIds = useMemo(() => {
     const s = new Set<string>();
     Object.values(lineup).forEach(u => { if (u) s.add(u.id); });
@@ -191,14 +277,20 @@ export default function LineupPage({ params }: { params: { id: string } }) {
     Object.values(lineup).reduce((sum, u) => sum + (u ? (priceMap[u.id] ?? 0) : 0), 0),
   [lineup, priceMap]);
 
-  const remaining = BUDGET - totalSalary;
+  const remaining  = BUDGET - totalSalary;
   const filledCount = Object.values(lineup).filter(Boolean).length;
-  const isComplete = filledCount === SLOTS.length;
+  const isComplete  = filledCount === SLOTS.length;
+  const isLocked    = firstGameTime ? new Date() >= new Date(firstGameTime) : false;
 
-  // Filtered pool for the right panel
+  // Filtered pool for left panel
   const filteredPool = useMemo(() => {
     return pool.filter(u => {
-      if (posFilter !== 'ALL' && u.unitType !== posFilter) return false;
+      if (posFilter === 'FLEX') {
+        if (!['RB', 'WR', 'TE'].includes(u.unitType)) return false;
+      } else if (posFilter !== 'ALL') {
+        if (u.unitType !== posFilter) return false;
+      }
+      if (confPillFilter !== 'all' && u.conference !== confPillFilter) return false;
       if (search) {
         const q = search.toLowerCase();
         if (!u.school.toLowerCase().includes(q) &&
@@ -207,142 +299,172 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       }
       return true;
     });
-  }, [pool, posFilter, search]);
+  }, [pool, posFilter, confPillFilter, search]);
 
-  function pickUnit(slotKey: string, unit: DraftUnit) {
-    setLineup(prev => ({ ...prev, [slotKey]: unit }));
-    setSaved(false);
+  // Remaining salary color
+  const remColor = remaining < 20 ? C.red : remaining < 50 ? C.orange : C.gold;
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(''), 2200);
+  }
+
+  function addUnit(unit: DraftUnit) {
+    const pos = unit.unitType;
+    for (const slot of SLOTS) {
+      if (slot.accepts.includes(pos) && !lineup[slot.key]) {
+        setLineup(prev => ({ ...prev, [slot.key]: unit }));
+        return;
+      }
+    }
+    showToast(`No available slot for ${pos}`);
   }
 
   function clearSlot(slotKey: string) {
     setLineup(prev => ({ ...prev, [slotKey]: null }));
-    setSaved(false);
   }
 
-  // Auto-assign to best empty matching slot
-  function autoAdd(unit: DraftUnit) {
-    const pos = unit.unitType;
-    // Find first matching slot that's empty, respecting slot order
-    for (const slot of SLOTS) {
-      if (slot.accepts.includes(pos) && !lineup[slot.key]) {
-        pickUnit(slot.key, unit);
-        return;
-      }
+  function clearAll() {
+    const empty: Record<string, DraftUnit | null> = {};
+    SLOTS.forEach(s => { empty[s.key] = null; });
+    setLineup(empty);
+  }
+
+  function randomize() {
+    const newLineup: Record<string, DraftUnit | null> = {};
+    SLOTS.forEach(s => { newLineup[s.key] = null; });
+    let rem = BUDGET;
+    const usedIds = new Set<string>();
+
+    for (let i = 0; i < SLOTS.length; i++) {
+      const slot = SLOTS[i];
+      const slotsLeft = SLOTS.length - i - 1;
+      const maxForThis = rem - 10 * slotsLeft;
+
+      const candidates = pool.filter(u =>
+        slot.accepts.includes(u.unitType) &&
+        !usedIds.has(u.id) &&
+        (priceMap[u.id] ?? 0) <= maxForThis
+      );
+
+      const source = candidates.length > 0
+        ? candidates
+        : pool.filter(u => slot.accepts.includes(u.unitType) && !usedIds.has(u.id));
+
+      if (source.length === 0) continue;
+      const pick = source[Math.floor(Math.random() * source.length)];
+      newLineup[slot.key] = pick;
+      usedIds.add(pick.id);
+      rem -= priceMap[pick.id] ?? 0;
     }
+    setLineup(newLineup);
   }
 
   async function submitLineup() {
-    if (!isComplete) return;
+    if (!isComplete || remaining < 0) return;
     setSaving(true);
     try {
-      // slot (s.label) = position label used for validation counts (RB, RB, WR, WR…)
-      // slot_key (s.key) = unique slot identifier for restoration (RB1, RB2, WR1, WR2…)
       const picks = SLOTS.map(s => ({
         unit_id:     lineup[s.key]!.id,
-        slot:        s.label,      // QB / RB / WR / TE / FLEX / DEF / K — for count validation
-        slot_key:    s.key,        // RB1 / RB2 / WR1 / WR2 etc — stored in _slot for restoration
+        slot:        s.label,
+        slot_key:    s.key,
         salary_cost: priceMap[lineup[s.key]!.id] ?? 0,
         player_data: lineup[s.key],
       }));
-
       const res = await fetch('/api/lineup/submit', {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ league_id: params.id, week, picks }),
+        body: JSON.stringify({ league_id: params.id, week, picks }),
       });
-
       if (res.ok) {
         router.push(`/league/${params.id}`);
       } else {
         const d = await res.json().catch(() => ({}));
-        alert(d.error ?? 'Failed to submit lineup.');
+        showToast(d.error ?? 'Failed to submit lineup.');
       }
     } finally {
       setSaving(false);
     }
   }
 
-  const isLocked    = firstGameTime ? new Date() >= new Date(firstGameTime) : false;
-  const showBuilder = !submitted || editing;
+  // ── Loading ──────────────────────────────────────────────────────────────────
+  if (loading) return (
+    <div style={{ height: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 3, fontSize: 13 }}>LOADING...</div>
+    </div>
+  );
 
-  // ── Submitted view (read-only dashboard) ─────────────────────────────────
-  if (!loading && submitted && !editing) {
+  // ── Submitted / read-only view ───────────────────────────────────────────────
+  if (submitted && !editing) {
     const lockLabel = firstGameTime
       ? isLocked
         ? 'Games in progress — lineup locked'
-        : `Locks at first kickoff: ${new Date(firstGameTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}`
+        : `Editable until first kickoff · ${new Date(firstGameTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}`
       : '';
-
     return (
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column' }}>
-        {/* Top bar */}
-        <div style={{ background: 'linear-gradient(180deg,#0d1827,#0c1422)', borderBottom: '1px solid ' + C.surf3, padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ background: 'linear-gradient(180deg,#0d1827,#0c1422)', borderBottom: '1px solid ' + C.surf3, padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button onClick={() => router.push(`/league/${params.id}`)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase', padding: '4px 0', display: 'flex', alignItems: 'center', gap: 6 }}>← Back</button>
+            <button onClick={() => router.push(`/league/${params.id}`)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase' }}>← Back</button>
             <div style={{ width: 1, height: 16, background: C.surf3 }} />
-            <div>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 1 }}>{league?.name}</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Weekly DFS · Week {week}</div>
-            </div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 1 }}>{league?.name}</div>
           </div>
           {isLocked ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: 'rgba(240,58,90,.12)', border: '1px solid rgba(240,58,90,.35)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: 'rgba(231,76,60,.12)', border: '1px solid rgba(231,76,60,.35)' }}>
               <span style={{ fontSize: 12 }}>🔒</span>
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.red, textTransform: 'uppercase' }}>Lineup Locked</span>
             </div>
           ) : (
-            <button onClick={() => setEditing(true)} style={{ padding: '8px 20px', background: 'linear-gradient(135deg,#f5a623,#ffd166)', border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 1.5, color: C.bg, cursor: 'pointer', textTransform: 'uppercase' }}>
-              ✏ Edit Lineup
-            </button>
+            <button onClick={() => setEditing(true)} style={{ padding: '8px 20px', background: 'linear-gradient(135deg,#d4a828,#f0c94a)', border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 1.5, color: C.bg, cursor: 'pointer', textTransform: 'uppercase' }}>✏ Edit Lineup</button>
           )}
         </div>
-
-        {/* Lock info banner */}
         {lockLabel && (
-          <div style={{ padding: '8px 20px', background: isLocked ? 'rgba(240,58,90,.08)' : 'rgba(21,198,120,.07)', borderBottom: '1px solid ' + (isLocked ? 'rgba(240,58,90,.2)' : 'rgba(21,198,120,.2)'), fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: isLocked ? C.red : C.green, textAlign: 'center', textTransform: 'uppercase' }}>
+          <div style={{ padding: '7px 20px', background: isLocked ? 'rgba(231,76,60,.08)' : 'rgba(46,204,113,.07)', borderBottom: '1px solid ' + (isLocked ? 'rgba(231,76,60,.2)' : 'rgba(46,204,113,.2)'), fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: isLocked ? C.red : C.green, textAlign: 'center', textTransform: 'uppercase' }}>
             {lockLabel}
           </div>
         )}
-
-        {/* Submitted lineup */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', maxWidth: 520, margin: '0 auto', width: '100%' }}>
-          {/* Status badge */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', maxWidth: 540, margin: '0 auto', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: isLocked ? C.red : C.green }} />
-              <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: isLocked ? C.red : C.green }}>
-                {isLocked ? 'Locked' : 'Submitted'}
-              </span>
+              <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: isLocked ? C.red : C.green }}>{isLocked ? 'Locked' : 'Submitted'}</span>
             </div>
             <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${totalSalary} / ${BUDGET}</span>
           </div>
-
-          {/* Slot rows */}
-          {SLOTS.map(slot => {
-            const unit     = lineup[slot.key];
-            const price    = unit ? (priceMap[unit.id] ?? 0) : 0;
+          {/* Column headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 100px 60px 60px', padding: '6px 12px', background: C.hdrBg, borderRadius: '6px 6px 0 0', marginBottom: 0 }}>
+            {['POS', 'PLAYER', 'OPP', 'FPPG', 'SAL'].map((h, i) => (
+              <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.hdrText, textTransform: 'uppercase', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
+            ))}
+          </div>
+          {SLOTS.map((slot, idx) => {
+            const unit = lineup[slot.key];
+            const price = unit ? (priceMap[unit.id] ?? 0) : 0;
             const posColor = unit ? (POS_COLOR[unit.unitType] ?? C.sub) : C.muted;
+            const opp = unit ? oppLabel(unit.school, opponentMap, homeMap) : '—';
+            const fp = unit ? fppg(unit) : '—';
             return (
-              <div key={slot.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4, background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8 }}>
-                <div style={{ width: 36, flexShrink: 0, fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: posColor }}>{slot.label}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
+              <div key={slot.key} style={{ display: 'grid', gridTemplateColumns: '44px 1fr 100px 60px 60px', alignItems: 'center', padding: '9px 12px', background: idx % 2 === 0 ? '#0c1220' : '#0a0e18', borderBottom: '1px solid rgba(30,45,71,.4)' }}>
+                <div><span style={posBadge(posColor)}>{slot.label}</span></div>
+                <div style={{ minWidth: 0 }}>
                   {unit ? (
                     <>
                       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{unit.playerName || unit.school}</div>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.5, marginTop: 1 }}>{unit.school} · {unit.conference}</div>
+                      {unit.playerName && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.5 }}>{unit.school}</div>}
                     </>
                   ) : (
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Empty</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>Empty</div>
                   )}
                 </div>
-                <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold, flexShrink: 0 }}>${price}</span>
+                <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>{opp}</div>
+                <div style={{ textAlign: 'right', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.gold }}>{fp}</div>
+                <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>{unit ? `$${price}` : '—'}</div>
               </div>
             );
           })}
-
-          {/* Edit button at bottom if not locked */}
           {!isLocked && (
-            <button onClick={() => setEditing(true)} style={{ width: '100%', marginTop: 16, padding: '13px 0', background: 'rgba(245,166,35,.12)', border: '1px solid rgba(245,166,35,.4)', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.gold, cursor: 'pointer', textTransform: 'uppercase' }}>
+            <button onClick={() => setEditing(true)} style={{ width: '100%', marginTop: 16, padding: '13px 0', background: 'rgba(212,168,40,.1)', border: '1px solid rgba(212,168,40,.35)', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.gold, cursor: 'pointer', textTransform: 'uppercase' }}>
               ✏ Edit Lineup
             </button>
           )}
@@ -351,319 +473,207 @@ export default function LineupPage({ params }: { params: { id: string } }) {
     );
   }
 
-  if (loading) return (
-    <div style={{ height: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 3, fontSize: 13 }}>Loading...</div>
-    </div>
-  );
+  // ── Builder view ─────────────────────────────────────────────────────────────
+  const enterLabel = league?.buy_in === 0
+    ? 'ENTER | FREE'
+    : `ENTER | $${(league?.buy_in ?? 0).toFixed(2)}`;
+
+  // void tick to use it (forces countdown re-render)
+  void tick;
+  const countdown = formatCountdown(firstGameTime);
+  const dateLabel = formatDate(firstGameTime);
+  const prize = (league?.buy_in ?? 0) * (league?.league_size ?? 0);
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      {/* Top bar */}
-      <div style={{
-        background: 'linear-gradient(180deg, #0d1827 0%, #0c1422 100%)',
-        borderBottom: '1px solid ' + C.surf3,
-        padding: '12px 20px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            onClick={() => router.push(`/league/${params.id}`)}
-            style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase', padding: '4px 0', display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            ← Back
-          </button>
-          <div style={{ width: 1, height: 16, background: C.surf3 }} />
+      {/* ── FULL-WIDTH HEADER ──────────────────────────────────────────────── */}
+      <div style={{ flexShrink: 0, background: 'linear-gradient(180deg,#0d1827 0%,#0a1020 100%)', borderBottom: '1px solid ' + C.surf3, padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+
+        {/* Left: back + league info */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+          <button onClick={() => router.push(`/league/${params.id}`)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', paddingTop: 3 }}>← Back</button>
           <div>
-            <div style={{ fontFamily: "'Anton',sans-serif", fontSize: 16, color: C.text, letterSpacing: 1 }}>
-              {league?.name}
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', lineHeight: 1.1, marginBottom: 5 }}>
+              {league?.name ?? 'Weekly Lineup'}
             </div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>
-              Weekly DFS Lineup
+            {/* Stats row */}
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginBottom: 5 }}>
+              {[
+                { label: 'Entries',     val: `${memberCount}/${league?.league_size ?? '?'}` },
+                { label: 'Entry',       val: league?.buy_in === 0 ? 'Free' : `$${league?.buy_in?.toFixed(2)}` },
+                { label: 'Prizes',      val: prize > 0 ? `$${prize.toFixed(2)}` : '—' },
+                { label: 'My Entries',  val: submitted ? '1' : '0' },
+                { label: 'Max Entries', val: '1' },
+              ].map((item, i) => (
+                <span key={i} style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub }}>
+                  <span style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' }}>{item.label}: </span>
+                  {item.val}
+                  {i < 4 && <span style={{ marginLeft: 14, color: C.surf3 }}>|</span>}
+                </span>
+              ))}
+            </div>
+            {/* Links */}
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.gold, textDecoration: 'underline' }}>Full Contest Details</button>
+              <button style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.gold, textDecoration: 'underline' }}>Share Link</button>
             </div>
           </div>
         </div>
 
-        {/* Contest week (locked — set when league was created) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Contest Week</span>
-          <div style={{
-            padding: '5px 14px', borderRadius: 8,
-            background: 'rgba(245,166,35,.15)', border: '1px solid ' + C.gold,
-            fontFamily: "'Anton',sans-serif", fontSize: 14, color: C.gold, letterSpacing: 1,
-          }}>Week {week}</div>
+        {/* Right: countdown */}
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 2 }}>
+            CONTEST GOES LIVE IN
+          </div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: C.gold, letterSpacing: 2, lineHeight: 1 }}>
+            {countdown}
+          </div>
+          {dateLabel && (
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.5, marginTop: 3 }}>
+              {dateLabel}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Two-panel layout */}
-      <div style={{ flex: 1, display: 'flex', gap: 0, overflow: 'hidden' }}>
+      {/* ── TWO-PANEL BODY ─────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* LEFT — Lineup slots + budget */}
-        <div style={{
-          width: 340, flexShrink: 0,
-          background: C.surf,
-          borderRight: '1px solid ' + C.surf3,
-          display: 'flex', flexDirection: 'column',
-          overflowY: 'auto',
-        }}>
-          {/* Budget bar */}
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid ' + C.surf3 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>
-                Salary Used
-              </span>
-              <span style={{ fontFamily: "'Anton',sans-serif", fontSize: 14, color: remaining < 0 ? C.red : C.gold }}>
-                ${totalSalary} / ${BUDGET}
-              </span>
-            </div>
-            <div style={{ height: 6, background: C.surf3, borderRadius: 3 }}>
-              <div style={{
-                height: '100%', borderRadius: 3,
-                background: remaining < 0 ? C.red : totalSalary / BUDGET > 0.85
-                  ? 'linear-gradient(90deg,#f5a623,#ffd166)' : C.green,
-                width: `${Math.min(1, totalSalary / BUDGET) * 100}%`,
-                transition: 'width .3s',
-              }} />
-            </div>
-            <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>
-                {filledCount}/{SLOTS.length} spots filled
-              </span>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: remaining < 0 ? C.red : C.green, letterSpacing: 1 }}>
-                ${remaining} remaining
-              </span>
-            </div>
-          </div>
+        {/* ══ LEFT PANEL — Player Pool (60%) ═══════════════════════════════ */}
+        <div style={{ flex: '0 0 60%', background: C.lPanel, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid ' + C.surf3 }}>
 
-          {/* Slots */}
-          <div style={{ flex: 1, padding: '8px 12px' }}>
-            {SLOTS.map(slot => {
-              const unit = lineup[slot.key];
-              const price = unit ? (priceMap[unit.id] ?? 0) : null;
-              const posColor = unit ? (POS_COLOR[unit.unitType] ?? C.sub) : C.muted;
-
-              return (
-                <div
-                  key={slot.key}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 10px', marginBottom: 4,
-                    background: unit ? C.surf2 : 'transparent',
-                    border: `1px solid ${unit ? C.surf3 : 'rgba(62,84,112,.4)'}`,
-                    borderRadius: 8,
-                    transition: 'all .15s',
-                  }}
-                >
-                  {/* Slot label */}
-                  <div style={{
-                    width: 36, flexShrink: 0,
-                    fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700,
-                    letterSpacing: 1.5, textTransform: 'uppercase',
-                    color: unit ? posColor : C.muted,
-                  }}>{slot.label}</div>
-
-                  {/* Player info or empty */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {unit ? (
-                      <>
-                        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {unit.playerName || unit.school}
-                        </div>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.5, marginTop: 1 }}>
-                          {unit.school} · {unit.conference}
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>
-                        Empty — pick from right panel
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Price + clear */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    {price !== null && (
-                      <span style={{ fontFamily: "'Anton',sans-serif", fontSize: 13, color: C.gold }}>${price}</span>
-                    )}
-                    {unit && (
-                      <button
-                        onClick={() => clearSlot(slot.key)}
-                        style={{
-                          width: 20, height: 20, borderRadius: '50%',
-                          background: 'rgba(240,58,90,.15)', border: '1px solid rgba(240,58,90,.3)',
-                          cursor: 'pointer', color: C.red,
-                          fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >×</button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Submit button */}
-          <div style={{ padding: 14, borderTop: '1px solid ' + C.surf3 }}>
-            {saved ? (
-              <div style={{
-                padding: '12px 16px', borderRadius: 8,
-                background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)',
-                fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600,
-                color: C.green, textAlign: 'center',
-              }}>
-                ✓ Lineup saved for Week {week}
-              </div>
-            ) : (
+          {/* Conference pills */}
+          <div style={{ flexShrink: 0, padding: '10px 16px 0', borderBottom: '1px solid ' + C.surf3, display: 'flex', gap: 0, overflowX: 'auto', background: '#090e18' }}>
+            {/* "All Schools" pill */}
+            <button
+              onClick={() => setConfPillFilter('all')}
+              style={confPillStyle(confPillFilter === 'all')}
+            >
+              All Schools ({pool.filter((u, i, a) => a.findIndex(x => x.school === u.school) === i).length})
+            </button>
+            {availableConfs.map(conf => (
               <button
-                onClick={submitLineup}
-                disabled={!isComplete || remaining < 0 || saving}
-                style={{
-                  width: '100%', padding: '13px 0',
-                  background: !isComplete || remaining < 0
-                    ? C.surf3
-                    : 'linear-gradient(135deg,#f5a623,#ffd166)',
-                  border: 'none', borderRadius: 8,
-                  cursor: !isComplete || remaining < 0 ? 'not-allowed' : 'pointer',
-                  fontFamily: "'Anton',sans-serif", fontSize: 14, letterSpacing: 2, textTransform: 'uppercase',
-                  color: !isComplete || remaining < 0 ? C.muted : C.bg,
-                  opacity: saving ? 0.7 : 1,
-                  transition: 'all .15s',
-                }}
+                key={conf}
+                onClick={() => setConfPillFilter(conf)}
+                style={confPillStyle(confPillFilter === conf)}
               >
-                {saving ? 'Saving...' : !isComplete ? `Fill All Slots (${filledCount}/${SLOTS.length})` : remaining < 0 ? 'Over Budget' : `Submit Lineup — Wk ${week}`}
+                {conf} ({confSchoolCounts[conf] ?? 0})
               </button>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT — Player pool */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-          {/* Pool toolbar */}
-          <div style={{
-            padding: '10px 16px',
-            borderBottom: '1px solid ' + C.surf3,
-            display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
-            background: C.surf,
-          }}>
-            {/* Position filter */}
-            <div style={{ display: 'flex', gap: 4 }}>
-              {['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'].map(pos => (
-                <button
-                  key={pos}
-                  onClick={() => setPosFilter(pos)}
-                  style={{
-                    padding: '5px 10px', borderRadius: 6,
-                    background: posFilter === pos ? `${POS_COLOR[pos] ?? C.gold}22` : 'transparent',
-                    border: `1px solid ${posFilter === pos ? (POS_COLOR[pos] ?? C.gold) : C.surf3}`,
-                    color: posFilter === pos ? (POS_COLOR[pos] ?? C.gold) : C.sub,
-                    fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: 1,
-                    cursor: 'pointer', transition: 'all .15s',
-                  }}
-                >{pos}</button>
-              ))}
-            </div>
-
-            {/* Search */}
-            <input
-              type="text"
-              placeholder="Search school, player..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{
-                flex: 1, minWidth: 140, padding: '7px 12px',
-                background: C.surf2, border: '1px solid ' + C.surf3,
-                borderRadius: 8, color: C.text,
-                fontFamily: "'Space Grotesk',sans-serif", fontSize: 12,
-                outline: 'none',
-              }}
-            />
-          </div>
-
-          {/* Pool column headers */}
-          <div style={{
-            display: 'grid', gridTemplateColumns: '40px 1fr 60px 60px 60px',
-            padding: '6px 16px',
-            background: C.surf2,
-            borderBottom: '1px solid ' + C.surf3,
-          }}>
-            {['POS', 'PLAYER / SCHOOL', 'PROJ', 'SALARY', ''].map((h, i) => (
-              <div key={i} style={{
-                fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2,
-                color: C.muted, textTransform: 'uppercase',
-                textAlign: i >= 2 ? 'right' : 'left',
-              }}>{h}</div>
             ))}
           </div>
 
-          {/* Pool list */}
+          {/* Search + Position tabs */}
+          <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: '#090e18', borderBottom: '1px solid ' + C.surf3 }}>
+            {/* Search */}
+            <div style={{ display: 'flex', alignItems: 'center', background: C.surf3, borderRadius: 6, padding: '0 12px', gap: 8 }}>
+              <span style={{ color: C.muted, fontSize: 14 }}>🔍</span>
+              <input
+                type="text"
+                placeholder="Player / Unit Search"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.text, padding: '8px 0' }}
+              />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}>✕</button>
+              )}
+            </div>
+
+            {/* Position filter tabs */}
+            <div style={{ display: 'flex', gap: 3 }}>
+              {['ALL', 'QB', 'RB', 'WR', 'TE', 'FLEX', 'DEF', 'K'].map(pos => {
+                const active = posFilter === pos;
+                const color = POS_COLOR[pos] ?? C.gold;
+                return (
+                  <button
+                    key={pos}
+                    onClick={() => setPosFilter(pos)}
+                    style={{
+                      flex: 1, padding: '6px 4px',
+                      background: active ? `${color}22` : 'transparent',
+                      border: `1px solid ${active ? color : 'rgba(30,45,71,.6)'}`,
+                      borderRadius: 4,
+                      fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                      color: active ? color : C.sub,
+                      cursor: 'pointer', transition: 'all .12s',
+                    }}
+                  >{pos}</button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Pool column headers */}
+          <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '50px 1fr 90px 55px 40px 60px 38px', padding: '7px 16px', background: C.hdrBg, borderBottom: '1px solid ' + C.surf3 }}>
+            {['POS', 'PLAYER', 'OPP', 'FPPG', 'RK', 'SALARY', ''].map((h, i) => (
+              <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1.5, color: C.hdrText, textTransform: 'uppercase', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
+            ))}
+          </div>
+
+          {/* Pool rows */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {filteredPool.length === 0 ? (
-              <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 2 }}>
-                No players found
-              </div>
+              <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 2 }}>No players found</div>
             ) : (
-              filteredPool.map(unit => {
-                const price   = priceMap[unit.id] ?? 0;
-                const proj    = (unit.projectedPoints ?? 0).toFixed(1);
-                const picked  = pickedIds.has(unit.id);
-                const posColor = POS_COLOR[unit.unitType] ?? C.sub;
+              filteredPool.map((unit, idx) => {
+                const price     = priceMap[unit.id] ?? 0;
+                const picked    = pickedIds.has(unit.id);
                 const canAfford = price <= remaining || picked;
+                const posColor  = POS_COLOR[unit.unitType] ?? C.sub;
+                const opp       = oppLabel(unit.school, opponentMap, homeMap);
+                const fp        = fppg(unit);
+                const rk        = rankByPos[unit.id] ?? '—';
 
                 return (
                   <div
                     key={unit.id}
-                    onClick={() => { if (!picked && canAfford) autoAdd(unit); }}
+                    onClick={() => { if (!picked && canAfford) addUnit(unit); }}
                     style={{
-                      display: 'grid', gridTemplateColumns: '40px 1fr 60px 60px 60px',
+                      display: 'grid', gridTemplateColumns: '50px 1fr 90px 55px 40px 60px 38px',
                       padding: '9px 16px', alignItems: 'center',
-                      borderBottom: '1px solid ' + C.surf3,
+                      background: idx % 2 === 0 ? C.lPanel : '#0a101c',
+                      borderBottom: '1px solid rgba(30,45,71,.35)',
                       cursor: picked ? 'default' : canAfford ? 'pointer' : 'not-allowed',
-                      opacity: picked ? 0.45 : canAfford ? 1 : 0.5,
-                      background: 'transparent',
+                      opacity: picked ? 0.45 : canAfford ? 1 : 0.4,
                       transition: 'background .1s',
                     }}
-                    onMouseEnter={e => { if (!picked && canAfford) (e.currentTarget as HTMLElement).style.background = C.surf2; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                    onMouseEnter={e => { if (!picked && canAfford) e.currentTarget.style.background = '#131d30'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = idx % 2 === 0 ? C.lPanel : '#0a101c'; }}
                   >
-                    {/* Pos badge */}
-                    <div>
-                      <span style={pillStyle(`${posColor}22`, posColor)}>{unit.unitType}</span>
-                    </div>
+                    {/* POS */}
+                    <div><span style={posBadge(posColor)}>{unit.unitType}</span></div>
 
-                    {/* Name */}
+                    {/* Player */}
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {unit.playerName || unit.school}
                       </div>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.5 }}>
-                        {unit.school} · {unit.conference}
-                      </div>
+                      {unit.playerName && (
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.3 }}>{unit.school}</div>
+                      )}
                     </div>
 
-                    {/* Proj */}
-                    <div style={{ textAlign: 'right', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub }}>
-                      {proj}
-                    </div>
+                    {/* OPP */}
+                    <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp}</div>
+
+                    {/* FPPG */}
+                    <div style={{ textAlign: 'right', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: C.gold }}>{fp}</div>
+
+                    {/* RK */}
+                    <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>#{rk}</div>
 
                     {/* Salary */}
-                    <div style={{ textAlign: 'right', fontFamily: "'Anton',sans-serif", fontSize: 13, color: C.gold }}>
-                      ${price}
-                    </div>
+                    <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>${price}</div>
 
                     {/* Add button */}
                     <div style={{ textAlign: 'right' }}>
                       {picked ? (
-                        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green, letterSpacing: 1 }}>✓</span>
+                        <span style={{ display: 'inline-flex', width: 22, height: 22, borderRadius: '50%', background: 'rgba(46,204,113,.15)', border: '1px solid rgba(46,204,113,.4)', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: C.green }}>✓</span>
+                      ) : canAfford ? (
+                        <span style={{ display: 'inline-flex', width: 22, height: 22, borderRadius: '50%', background: 'rgba(46,204,113,.12)', border: '1px solid rgba(46,204,113,.4)', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: C.green, cursor: 'pointer', lineHeight: 1 }}>+</span>
                       ) : (
-                        <span style={{
-                          fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1,
-                          color: canAfford ? C.gold : C.muted, textTransform: 'uppercase',
-                        }}>
-                          {canAfford ? '+ ADD' : 'N/A'}
-                        </span>
+                        <span style={{ display: 'inline-flex', width: 22, height: 22, borderRadius: '50%', background: 'rgba(74,93,122,.12)', border: '1px solid rgba(74,93,122,.3)', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: C.muted, cursor: 'not-allowed', lineHeight: 1 }}>+</span>
                       )}
                     </div>
                   </div>
@@ -672,7 +682,163 @@ export default function LineupPage({ params }: { params: { id: string } }) {
             )}
           </div>
         </div>
+
+        {/* ══ RIGHT PANEL — Lineup (40%) ════════════════════════════════════ */}
+        <div style={{ flex: '0 0 40%', background: C.rPanel, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* Lineup header */}
+          <div style={{ flexShrink: 0, padding: '12px 16px', background: '#06090f', borderBottom: '1px solid ' + C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 2, textTransform: 'uppercase' }}>Lineup</div>
+            <div>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginRight: 6 }}>Rem. Salary:</span>
+              <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: remColor, letterSpacing: 1 }}>${remaining}</span>
+            </div>
+          </div>
+
+          {/* Lineup slot headers */}
+          <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '44px 1fr 80px 50px 50px 28px', padding: '6px 14px', background: C.hdrBg, borderBottom: '1px solid ' + C.surf3 }}>
+            {['POS', 'PLAYER', 'OPP', 'FPPG', 'SAL', ''].map((h, i) => (
+              <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1.5, color: C.hdrText, textTransform: 'uppercase', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
+            ))}
+          </div>
+
+          {/* Lineup slot rows */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {SLOTS.map((slot, idx) => {
+              const unit = lineup[slot.key];
+              const price = unit ? (priceMap[unit.id] ?? 0) : 0;
+              const posColor = POS_COLOR[slot.label] ?? POS_COLOR[unit?.unitType ?? ''] ?? C.muted;
+              const opp = unit ? oppLabel(unit.school, opponentMap, homeMap) : '—';
+              const fp  = unit ? fppg(unit) : '—';
+
+              return (
+                <div
+                  key={slot.key}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '44px 1fr 80px 50px 50px 28px',
+                    padding: '10px 14px', alignItems: 'center',
+                    background: idx % 2 === 0 ? C.rPanel : '#090d16',
+                    borderBottom: '1px solid rgba(30,45,71,.4)',
+                    minHeight: 52,
+                  }}
+                >
+                  {/* POS */}
+                  <div><span style={posBadge(posColor)}>{slot.label}</span></div>
+
+                  {/* Player or placeholder */}
+                  <div style={{ minWidth: 0 }}>
+                    {unit ? (
+                      <>
+                        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{unit.playerName || unit.school}</div>
+                        {unit.playerName && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub }}>{unit.school}</div>}
+                      </>
+                    ) : (
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>Select {slot.label}</div>
+                    )}
+                  </div>
+
+                  {/* OPP */}
+                  <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp}</div>
+
+                  {/* FPPG */}
+                  <div style={{ textAlign: 'right', fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: unit ? C.gold : C.muted }}>{fp}</div>
+
+                  {/* Salary */}
+                  <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 12, color: unit ? C.text : C.muted }}>{unit ? `$${price}` : '—'}</div>
+
+                  {/* Remove */}
+                  <div style={{ textAlign: 'right' }}>
+                    {unit && (
+                      <button
+                        onClick={() => clearSlot(slot.key)}
+                        style={{ display: 'inline-flex', width: 20, height: 20, borderRadius: '50%', background: 'rgba(231,76,60,.12)', border: '1px solid rgba(231,76,60,.3)', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.red, fontSize: 12, padding: 0, lineHeight: 1 }}
+                      >✕</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Bottom actions */}
+          <div style={{ flexShrink: 0, padding: '12px 14px', borderTop: '1px solid ' + C.surf3, background: '#06090f', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Salary bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{filledCount}/{SLOTS.length} filled</span>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>${totalSalary} / $200 used</span>
+            </div>
+            <div style={{ height: 4, background: C.surf3, borderRadius: 2, marginBottom: 4 }}>
+              <div style={{ height: '100%', borderRadius: 2, width: `${Math.min(1, totalSalary / BUDGET) * 100}%`, background: remaining < 0 ? C.red : totalSalary / BUDGET > 0.85 ? C.orange : C.green, transition: 'width .3s' }} />
+            </div>
+
+            {/* Clear + Randomize */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={clearAll} style={{ flex: 1, padding: '9px 0', background: C.surf3, border: '1px solid rgba(30,45,71,.8)', borderRadius: 5, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1.5, color: C.sub, textTransform: 'uppercase', transition: 'all .12s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#263a58'; e.currentTarget.style.color = C.text; }}
+                onMouseLeave={e => { e.currentTarget.style.background = C.surf3; e.currentTarget.style.color = C.sub; }}>
+                Clear
+              </button>
+              <button onClick={randomize} style={{ flex: 1, padding: '9px 0', background: C.surf3, border: '1px solid rgba(30,45,71,.8)', borderRadius: 5, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1.5, color: C.sub, textTransform: 'uppercase', transition: 'all .12s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#263a58'; e.currentTarget.style.color = C.text; }}
+                onMouseLeave={e => { e.currentTarget.style.background = C.surf3; e.currentTarget.style.color = C.sub; }}>
+                Randomize
+              </button>
+            </div>
+
+            {/* Enter button */}
+            <button
+              onClick={submitLineup}
+              disabled={!isComplete || remaining < 0 || saving}
+              style={{
+                width: '100%', padding: '14px 0',
+                background: (!isComplete || remaining < 0) ? C.surf3 : 'linear-gradient(135deg,#27ae60,#2ecc71)',
+                border: 'none', borderRadius: 6,
+                cursor: (!isComplete || remaining < 0) ? 'not-allowed' : 'pointer',
+                fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 2, textTransform: 'uppercase',
+                color: (!isComplete || remaining < 0) ? C.muted : '#fff',
+                boxShadow: isComplete && remaining >= 0 ? '0 0 24px rgba(46,204,113,.3)' : 'none',
+                opacity: saving ? 0.7 : 1,
+                transition: 'all .15s',
+              }}
+            >
+              {saving ? 'Submitting…' : !isComplete ? `${filledCount}/${SLOTS.length} Slots Filled` : remaining < 0 ? 'Over Budget' : enterLabel}
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* ── Toast ──────────────────────────────────────────────────────────── */}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#1e2d47', border: '1px solid rgba(212,168,40,.4)', borderRadius: 8, padding: '10px 20px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, color: C.text, boxShadow: '0 4px 20px rgba(0,0,0,.5)', zIndex: 2000, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+          {toast}
+        </div>
+      )}
     </div>
   );
+}
+
+// ── Style helpers ─────────────────────────────────────────────────────────────
+function posBadge(color: string): React.CSSProperties {
+  return {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    minWidth: 34, padding: '2px 5px', borderRadius: 3,
+    background: `${color}22`, border: `1px solid ${color}55`,
+    fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1,
+    color, textTransform: 'uppercase' as const,
+  };
+}
+
+function confPillStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '8px 16px',
+    background: 'none',
+    border: 'none',
+    borderBottom: `2px solid ${active ? '#d4a828' : 'transparent'}`,
+    fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' as const,
+    color: active ? '#d4a828' : '#7a90b0',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap' as const,
+    transition: 'all .12s',
+    marginBottom: -1,
+  };
 }
