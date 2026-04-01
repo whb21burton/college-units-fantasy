@@ -115,6 +115,6 @@ export async function GET(_req: NextRequest) {
   );
 
   return NextResponse.json({ data, error: null }, {
-    headers: { 'Cache-Control': 'no-store' },
+    headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' },
   });
 }
