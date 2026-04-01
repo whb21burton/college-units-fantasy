@@ -79,6 +79,8 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  console.log('[GET /api/leagues] query: league_members JOIN leagues WHERE user_id=%s ORDER BY joined_at DESC', user.id);
+
   const { data, error } = await supabase
     .from('league_members')
     .select(`
@@ -94,8 +96,23 @@ export async function GET(_req: NextRequest) {
     .order('joined_at', { ascending: false });
 
   if (error) {
+    console.log('[GET /api/leagues] error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  console.log('[GET /api/leagues] rows returned:', data?.length ?? 0);
+  console.log('[GET /api/leagues] first 3 rows (id, name, is_public, league_type, status):',
+    (data ?? []).slice(0, 3).map(r => {
+      const lg = (r as any).leagues;
+      return {
+        id:          lg?.id,
+        name:        lg?.name,
+        is_public:   lg?.is_public,   // not in select — will be undefined; add to select to expose
+        league_type: lg?.league_type, // not in select — will be undefined; add to select to expose
+        status:      lg?.status,
+      };
+    })
+  );
 
   return NextResponse.json({ data, error: null }, {
     headers: { 'Cache-Control': 'no-store' },
