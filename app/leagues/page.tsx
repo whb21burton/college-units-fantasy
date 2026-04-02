@@ -41,7 +41,14 @@ type League = {
   member_count: number;
   is_capped: boolean | null;
   is_featured: boolean | null;
+  settings: { allowed_schools?: string[] } | null;
 };
+
+// Detect copy suffix e.g. "My League 03" → "03"
+function getCopyBadge(name: string): string | null {
+  const m = name.match(/ (\d{2})$/);
+  return m ? m[1] : null;
+}
 
 type Member = {
   user_id: string;
@@ -516,6 +523,39 @@ function ContestDetailModal({
                   ))}
                 </div>
               </div>
+
+              {/* Eligible Schools section */}
+              {(() => {
+                const allowed = league.settings?.allowed_schools;
+                const cf = league.conference_filter;
+                const isAll = !allowed || allowed.length === 0;
+                const schoolLabel = isAll
+                  ? 'All D1 Schools'
+                  : cf && cf !== 'ALL' && cf !== 'CUSTOM'
+                    ? `${cf} Only`
+                    : `${allowed.length} schools`;
+                const schoolList = isAll ? null : allowed;
+                return (
+                  <div style={{ marginTop: 20, background: '#0a101c', border: '1px solid ' + C.surf3, borderRadius: 6, padding: '14px 16px' }}>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+                      Eligible Schools — {schoolLabel}
+                    </div>
+                    {isAll ? (
+                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, lineHeight: 1.6 }}>
+                        All D1 schools are eligible. Draft any unit from any program.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {schoolList!.sort().map(s => (
+                          <span key={s} style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, background: C.hover, border: '1px solid ' + C.surf3, borderRadius: 3, padding: '2px 7px', color: C.sub }}>
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -912,7 +952,14 @@ function PublicLeaguesContent() {
                     <div style={{ padding: '12px 4px 12px 0', fontSize: 12, color: league.is_featured ? C.gold : 'transparent' }}>⭐</div>
 
                     <div style={{ padding: '10px 8px', minWidth: 0 }}>
-                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 700, color: C.gold, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{league.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 700, color: C.gold, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{league.name}</div>
+                        {getCopyBadge(league.name) && (
+                          <span style={{ flexShrink: 0, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, background: 'rgba(212,168,40,.15)', border: '1px solid rgba(212,168,40,.3)', borderRadius: 3, padding: '1px 5px', color: C.gold }}>
+                            #{getCopyBadge(league.name)}
+                          </span>
+                        )}
+                      </div>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         <span style={tagStyle('rgba(245,166,35,.15)', '#f5a623')}>
                           ⚡ Weekly{league.week ? ` · Wk ${league.week}` : ''}
