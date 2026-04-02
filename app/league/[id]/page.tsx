@@ -1146,9 +1146,27 @@ const STAT_COLS: Record<string, { key: string; label: string }[]> = {
 function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
   player: any; onBack: () => void; onAdd: () => void; canAdd: boolean;
 }) {
-  const [stats,      setStats]      = useState<any | null>(null);
-  const [loading,    setLoading]    = useState(true);
-  const [expandedWk, setExpandedWk] = useState<number | null>(null);
+  const [stats,         setStats]         = useState<any | null>(null);
+  const [loading,       setLoading]       = useState(true);
+  const [expandedWk,    setExpandedWk]    = useState<number | null>(null);
+  const [bdCache,       setBdCache]       = useState<Record<number, any[] | null | 'loading'>>({});
+
+  const toggleWeek = (wk: number) => {
+    setExpandedWk(prev => {
+      const next = prev === wk ? null : wk;
+      // Lazy-fetch breakdown if not yet cached
+      if (next !== null && bdCache[next] === undefined) {
+        setBdCache(c => ({ ...c, [next]: 'loading' }));
+        fetch(
+          `/api/unit-stats?school=${encodeURIComponent(player.school)}&unitType=${player.unitType}&season=2025&breakdown=true&week=${next}`
+        )
+          .then(r => r.json())
+          .then(d => setBdCache(c => ({ ...c, [next]: d.breakdown ?? null })))
+          .catch(() => setBdCache(c => ({ ...c, [next]: null })));
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -1207,13 +1225,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
     return 0;
   };
 
-  // Role weights and labels per unit type
-  const ROLE_WEIGHTS_MAP: Record<string, number[]> = {
-    RB: [1.0, 0.7, 0.4],
-    WR: [1.0, 0.8, 0.7],
-    TE: [1.0, 0.5],
-  };
-  const RANK_COLORS = ['#d4a828', '#9ca3af', '#cd7f32'] as const; // gold, silver, bronze
+  const BD_RANK_COLORS = ['#d4a828', '#9ca3af', '#cd7f32'] as const; // gold, silver, bronze
 
   // Top contributors: all named players sorted by fantasy pts desc
   const contributors = sortedPlayers
@@ -1377,30 +1389,23 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
             ))}
           </div>
           {weeks.map((wk: any) => {
-            const p0          = wk.players?.[0] ?? {};
-            const isPlayoff   = wk.week > 11;
-            const hasBreakdown = wk.completed && ['RB','WR','TE'].includes(player.unitType) && (wk.players?.length ?? 0) > 1;
-            const isExpanded  = expandedWk === wk.week;
-
-            // Build per-player breakdown for RB/WR/TE
-            const namedPlayers: any[] = hasBreakdown ? (wk.players ?? []).slice(1) : [];
-            const weights = ROLE_WEIGHTS_MAP[player.unitType] ?? [];
-            // Sort named players by raw fpts desc to assign rank 1/2/3
-            const sorted = [...namedPlayers]
-              .map(p => ({ ...p, rawPts: playerFpts(p, player.unitType) }))
-              .sort((a, b) => b.rawPts - a.rawPts);
-            const unitLabel = player.unitType; // 'RB'|'WR'|'TE'
+            const p0           = wk.players?.[0] ?? {};
+            const isPlayoff    = wk.week > 11;
+            const canExpand    = wk.completed && ['RB','WR','TE'].includes(player.unitType);
+            const isExpanded   = expandedWk === wk.week;
+            const bdData       = bdCache[wk.week]; // any[] | null | 'loading' | undefined
 
             return (
               <div key={wk.week} style={{ borderBottom: `1px solid ${C.surf3}22` }}>
                 {/* Main week row */}
                 <div
-                  onClick={hasBreakdown ? () => setExpandedWk(isExpanded ? null : wk.week) : undefined}
+                  onClick={canExpand ? () => toggleWeek(wk.week) : undefined}
                   style={{
-                    display: 'grid', gridTemplateColumns: colTemplate + (hasBreakdown ? ' 18px' : ''), gap: 4,
-                    padding: '7px 12px', minWidth: 380,
+                    display: 'grid',
+                    gridTemplateColumns: colTemplate + (canExpand ? ' 18px' : ''),
+                    gap: 4, padding: '7px 12px', minWidth: 380,
                     background: isPlayoff ? 'rgba(139,92,246,.04)' : 'transparent',
-                    cursor: hasBreakdown ? 'pointer' : 'default',
+                    cursor: canExpand ? 'pointer' : 'default',
                   }}
                 >
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isPlayoff ? '#a855f7' : C.muted }}>{wk.week}</div>
@@ -1424,124 +1429,119 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                       {wk.completed && p0[col.key] != null ? p0[col.key] : '—'}
                     </div>
                   ))}
-                  {hasBreakdown && (
+                  {canExpand && (
                     <div style={{
-                      fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted,
                       display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                      fontSize: 9, color: C.muted,
                       transform: isExpanded ? 'rotate(180deg)' : 'none',
                       transition: 'transform .2s ease',
                     }}>▼</div>
                   )}
                 </div>
 
-                {/* Collapsible breakdown sub-table */}
-                {hasBreakdown && (
+                {/* Collapsible breakdown panel */}
+                {canExpand && (
                   <div style={{
                     overflow: 'hidden',
-                    maxHeight: isExpanded ? `${sorted.length * 34 + 68}px` : '0px',
+                    maxHeight: isExpanded ? '320px' : '0px',
                     transition: 'max-height .25s ease',
                   }}>
-                    <div style={{
-                      background: '#080c14',
-                      borderLeft: '3px solid #d4a828',
-                      margin: '0 0 0 0',
-                    }}>
-                      {/* Sub-table header */}
-                      {(() => {
-                        const isRB = unitLabel === 'RB';
-                        const isTE = unitLabel === 'TE';
-                        return (
-                          <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: isRB
-                              ? '52px 1fr 48px 40px 48px 36px 36px 48px 56px 56px'
-                              : '52px 1fr 48px 36px 52px 36px 56px 56px',
-                            gap: 4, padding: '5px 12px',
-                            background: '#0f1a2e',
-                          }}>
-                            {['RANK','PLAYER','MULT',
-                              ...(isRB ? ['ATT','YDS','TD','REC','REC YDS'] : ['REC','YDS','TD']),
-                              'RAW PTS','WTD PTS',
-                            ].map(h => (
-                              <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: '#7a90b0', textAlign: h === 'PLAYER' ? 'left' : 'right', letterSpacing: .5 }}>{h}</div>
-                            ))}
-                          </div>
-                        );
-                      })()}
+                    <div style={{ background: '#131d30', borderLeft: '3px solid #d4a828' }}>
 
-                      {/* Player rows */}
-                      {sorted.map((p, idx) => {
-                        const mult     = weights[idx] ?? weights[weights.length - 1] ?? 1.0;
-                        const raw      = p.rawPts;
-                        const wtd      = raw * mult;
-                        const rc       = RANK_COLORS[idx] ?? RANK_COLORS[RANK_COLORS.length - 1];
-                        const label    = `${unitLabel}${idx + 1}`;
-                        const isRB     = unitLabel === 'RB';
-                        return (
-                          <div key={p.name ?? idx} style={{
-                            display: 'grid',
-                            gridTemplateColumns: isRB
-                              ? '52px 1fr 48px 40px 48px 36px 36px 48px 56px 56px'
-                              : '52px 1fr 48px 36px 52px 36px 56px 56px',
-                            gap: 4, padding: '6px 12px',
-                            borderTop: `1px solid ${C.surf3}22`,
-                            alignItems: 'center',
-                          }}>
-                            {/* RANK badge */}
-                            <div>
-                              <span style={{
-                                fontFamily: "'Space Grotesk',sans-serif", fontSize: 8, fontWeight: 700,
-                                padding: '2px 6px', borderRadius: 20,
-                                background: rc + '22', border: `1px solid ${rc}55`, color: rc,
-                                letterSpacing: .5,
-                              }}>{label}</span>
-                            </div>
-                            {/* PLAYER */}
-                            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {p.name ?? '—'}
-                            </div>
-                            {/* MULT */}
-                            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>×{mult.toFixed(1)}</div>
-                            {/* RB stats */}
-                            {isRB && <>
-                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.rushAtt ?? 0}</div>
-                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.rushYd ?? 0}</div>
-                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.rushTd ?? 0}</div>
-                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.rec ?? 0}</div>
-                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.recYd ?? 0}</div>
-                            </>}
-                            {/* WR/TE stats */}
-                            {!isRB && <>
-                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.rec ?? 0}</div>
-                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.recYd ?? 0}</div>
-                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.recTd ?? 0}</div>
-                            </>}
-                            {/* RAW PTS */}
-                            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{raw.toFixed(1)}</div>
-                            {/* WEIGHTED PTS */}
-                            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.gold, textAlign: 'right' }}>{wtd.toFixed(1)}</div>
-                          </div>
-                        );
-                      })}
+                      {/* Loading spinner */}
+                      {bdData === 'loading' && (
+                        <div style={{ padding: '12px 16px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                          Loading breakdown…
+                        </div>
+                      )}
 
-                      {/* Total row */}
-                      {(() => {
-                        const total = sorted.reduce((s, p, idx) => {
-                          const mult = weights[idx] ?? weights[weights.length - 1] ?? 1.0;
-                          return s + p.rawPts * mult;
-                        }, 0);
+                      {/* No data */}
+                      {(bdData === null || (Array.isArray(bdData) && bdData.length === 0)) && (
+                        <div style={{ padding: '12px 16px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.muted, fontStyle: 'italic' }}>
+                          Detailed breakdown not available for this week
+                        </div>
+                      )}
+
+                      {/* Breakdown table */}
+                      {Array.isArray(bdData) && bdData.length > 0 && (() => {
+                        const rows: any[] = bdData;
+                        const total = rows.reduce((s: number, r: any) => s + (r.weightedPts ?? 0), 0);
                         return (
-                          <div style={{
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            padding: '6px 12px',
-                            borderTop: `1px solid ${C.surf3}44`,
-                            background: '#0a0e18',
-                          }}>
-                            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: 'uppercase' }}>
-                              Unit Total
+                          <>
+                            {/* Header */}
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1fr 44px 60px 50px 60px 64px',
+                              gap: 4, padding: '5px 14px',
+                              background: '#0f1a2e',
+                            }}>
+                              {['PLAYER','ROLE','OPP SCR','MULT','RAW PTS','WTD PTS'].map((h, i) => (
+                                <div key={h} style={{
+                                  fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: .5,
+                                  color: '#7a90b0', textAlign: i === 0 ? 'left' : 'right',
+                                }}>{h}</div>
+                              ))}
                             </div>
-                            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>{total.toFixed(1)}</div>
-                          </div>
+
+                            {/* Player rows */}
+                            {rows.map((r: any, idx: number) => {
+                              const rc = BD_RANK_COLORS[idx] ?? BD_RANK_COLORS[BD_RANK_COLORS.length - 1];
+                              return (
+                                <div key={r.role} style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '1fr 44px 60px 50px 60px 64px',
+                                  gap: 4, padding: '7px 14px',
+                                  borderTop: `1px solid ${C.surf3}22`,
+                                  alignItems: 'center',
+                                }}>
+                                  {/* PLAYER */}
+                                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {r.playerName}
+                                  </div>
+                                  {/* ROLE badge */}
+                                  <div style={{ textAlign: 'right' }}>
+                                    <span style={{
+                                      fontFamily: "'Space Grotesk',sans-serif", fontSize: 8, fontWeight: 700,
+                                      padding: '2px 5px', borderRadius: 10,
+                                      background: rc + '22', border: `1px solid ${rc}55`, color: rc,
+                                      letterSpacing: .3,
+                                    }}>{r.role}</span>
+                                  </div>
+                                  {/* OPP SCORE */}
+                                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textAlign: 'right' }}>
+                                    {(r.oppScore * 100).toFixed(0)}%
+                                  </div>
+                                  {/* MULT */}
+                                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, textAlign: 'right' }}>
+                                    ×{r.multiplier.toFixed(1)}
+                                  </div>
+                                  {/* RAW PTS */}
+                                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textAlign: 'right' }}>
+                                    {(r.rawPts ?? 0).toFixed(1)}
+                                  </div>
+                                  {/* WEIGHTED PTS */}
+                                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold, textAlign: 'right' }}>
+                                    {(r.weightedPts ?? 0).toFixed(1)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* Total row */}
+                            <div style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              padding: '6px 14px',
+                              borderTop: `1px solid ${C.surf3}55`,
+                              background: '#0e1828',
+                            }}>
+                              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: 'uppercase' }}>
+                                Unit Total
+                              </div>
+                              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>
+                                {total.toFixed(1)}
+                              </div>
+                            </div>
+                          </>
                         );
                       })()}
                     </div>
