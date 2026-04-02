@@ -12,6 +12,7 @@ export interface DraftUnit {
   adp: number;         // average draft position (lower = better)
   projectedPoints: number;
   seasonTotal?: number; // actual season fantasy points summed from cached_stats (used for ranking)
+  badge?: string;       // e.g. '🐎 Workhorse' or '👥 Committee' for RB units
 }
 
 // ── Roster slots & caps ──────────────────────────────────────

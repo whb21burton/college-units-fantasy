@@ -14,13 +14,19 @@ import { createAdminClient } from '@/lib/supabase-server';
 
 const BASE_URL = 'https://apinext.collegefootballdata.com';
 
-// ── Scoring constants (mirrors unit-stats/route.ts exactly) ──────────────────
+// ── Scoring constants ─────────────────────────────────────────────────────────
 const S = {
-  passYd: 0.05, passTd: 4, int: -2,
-  rushYd: 0.05, rushTd: 6,
-  recYd:  0.05, recTd: 6,
+  passYd: 0.1, passTd: 4,  int: -2,
+  rushYd: 0.1, rushTd: 6,  rec: 1.0,
+  recYd:  0.1, recTd: 6,
   sack: 1, defInt: 2, fumRec: 2, defTd: 6,
 };
+
+// ── Unit role weights ─────────────────────────────────────────────────────────
+const RB_WEIGHTS    = [1.0, 0.7, 0.4] as const;
+const WR_WEIGHTS    = [1.0, 0.8, 0.7] as const;
+const TE_WEIGHTS    = [1.0, 0.5]      as const;
+const MIN_TOUCH_SHR = 0.05; // 5% minimum touch-share threshold (snap data unavailable)
 
 function rankMult(rank: number): number {
   if (rank <=   5) return 1.3;
@@ -327,6 +333,23 @@ export async function syncStats(week: number, season: number): Promise<number> {
       }
     }
 
+    // ── Fetch player positions for opportunity-based scoring ────────────────────
+    const allSchoolsInBatch = Array.from(
+      new Set<string>(completedGames.flatMap((g: any) => [g.homeTeam as string, g.awayTeam as string]))
+    );
+    const { data: posData } = await admin
+      .from('cached_players')
+      .select('school, player_name, position')
+      .in('school', allSchoolsInBatch)
+      .limit(10000);
+
+    const posMap: Record<string, string> = {};
+    for (const p of (posData ?? [])) {
+      if (p.school && p.player_name && p.position) {
+        posMap[`${p.school}||${p.player_name}`] = p.position;
+      }
+    }
+
     const statRows: any[] = [];
 
     for (const game of completedGames) {
@@ -392,83 +415,150 @@ export async function syncStats(week: number, season: number): Promise<number> {
 
         // ── Compute unit fantasy points (Elo-adjusted) ──────────────────────
 
-        // QB
-        const passers = schoolEntries.filter(e => e.category === 'passing')
-          .sort((a, b) => (b.YDS || 0) - (a.YDS || 0));
-        const qb = passers[0];
-        if (qb) {
-          const qbRush  = playerStatMap[`${school}||${qb.name}||rushing`] ?? {};
-          const rawQB   = (qb.YDS  || 0) * S.passYd +
-                          (qb.TD   || 0) * S.passTd +
-                          (qb.INT  || 0) * S.int    +
-                          (qbRush.YDS || 0) * S.rushYd +
-                          (qbRush.TD  || 0) * S.rushTd;
+        // Individual scoring helpers
+        const calcRecvPts = (e: any) =>
+          (e.YDS || 0) * S.recYd + (e.REC || 0) * S.rec + (e.TD || 0) * S.recTd;
+        const calcRushPts = (e: any) =>
+          (e.YDS || 0) * S.rushYd + (e.TD || 0) * S.rushTd;
+
+        // ── QB: best-scoring QB is the unit score (no weighting) ──────────
+        const passers = schoolEntries
+          .filter((e: any) => e.category === 'passing')
+          .sort((a: any, b: any) => {
+            const pA = (a.YDS||0)*S.passYd + (a.TD||0)*S.passTd + (a.INT||0)*S.int;
+            const pB = (b.YDS||0)*S.passYd + (b.TD||0)*S.passTd + (b.INT||0)*S.int;
+            return pB - pA;
+          });
+        const topQB = passers[0];
+        if (topQB) {
+          const qbRushEntry = schoolEntries.find((e: any) => e.name === topQB.name && e.category === 'rushing');
+          const rawQB = (topQB.YDS||0)*S.passYd + (topQB.TD||0)*S.passTd + (topQB.INT||0)*S.int
+            + calcRushPts(qbRushEntry ?? {});
           addStatRow(null, 'unit_QB', Math.round(rawQB * mult * 10) / 10);
         } else {
           addStatRow(null, 'unit_QB', 0);
         }
 
-        // RB (team rushing — includes all rushers: QBs, WRs, etc.)
-        const rawRB = (ts.rushingYards || 0) * S.rushYd + (ts.rushingTDs || 0) * S.rushTd;
-        addStatRow(null, 'unit_RB', Math.round(rawRB * mult * 10) / 10);
+        const qbNames = new Set<string>(
+          schoolEntries.filter((e: any) => e.category === 'passing').map((e: any) => e.name as string)
+        );
 
-        // Mismatch check: sum of ALL individual rushing yards stored vs team rushing yards.
-        // A >20% gap means some players' stat rows are missing from the API response.
-        const sumIndivRushYds = schoolEntries
-          .filter((e: any) => e.category === 'rushing')
-          .reduce((s: number, e: any) => s + (e.YDS || 0), 0);
-        const teamRushYds = ts.rushingYards || 0;
-        if (teamRushYds > 10) {
-          const gap = Math.abs(sumIndivRushYds - teamRushYds) / teamRushYds;
-          if (gap > 0.2) {
-            console.warn(
-              `[syncStats] RB player-row mismatch: ${school} game_id=${gameId} w${week} — ` +
-              `individual sum=${sumIndivRushYds} yds vs team total=${teamRushYds} yds ` +
-              `(${(gap * 100).toFixed(0)}% gap, unit_RB=${Math.round(rawRB * mult * 10) / 10} pts)`,
-            );
-          }
+        // ── RB: opportunity-ranked weighted scoring ────────────────────────
+        // Candidates: non-QB rushers + RBs who caught passes
+        const rbCandidateNames = new Set<string>();
+        for (const e of schoolEntries.filter((e: any) => e.category === 'rushing')) {
+          if (posMap[`${school}||${e.name}`] !== 'QB') rbCandidateNames.add(e.name as string);
+        }
+        for (const e of schoolEntries.filter((e: any) => e.category === 'receiving')) {
+          if (posMap[`${school}||${e.name}`] === 'RB') rbCandidateNames.add(e.name as string);
         }
 
-        // WR / TE (top-5 receivers excl. QBs, same score for both)
-        const recvs = schoolEntries
-          .filter(e => e.category === 'receiving')
-          .filter(e => !schoolEntries.some(p => p.name === e.name && p.category === 'passing'))
-          .sort((a, b) => (b.YDS || 0) - (a.YDS || 0))
-          .slice(0, 5);
-        const rawRecv = recvs.reduce(
-          (s, r) => s + (r.YDS || 0) * S.recYd + (r.TD || 0) * S.recTd, 0,
-        );
-        addStatRow(null, 'unit_WR', Math.round(rawRecv * mult * 10) / 10);
-        addStatRow(null, 'unit_TE', Math.round(rawRecv * mult * 10) / 10);
+        const rbPlayerData = Array.from(rbCandidateNames).map(name => {
+          const r  = schoolEntries.find((e: any) => e.name === name && e.category === 'rushing')   ?? {};
+          const cv = schoolEntries.find((e: any) => e.name === name && e.category === 'receiving') ?? {};
+          return { name, rushATT: r.ATT || 0, rec: cv.REC || 0, pts: calcRushPts(r) + calcRecvPts(cv), touchShare: 0 };
+        });
+        const totalRBTouches = rbPlayerData.reduce((s, p) => s + p.rushATT + p.rec, 0);
+        for (const p of rbPlayerData) p.touchShare = totalRBTouches > 0 ? (p.rushATT + p.rec) / totalRBTouches : 0;
 
-        // DEF
+        const qualifiedRBs = rbPlayerData
+          .filter(p => p.touchShare >= MIN_TOUCH_SHR)
+          .sort((a, b) => b.touchShare - a.touchShare || b.pts - a.pts);
+
+        let rbUnitRaw = 0;
+        if (qualifiedRBs.length > 0) {
+          for (let ri = 0; ri < Math.min(qualifiedRBs.length, RB_WEIGHTS.length); ri++) {
+            const w = qualifiedRBs[ri].pts * RB_WEIGHTS[ri];
+            rbUnitRaw += w;
+            addStatRow(qualifiedRBs[ri].name, `rb${ri+1}_opportunity`, Math.round(qualifiedRBs[ri].touchShare * 1000) / 1000);
+            addStatRow(qualifiedRBs[ri].name, `rb${ri+1}_rank_pts`,    Math.round(w * 100) / 100);
+          }
+        } else {
+          // Fallback to team rushing totals when no individual data available
+          rbUnitRaw = (ts.rushingYards || 0) * S.rushYd + (ts.rushingTDs || 0) * S.rushTd;
+        }
+        addStatRow(null, 'unit_RB', Math.round(rbUnitRaw * mult * 10) / 10);
+
+        // ── WR / TE: separate opportunity-ranked weighted scoring ──────────
+        const allNonQBReceivers = schoolEntries.filter((e: any) =>
+          e.category === 'receiving' && !qbNames.has(e.name as string)
+        );
+        const totalWRTERec = allNonQBReceivers.reduce((s: number, e: any) => s + (e.REC || 0), 0);
+
+        // Position map: TE if known, otherwise treat as WR
+        const wrEntries = allNonQBReceivers.filter((e: any) => posMap[`${school}||${e.name}`] !== 'TE');
+        const teEntries = allNonQBReceivers.filter((e: any) => posMap[`${school}||${e.name}`] === 'TE');
+
+        const scoreRecvUnit = (
+          entries: any[],
+          weights: readonly number[],
+          prefix: string,
+          denom: number,
+        ): number => {
+          const players = entries.map((e: any) => ({
+            name:       e.name as string,
+            pts:        calcRecvPts(e),
+            touchShare: denom > 0 ? (e.REC || 0) / denom : 0,
+          }));
+          const qualified = players
+            .filter(p => p.touchShare >= MIN_TOUCH_SHR)
+            .sort((a, b) => b.touchShare - a.touchShare || b.pts - a.pts);
+          if (qualified.length === 0) {
+            return entries.reduce((s: number, e: any) => s + calcRecvPts(e), 0);
+          }
+          let total = 0;
+          for (let wi = 0; wi < Math.min(qualified.length, weights.length); wi++) {
+            const w = qualified[wi].pts * weights[wi];
+            total += w;
+            addStatRow(qualified[wi].name, `${prefix}${wi+1}_opportunity`, Math.round(qualified[wi].touchShare * 1000) / 1000);
+            addStatRow(qualified[wi].name, `${prefix}${wi+1}_rank_pts`,    Math.round(w * 100) / 100);
+          }
+          return total;
+        }
+
+        const wrUnitRaw = scoreRecvUnit(wrEntries, WR_WEIGHTS, 'wr', totalWRTERec);
+        const teUnitRaw = scoreRecvUnit(teEntries, TE_WEIGHTS, 'te', totalWRTERec);
+        addStatRow(null, 'unit_WR', Math.round(wrUnitRaw * mult * 10) / 10);
+        addStatRow(null, 'unit_TE', Math.round(teUnitRaw * mult * 10) / 10);
+
+        // ── DEF ───────────────────────────────────────────────────────────
         const rawDEF = (ts.sacks             || 0) * S.sack   +
                        (ts.passesIntercepted || 0) * S.defInt +
                        (ts.fumblesRecovered  || 0) * S.fumRec +
                        ((ts.interceptionTDs  || 0) + (ts.fumbleReturnTDs || 0)) * S.defTd;
         addStatRow(null, 'unit_DEF', Math.round(rawDEF * mult * 10) / 10);
 
-        // K
+        // ── K ─────────────────────────────────────────────────────────────
         const kicker = schoolEntries
-          .filter(e => e.category === 'kicking')
-          .sort((a, b) => (b.PTS || 0) - (a.PTS || 0))[0];
+          .filter((e: any) => e.category === 'kicking')
+          .sort((a: any, b: any) => (b.PTS || 0) - (a.PTS || 0))[0];
         addStatRow(null, 'unit_K', kicker ? Math.round((kicker.PTS || 0) * mult * 10) / 10 : 0);
       }
     }
 
-    // Split into player rows (player_name NOT NULL) and unit/team rows (player_name IS NULL).
-    // Player rows are upserted using (game_id, school, player_name, stat_type) as the conflict key.
-    // Unit/team rows (unit_QB, unit_RB, game_mult, team_*) have player_name=NULL.
-    // PostgreSQL UNIQUE treats NULL≠NULL, so upsert would INSERT duplicates every run.
-    // Fix: DELETE existing NULL-player rows for these game_ids, then INSERT fresh.
-    const playerRows = statRows.filter(r => r.player_name !== null);
+    // ── Persist to cached_stats ────────────────────────────────────────────────
+    // Three categories:
+    //   unitRows   — player_name IS NULL (unit_QB, unit_RB, game_mult, team_*): delete + insert
+    //   roleRows   — player_name NOT NULL, role stat type (rb1_opportunity etc.): delete + insert
+    //   playerRows — player_name NOT NULL, raw stats (passing_YDS etc.): upsert
+    const ROLE_TYPES = new Set([
+      'rb1_opportunity','rb2_opportunity','rb3_opportunity',
+      'wr1_opportunity','wr2_opportunity','wr3_opportunity',
+      'te1_opportunity','te2_opportunity',
+      'rb1_rank_pts','rb2_rank_pts','rb3_rank_pts',
+      'wr1_rank_pts','wr2_rank_pts','wr3_rank_pts',
+      'te1_rank_pts','te2_rank_pts',
+    ]);
+
+    const playerRows = statRows.filter(r => r.player_name !== null && !ROLE_TYPES.has(r.stat_type));
+    const roleRows   = statRows.filter(r => r.player_name !== null &&  ROLE_TYPES.has(r.stat_type));
     const unitRows   = statRows.filter(r => r.player_name === null);
 
     const gameIds = Array.from(new Set(completedGames.map((g: any) => String(g.id))));
     const schools = Array.from(new Set(completedGames.flatMap((g: any) => [g.homeTeam, g.awayTeam])));
 
     if (gameIds.length > 0) {
-      // Delete unit/team rows (player_name IS NULL) so we can re-insert fresh
+      // Delete unit rows (player_name IS NULL) — re-inserted fresh each sync
       const { error: delErr } = await admin
         .from('cached_stats')
         .delete()
@@ -476,9 +566,16 @@ export async function syncStats(week: number, season: number): Promise<number> {
         .is('player_name', null);
       if (delErr) throw delErr;
 
+      // Delete role rows (opportunity/rank_pts) — re-inserted so rankings can change
+      if (roleRows.length > 0) {
+        await admin
+          .from('cached_stats')
+          .delete()
+          .in('game_id', gameIds)
+          .in('stat_type', Array.from(ROLE_TYPES));
+      }
+
       // Delete any legacy player rows with game_id=NULL for these school+week+season combos.
-      // These were written before game_id was added to the key and are now invisible to
-      // sportsDataReader.ts (which requires game_id for reliable week lookup).
       if (schools.length > 0) {
         const { error: delNullErr } = await admin
           .from('cached_stats')
@@ -501,13 +598,15 @@ export async function syncStats(week: number, season: number): Promise<number> {
       if (error) throw error;
       recordsUpdated += batch.length;
     }
-    for (let i = 0; i < unitRows.length; i += BATCH) {
-      const batch = unitRows.slice(i, i + BATCH);
-      const { error } = await admin
-        .from('cached_stats')
-        .insert(batch);
-      if (error) throw error;
-      recordsUpdated += batch.length;
+    for (const rows of [roleRows, unitRows]) {
+      for (let i = 0; i < rows.length; i += BATCH) {
+        const batch = rows.slice(i, i + BATCH);
+        const { error } = await admin
+          .from('cached_stats')
+          .insert(batch);
+        if (error) throw error;
+        recordsUpdated += batch.length;
+      }
     }
 
     await logSync(`syncStats:${season}:w${week}`, 'success', recordsUpdated);

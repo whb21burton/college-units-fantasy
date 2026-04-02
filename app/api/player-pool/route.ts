@@ -60,6 +60,32 @@ export async function GET(req: Request) {
       .is('player_name', null)
       .limit(100000);
 
+    // ── RB pricing data: rb1_opportunity per school across all weeks ──────────
+    const { data: rbOppRows } = await admin
+      .from('cached_stats')
+      .select('school, game_id, value')
+      .eq('season', SEASON)
+      .eq('stat_type', 'rb1_opportunity')
+      .not('player_name', 'is', null);   // role rows always have player_name set
+
+    // Aggregate per-school: CI = avg rb1_opportunity; stability = fraction of weeks where ≥ 0.40
+    const rbOppBySchool: Record<string, number[]> = {};
+    for (const row of rbOppRows ?? []) {
+      if (!row.school) continue;
+      if (!rbOppBySchool[row.school]) rbOppBySchool[row.school] = [];
+      rbOppBySchool[row.school].push(row.value ?? 0);
+    }
+
+    const rbPricingMultipliers = (school: string): { oppMult: number; stabMult: number; ci: number } => {
+      const vals = rbOppBySchool[school];
+      if (!vals || vals.length === 0) return { oppMult: 1.0, stabMult: 1.0, ci: 0 };
+      const ci = vals.reduce((s, v) => s + v, 0) / vals.length;
+      const oppMult = ci >= 0.65 ? 1.20 : ci >= 0.50 ? 1.10 : ci >= 0.35 ? 1.00 : 0.85;
+      const stableWeeks = vals.filter(v => v >= 0.40).length;
+      const stabMult = Math.max(0.80, Math.min(1.00, stableWeeks / vals.length));
+      return { oppMult, stabMult, ci };
+    }
+
     // Derive QB and K starters from actual game performance:
     // top passer by cumulative passing_YDS, top kicker by cumulative kicking_PTS.
     // This is more reliable than depth_chart_position which is always null in the DB.
@@ -163,6 +189,15 @@ export async function GET(req: Request) {
         const starterName = (unitType === 'QB' || unitType === 'K')
           ? (starterMap[`${school}||${unitType}`] ?? undefined)
           : undefined;
+
+        let adjustedPts = pts;
+        let badge: string | undefined;
+        if (unitType === 'RB') {
+          const { oppMult, stabMult, ci } = rbPricingMultipliers(school);
+          adjustedPts = pts * oppMult * stabMult;
+          badge = ci >= 0.65 ? '🐎 Workhorse' : ci < 0.50 && ci > 0 ? '👥 Committee' : undefined;
+        }
+
         pool.push({
           id:              uid(school, unitType),
           school,
@@ -171,8 +206,9 @@ export async function GET(req: Request) {
           playerName:      starterName,
           tier:            tierFromRank(rank, arr.length),
           adp:             adpMap.get(`${school}||${unitType}`) ?? rank + 1,
-          projectedPoints: Math.round(pts),
+          projectedPoints: Math.round(adjustedPts),
           seasonTotal:     Math.round(seasonTotal),
+          ...(badge ? { badge } : {}),
         });
       });
     }
