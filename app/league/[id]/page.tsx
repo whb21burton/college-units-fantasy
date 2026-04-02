@@ -1146,8 +1146,9 @@ const STAT_COLS: Record<string, { key: string; label: string }[]> = {
 function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
   player: any; onBack: () => void; onAdd: () => void; canAdd: boolean;
 }) {
-  const [stats,   setStats]   = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [stats,      setStats]      = useState<any | null>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [expandedWk, setExpandedWk] = useState<number | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -1197,14 +1198,22 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
   const colTemplate = `32px 1fr 64px 44px${cols.map(() => ' 64px').join('')}`;
 
   // Scoring constants (mirror sportsDataService.ts)
-  const S = { passYd: 0.05, passTd: 4, int: -2, rushYd: 0.05, rushTd: 6, recYd: 0.05, recTd: 6 };
-  function playerFpts(p: any, ut: string): number {
+  const S = { passYd: 0.1, passTd: 4, int: -2, rushYd: 0.1, rushTd: 6, rec: 1.0, recYd: 0.1, recTd: 6 };
+  const playerFpts = (p: any, ut: string): number => {
     if (ut === 'QB') return (p.passYd||0)*S.passYd + (p.passTd||0)*S.passTd + (p.int||0)*S.int + (p.rushYd||0)*S.rushYd + (p.rushTd||0)*S.rushTd;
-    if (ut === 'RB') return (p.rushYd||0)*S.rushYd + (p.rushTd||0)*S.rushTd + (p.recYd||0)*S.recYd;
-    if (ut === 'WR' || ut === 'TE') return (p.recYd||0)*S.recYd + (p.recTd||0)*S.recTd;
+    if (ut === 'RB') return (p.rushYd||0)*S.rushYd + (p.rushTd||0)*S.rushTd + (p.rec||0)*S.rec + (p.recYd||0)*S.recYd + (p.recTd||0)*S.recTd;
+    if (ut === 'WR' || ut === 'TE') return (p.rec||0)*S.rec + (p.recYd||0)*S.recYd + (p.recTd||0)*S.recTd;
     if (ut === 'K')  return p.pts || 0;
     return 0;
-  }
+  };
+
+  // Role weights and labels per unit type
+  const ROLE_WEIGHTS_MAP: Record<string, number[]> = {
+    RB: [1.0, 0.7, 0.4],
+    WR: [1.0, 0.8, 0.7],
+    TE: [1.0, 0.5],
+  };
+  const RANK_COLORS = ['#d4a828', '#9ca3af', '#cd7f32'] as const; // gold, silver, bronze
 
   // Top contributors: all named players sorted by fantasy pts desc
   const contributors = sortedPlayers
@@ -1368,31 +1377,176 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
             ))}
           </div>
           {weeks.map((wk: any) => {
-            const p0 = wk.players?.[0] ?? {};
-            const isPlayoff = wk.week > 11;
+            const p0          = wk.players?.[0] ?? {};
+            const isPlayoff   = wk.week > 11;
+            const hasBreakdown = wk.completed && ['RB','WR','TE'].includes(player.unitType) && (wk.players?.length ?? 0) > 1;
+            const isExpanded  = expandedWk === wk.week;
+
+            // Build per-player breakdown for RB/WR/TE
+            const namedPlayers: any[] = hasBreakdown ? (wk.players ?? []).slice(1) : [];
+            const weights = ROLE_WEIGHTS_MAP[player.unitType] ?? [];
+            // Sort named players by raw fpts desc to assign rank 1/2/3
+            const sorted = [...namedPlayers]
+              .map(p => ({ ...p, rawPts: playerFpts(p, player.unitType) }))
+              .sort((a, b) => b.rawPts - a.rawPts);
+            const unitLabel = player.unitType; // 'RB'|'WR'|'TE'
+
             return (
-              <div key={wk.week} style={{ display: 'grid', gridTemplateColumns: colTemplate, gap: 4, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22`, minWidth: 380, background: isPlayoff ? 'rgba(139,92,246,.04)' : 'transparent' }}>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isPlayoff ? '#a855f7' : C.muted }}>{wk.week}</div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {wk.opponent
-                    ? `vs ${wk.opponent.length > 12 ? wk.opponent.slice(0, 12) + '…' : wk.opponent}`
-                    : (isPlayoff ? 'PLAYOFF' : '—')}
-                </div>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: wk.fantasyPoints != null ? C.gold : C.muted, textAlign: 'right' }}>
-                  {wk.fantasyPoints != null
-                    ? wk.fantasyPoints.toFixed(1)
-                    : wk.opponent != null
-                      ? weeklyProj(player.projectedPoints).toFixed(1)
-                      : '—'}
-                </div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right', color: wk.multiplier == null ? C.muted : wk.multiplier > 1 ? C.green : wk.multiplier < 1 ? C.red : C.sub }}>
-                  {wk.multiplier != null ? `×${wk.multiplier.toFixed(1)}` : '—'}
-                </div>
-                {cols.map(col => (
-                  <div key={col.key} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textAlign: 'right' }}>
-                    {wk.completed && p0[col.key] != null ? p0[col.key] : '—'}
+              <div key={wk.week} style={{ borderBottom: `1px solid ${C.surf3}22` }}>
+                {/* Main week row */}
+                <div
+                  onClick={hasBreakdown ? () => setExpandedWk(isExpanded ? null : wk.week) : undefined}
+                  style={{
+                    display: 'grid', gridTemplateColumns: colTemplate + (hasBreakdown ? ' 18px' : ''), gap: 4,
+                    padding: '7px 12px', minWidth: 380,
+                    background: isPlayoff ? 'rgba(139,92,246,.04)' : 'transparent',
+                    cursor: hasBreakdown ? 'pointer' : 'default',
+                  }}
+                >
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isPlayoff ? '#a855f7' : C.muted }}>{wk.week}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {wk.opponent
+                      ? `vs ${wk.opponent.length > 12 ? wk.opponent.slice(0, 12) + '…' : wk.opponent}`
+                      : (isPlayoff ? 'PLAYOFF' : '—')}
                   </div>
-                ))}
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: wk.fantasyPoints != null ? C.gold : C.muted, textAlign: 'right' }}>
+                    {wk.fantasyPoints != null
+                      ? wk.fantasyPoints.toFixed(1)
+                      : wk.opponent != null
+                        ? weeklyProj(player.projectedPoints).toFixed(1)
+                        : '—'}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right', color: wk.multiplier == null ? C.muted : wk.multiplier > 1 ? C.green : wk.multiplier < 1 ? C.red : C.sub }}>
+                    {wk.multiplier != null ? `×${wk.multiplier.toFixed(1)}` : '—'}
+                  </div>
+                  {cols.map(col => (
+                    <div key={col.key} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textAlign: 'right' }}>
+                      {wk.completed && p0[col.key] != null ? p0[col.key] : '—'}
+                    </div>
+                  ))}
+                  {hasBreakdown && (
+                    <div style={{
+                      fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted,
+                      display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                      transform: isExpanded ? 'rotate(180deg)' : 'none',
+                      transition: 'transform .2s ease',
+                    }}>▼</div>
+                  )}
+                </div>
+
+                {/* Collapsible breakdown sub-table */}
+                {hasBreakdown && (
+                  <div style={{
+                    overflow: 'hidden',
+                    maxHeight: isExpanded ? `${sorted.length * 34 + 68}px` : '0px',
+                    transition: 'max-height .25s ease',
+                  }}>
+                    <div style={{
+                      background: '#080c14',
+                      borderLeft: '3px solid #d4a828',
+                      margin: '0 0 0 0',
+                    }}>
+                      {/* Sub-table header */}
+                      {(() => {
+                        const isRB = unitLabel === 'RB';
+                        const isTE = unitLabel === 'TE';
+                        return (
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: isRB
+                              ? '52px 1fr 48px 40px 48px 36px 36px 48px 56px 56px'
+                              : '52px 1fr 48px 36px 52px 36px 56px 56px',
+                            gap: 4, padding: '5px 12px',
+                            background: '#0f1a2e',
+                          }}>
+                            {['RANK','PLAYER','MULT',
+                              ...(isRB ? ['ATT','YDS','TD','REC','REC YDS'] : ['REC','YDS','TD']),
+                              'RAW PTS','WTD PTS',
+                            ].map(h => (
+                              <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: '#7a90b0', textAlign: h === 'PLAYER' ? 'left' : 'right', letterSpacing: .5 }}>{h}</div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Player rows */}
+                      {sorted.map((p, idx) => {
+                        const mult     = weights[idx] ?? weights[weights.length - 1] ?? 1.0;
+                        const raw      = p.rawPts;
+                        const wtd      = raw * mult;
+                        const rc       = RANK_COLORS[idx] ?? RANK_COLORS[RANK_COLORS.length - 1];
+                        const label    = `${unitLabel}${idx + 1}`;
+                        const isRB     = unitLabel === 'RB';
+                        return (
+                          <div key={p.name ?? idx} style={{
+                            display: 'grid',
+                            gridTemplateColumns: isRB
+                              ? '52px 1fr 48px 40px 48px 36px 36px 48px 56px 56px'
+                              : '52px 1fr 48px 36px 52px 36px 56px 56px',
+                            gap: 4, padding: '6px 12px',
+                            borderTop: `1px solid ${C.surf3}22`,
+                            alignItems: 'center',
+                          }}>
+                            {/* RANK badge */}
+                            <div>
+                              <span style={{
+                                fontFamily: "'Space Grotesk',sans-serif", fontSize: 8, fontWeight: 700,
+                                padding: '2px 6px', borderRadius: 20,
+                                background: rc + '22', border: `1px solid ${rc}55`, color: rc,
+                                letterSpacing: .5,
+                              }}>{label}</span>
+                            </div>
+                            {/* PLAYER */}
+                            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {p.name ?? '—'}
+                            </div>
+                            {/* MULT */}
+                            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>×{mult.toFixed(1)}</div>
+                            {/* RB stats */}
+                            {isRB && <>
+                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.rushAtt ?? 0}</div>
+                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.rushYd ?? 0}</div>
+                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.rushTd ?? 0}</div>
+                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.rec ?? 0}</div>
+                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.recYd ?? 0}</div>
+                            </>}
+                            {/* WR/TE stats */}
+                            {!isRB && <>
+                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.rec ?? 0}</div>
+                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.recYd ?? 0}</div>
+                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{p.recTd ?? 0}</div>
+                            </>}
+                            {/* RAW PTS */}
+                            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, textAlign: 'right' }}>{raw.toFixed(1)}</div>
+                            {/* WEIGHTED PTS */}
+                            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.gold, textAlign: 'right' }}>{wtd.toFixed(1)}</div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Total row */}
+                      {(() => {
+                        const total = sorted.reduce((s, p, idx) => {
+                          const mult = weights[idx] ?? weights[weights.length - 1] ?? 1.0;
+                          return s + p.rawPts * mult;
+                        }, 0);
+                        return (
+                          <div style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            padding: '6px 12px',
+                            borderTop: `1px solid ${C.surf3}44`,
+                            background: '#0a0e18',
+                          }}>
+                            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: 'uppercase' }}>
+                              Unit Total
+                            </div>
+                            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>{total.toFixed(1)}</div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
