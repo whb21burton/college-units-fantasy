@@ -189,6 +189,10 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
       PLACEKICKER: 'K', 'PLACE-KICKER': 'K', KR: 'K',
     };
 
+    // Position priority: higher number = takes precedence.
+    // A player already stored as WR will NOT be downgraded to RB if both appear in CFBD data.
+    const POSITION_PRIORITY: Record<string, number> = { QB: 5, WR: 4, TE: 3, RB: 2, K: 1, DEF: 0 };
+
     const rosterYear = cfbdYear ?? season;
 
     // Normalize year: CFBD returns integers (1=FR,2=SO,3=JR,4=SR,5=SR) OR
@@ -224,6 +228,7 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
 
             return {
               school:               team,
+              season,
               position:             pos,              // CHECK: 'QB'|'RB'|'WR'|'TE'|'K'|'DEF'
               player_name:          name,
               jersey_number:        p.jersey != null ? String(p.jersey) : null,
@@ -237,18 +242,43 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
 
         if (rows.length === 0) continue;
 
+        // ── Position priority guard ─────────────────────────────────────────
+        // Fetch existing positions for this team so we never downgrade a player
+        // from a higher-priority position (e.g. WR→RB when CFBD lists both).
+        const { data: existingRows } = await admin
+          .from('cached_players')
+          .select('player_name, position')
+          .eq('school', team)
+          .eq('season', season)
+          .in('player_name', rows.map((r: any) => r.player_name));
+
+        const existingPosMap: Record<string, string> = {};
+        for (const ep of existingRows ?? []) {
+          if (ep.player_name) existingPosMap[ep.player_name] = ep.position;
+        }
+
+        const filteredRows = rows.filter((r: any) => {
+          const existing = existingPosMap[r.player_name];
+          if (!existing) return true; // new player — always insert
+          const existPrio = POSITION_PRIORITY[existing] ?? 0;
+          const newPrio   = POSITION_PRIORITY[r.position] ?? 0;
+          return newPrio >= existPrio; // only update if same or higher priority
+        });
+
+        if (filteredRows.length === 0) continue;
+
         const { error } = await admin
           .from('cached_players')
-          .upsert(rows, { onConflict: 'school,position,player_name' });
+          .upsert(filteredRows, { onConflict: 'school,player_name,season' });
 
         if (error) {
           console.error(
             `syncRosters:${team} upsert FAILED — code=${error.code} msg=${error.message}`,
             `details=${error.details ?? ''} hint=${error.hint ?? ''}`,
-            `first_row=${JSON.stringify(rows[0])}`,
+            `first_row=${JSON.stringify(filteredRows[0])}`,
           );
         } else {
-          recordsUpdated += rows.length;
+          recordsUpdated += filteredRows.length;
         }
       } catch (teamErr: any) {
         console.error(`syncRosters:${team} fetch error:`, teamErr.message);
@@ -444,10 +474,15 @@ export async function syncStats(week: number, season: number): Promise<number> {
         );
 
         // ── RB: opportunity-ranked weighted scoring ────────────────────────
-        // Candidates: non-QB rushers + RBs who caught passes
+        // Candidates: rushers who are RB or unknown position (never WR/TE/QB/K),
+        // plus known RBs who caught passes.
         const rbCandidateNames = new Set<string>();
         for (const e of schoolEntries.filter((e: any) => e.category === 'rushing')) {
-          if (posMap[`${school}||${e.name}`] !== 'QB') rbCandidateNames.add(e.name as string);
+          const pos = posMap[`${school}||${e.name}`];
+          // Exclude players explicitly mapped to non-RB positions
+          if (pos !== 'QB' && pos !== 'WR' && pos !== 'TE' && pos !== 'K') {
+            rbCandidateNames.add(e.name as string);
+          }
         }
         for (const e of schoolEntries.filter((e: any) => e.category === 'receiving')) {
           if (posMap[`${school}||${e.name}`] === 'RB') rbCandidateNames.add(e.name as string);
@@ -485,8 +520,12 @@ export async function syncStats(week: number, season: number): Promise<number> {
         );
         const totalWRTERec = allNonQBReceivers.reduce((s: number, e: any) => s + (e.REC || 0), 0);
 
-        // Position map: TE if known, otherwise treat as WR
-        const wrEntries = allNonQBReceivers.filter((e: any) => posMap[`${school}||${e.name}`] !== 'TE');
+        // Strict position split: WR = known WR or unknown; TE = known TE only.
+        // Players mapped to RB are excluded from both (their receiving is in RB scoring).
+        const wrEntries = allNonQBReceivers.filter((e: any) => {
+          const pos = posMap[`${school}||${e.name}`];
+          return pos === 'WR' || !pos; // WR or no data → default to WR
+        });
         const teEntries = allNonQBReceivers.filter((e: any) => posMap[`${school}||${e.name}`] === 'TE');
 
         const scoreRecvUnit = (
