@@ -119,7 +119,14 @@ function formatHeaderTime(league: League): { countdown: string; date: string } {
 }
 
 function styleLabel(cf: string): string {
-  if (!cf || cf === 'ALL') return 'All D1';
+  if (!cf || cf === 'ALL' || cf === 'All D1' || cf === 'All D1 Schools') return 'All D1';
+  if (cf.includes('SEC'))         return 'SEC';
+  if (cf.includes('Big Ten'))     return 'Big Ten';
+  if (cf.includes('ACC'))         return 'ACC';
+  if (cf.includes('Big 12'))      return 'Big 12';
+  if (cf.includes('Pac-12'))      return 'Pac-12';
+  if (cf.includes('Independent')) return 'Independent';
+  if (cf === 'CUSTOM')            return 'Custom';
   return cf;
 }
 
@@ -776,8 +783,14 @@ function PublicLeaguesContent() {
     if (minFee !== null && l.buy_in < minFee) return false;
     if (maxFee !== null && l.buy_in > maxFee) return false;
     if (styleFilter !== '__all__') {
-      const cf = l.conference_filter === 'ALL' ? 'ALL' : l.conference_filter;
-      if (cf !== styleFilter) return false;
+      const cf = l.conference_filter ?? '';
+      if (styleFilter === 'ALL') {
+        // "All D1 Schools" filter — only leagues open to all schools
+        if (cf !== 'ALL' && cf !== 'All D1' && cf !== 'All D1 Schools') return false;
+      } else {
+        // Specific conference — use includes so "SEC", "SEC Only", etc. all match
+        if (!cf.includes(styleFilter)) return false;
+      }
     }
     if (typeFilter === 'capped'   && l.is_capped === false)       return false;
     if (typeFilter === 'nocap'    && l.is_capped !== false)        return false;

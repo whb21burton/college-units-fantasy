@@ -30,12 +30,13 @@ export async function POST(req: NextRequest) {
   const copies      = Math.max(1, Math.min(20, parseInt(body.copies) || 1));
   const settings    = body.settings && typeof body.settings === 'object' ? body.settings : {};
 
+  const storedConferenceFilter = isPublic ? (body.conference_filter ?? 'ALL') : 'ALL';
   console.log('[leagues/create] creating:', {
     baseName,
     is_public:         isPublic,
     league_type:       body.league_type ?? 'season',
     status:            'forming',
-    conference_filter: isPublic ? (body.conference_filter ?? 'ALL') : 'ALL',
+    conference_filter: storedConferenceFilter,   // <-- exact value saved to DB
     league_size:       leagueSize,
     buy_in:            buyIn,
     is_capped:         isCapped,
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
         league_size:       leagueSize,
         draft_type:        body.draft_type ?? 'snake',
         salary_cap:        body.salary_cap ?? 200,
-        conference_filter: isPublic ? (body.conference_filter ?? 'ALL') : 'ALL',
+        conference_filter: storedConferenceFilter,
         is_public:         isPublic,
         league_type:       body.league_type ?? 'season',
         week:              body.week ?? null,
