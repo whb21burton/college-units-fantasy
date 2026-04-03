@@ -191,7 +191,7 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
 
     // Position priority: higher number = takes precedence.
     // A player already stored as WR will NOT be downgraded to RB if both appear in CFBD data.
-    const POSITION_PRIORITY: Record<string, number> = { QB: 5, WR: 4, TE: 3, RB: 2, K: 1, DEF: 0 };
+    const POSITION_PRIORITY: Record<string, number> = { QB: 5, WR: 4, TE: 4, RB: 2, K: 1, DEF: 0 };
 
     const rosterYear = cfbdYear ?? season;
 
