@@ -322,6 +322,7 @@ export async function syncStats(week: number, season: number): Promise<number> {
         (g.seasonType === 'regular' || g.season_type === 'regular'),
     );
 
+    console.log(`[syncStats] week=${week} season=${season} totalGames=${(games as any[]).length} completedRegular=${completedGames.length}`);
     if (completedGames.length === 0) {
       await logSync(`syncStats:${season}:w${week}`, 'success', 0);
       return 0;
@@ -450,6 +451,7 @@ export async function syncStats(week: number, season: number): Promise<number> {
         addStatRow(null, 'game_mult', mult);
 
         // ── Compute unit fantasy points (Elo-adjusted) ──────────────────────
+        console.log(`[unit-scoring-start] ${school} wk${week} starting unit calculations (entries=${schoolEntries.length})`);
 
         // Individual scoring helpers
         const calcRecvPts = (e: any) =>
@@ -644,6 +646,7 @@ export async function syncStats(week: number, season: number): Promise<number> {
         addStatRow(null, 'unit_WR', Math.round(wrUnitRaw * mult * 10) / 10);
 
         // ── TE ────────────────────────────────────────────────────────────
+        console.log(`[pre-TE] ${school} wk${week} about to calculate TE unit`);
         // Step 1: get all receiving entries assigned to TE unit
         const allReceivingEntries = entriesFor('TE', 'receiving');
         console.log(
