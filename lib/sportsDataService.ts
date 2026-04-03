@@ -373,10 +373,16 @@ export async function syncStats(week: number, season: number): Promise<number> {
       .in('school', allSchoolsInBatch)
       .limit(10000);
 
-    const posMap: Record<string, string> = {};
+    // Normalize player names for fuzzy matching: strip punctuation, lowercase, collapse spaces
+    const normName = (n: string) =>
+      n.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+
+    const posMap:     Record<string, string> = {};  // exact:  school||player_name → position
+    const posMapNorm: Record<string, string> = {};  // normalized: school||normName → position
     for (const p of (posData ?? [])) {
       if (p.school && p.player_name && p.position) {
         posMap[`${p.school}||${p.player_name}`] = p.position;
+        posMapNorm[`${p.school}||${normName(p.player_name)}`] = p.position;
       }
     }
 
@@ -467,7 +473,12 @@ export async function syncStats(week: number, season: number): Promise<number> {
         ));
 
         for (const name of allPlayerNames) {
-          const cachedPos = posMap[`${school}||${name}`] as UnitLabel | undefined;
+          // Try exact match first, then normalized fallback to handle punctuation differences
+          // e.g. "T.J. Logan" (CFBD stats) vs "TJ Logan" (cached_players)
+          const cachedPos = (
+            posMap[`${school}||${name}`] ??
+            posMapNorm[`${school}||${normName(name)}`]
+          ) as UnitLabel | undefined;
           const hasPass   = schoolEntries.some((e: any) => e.name === name && e.category === 'passing');
           const hasRush   = schoolEntries.some((e: any) => e.name === name && e.category === 'rushing');
           const hasRecv   = schoolEntries.some((e: any) => e.name === name && e.category === 'receiving');
@@ -599,7 +610,7 @@ export async function syncStats(week: number, season: number): Promise<number> {
         }
         addStatRow(null, 'unit_RB', Math.round(rbUnitRaw * mult * 10) / 10);
 
-        // ── WR / TE ────────────────────────────────────────────────────────
+        // ── WR ────────────────────────────────────────────────────────────
         const scoreRecvUnit = (
           entries: any[],
           weights: readonly number[],
@@ -628,24 +639,56 @@ export async function syncStats(week: number, season: number): Promise<number> {
         };
 
         const wrEntries = entriesFor('WR', 'receiving');
-        const teEntries = entriesFor('TE', 'receiving');
-        const totalWRTERec = [...wrEntries, ...teEntries].reduce((s: number, e: any) => s + (e.REC || 0), 0);
-
-        console.log(
-          `[TE-debug] ${school} wk${week}: tePlayers=${teEntries.length}` +
-          ` names=${teEntries.map((e: any) => e.name).join(',') || 'NONE'}` +
-          ` totalWRTERec=${totalWRTERec}`
-        );
-
-        const wrUnitRaw = scoreRecvUnit(wrEntries, WR_WEIGHTS, 'wr', totalWRTERec);
-        const teUnitRaw = scoreRecvUnit(teEntries, TE_WEIGHTS, 'te', totalWRTERec);
-
-        console.log(
-          `[TE-debug] ${school} wk${week}: TE unit score = ${Math.round(teUnitRaw * mult * 10) / 10}` +
-          ` (raw=${teUnitRaw.toFixed(2)} mult=${mult.toFixed(2)})`
-        );
-
+        const totalWRRec = wrEntries.reduce((s: number, e: any) => s + (e.REC || 0), 0);
+        const wrUnitRaw  = scoreRecvUnit(wrEntries, WR_WEIGHTS, 'wr', totalWRRec);
         addStatRow(null, 'unit_WR', Math.round(wrUnitRaw * mult * 10) / 10);
+
+        // ── TE ────────────────────────────────────────────────────────────
+        // Step 1: get all receiving entries assigned to TE unit
+        const allReceivingEntries = entriesFor('TE', 'receiving');
+        console.log(
+          `[TE-debug] ${school} wk${week}: ${allReceivingEntries.length} TE receiving entries:` +
+          ` [${allReceivingEntries.map((e: any) => e.name).join(', ') || 'NONE'}]`
+        );
+
+        // Step 2: show what the registry knows about TE players for this school
+        const teInRegistry = Object.entries(posMap)
+          .filter(([k, v]) => k.startsWith(`${school}||`) && v === 'TE')
+          .map(([k]) => k.replace(`${school}||`, ''));
+        console.log(
+          `[TE-debug] ${school} wk${week}: TE in registry (posMap): [${teInRegistry.join(', ') || 'NONE'}]`
+        );
+
+        // Step 3: sort by receiving points descending (opportunity = receiving stats)
+        const tePlayers = allReceivingEntries
+          .map((e: any) => ({ ...e, pts: calcRecvPts(e) }))
+          .sort((a: any, b: any) => b.pts - a.pts);
+
+        const te1 = tePlayers[0];
+        const te2 = tePlayers[1];
+        const te1pts = te1 ? te1.pts : 0;
+        const te2pts = te2 ? te2.pts : 0;
+        const teUnitRaw = (te1pts * TE_WEIGHTS[0]) + (te2pts * (TE_WEIGHTS[1] ?? 0));
+
+        console.log(
+          `[TE-debug] ${school} wk${week}: TE1=${te1?.name ?? 'none'}(${te1pts.toFixed(1)}pts)` +
+          ` TE2=${te2?.name ?? 'none'}(${te2pts.toFixed(1)}pts)` +
+          ` unit=${(teUnitRaw * mult).toFixed(1)} mult=${mult.toFixed(2)}`
+        );
+
+        // Store opportunity scores for TE1/TE2
+        const totalTERec = tePlayers.reduce((s: number, e: any) => s + (e.REC || 0), 0);
+        if (te1) {
+          const te1Share = totalTERec > 0 ? (te1.REC || 0) / totalTERec : 0;
+          addStatRow(te1.name, 'te1_opportunity', Math.round(te1Share * 1000) / 1000);
+          addStatRow(te1.name, 'te1_rank_pts',    Math.round(te1pts * TE_WEIGHTS[0] * 100) / 100);
+        }
+        if (te2) {
+          const te2Share = totalTERec > 0 ? (te2.REC || 0) / totalTERec : 0;
+          addStatRow(te2.name, 'te2_opportunity', Math.round(te2Share * 1000) / 1000);
+          addStatRow(te2.name, 'te2_rank_pts',    Math.round(te2pts * (TE_WEIGHTS[1] ?? 0) * 100) / 100);
+        }
+
         addStatRow(null, 'unit_TE', Math.round(teUnitRaw * mult * 10) / 10);
 
         // ── DEF ───────────────────────────────────────────────────────────
