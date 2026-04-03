@@ -488,6 +488,39 @@ export async function syncStats(week: number, season: number): Promise<number> {
           if (posMap[`${school}||${e.name}`] === 'RB') rbCandidateNames.add(e.name as string);
         }
 
+        // ── WR / TE: all non-QB receivers ─────────────────────────────────
+        const allNonQBReceivers = schoolEntries.filter((e: any) =>
+          e.category === 'receiving' && !qbNames.has(e.name as string)
+        );
+
+        // ── Deduplication: each player counts for AT MOST ONE unit per game ──
+        // Find players who appear in both RB candidates AND as receivers.
+        // Compare their rush-only pts vs recv-only pts to decide unit assignment.
+        // Tiebreaker: cached_players position; if unknown, receiving unit wins.
+        for (const name of Array.from(rbCandidateNames)) {
+          const hasRecv = allNonQBReceivers.some((e: any) => e.name === name);
+          if (!hasRecv) continue; // rush-only player — no conflict, stays in RB
+
+          const rushEntry = schoolEntries.find((e: any) => e.name === name && e.category === 'rushing') ?? {};
+          const recvEntry = schoolEntries.find((e: any) => e.name === name && e.category === 'receiving') ?? {};
+          const rushOnlyPts = calcRushPts(rushEntry);
+          const recvOnlyPts = calcRecvPts(recvEntry);
+
+          let assignToRB: boolean;
+          if (rushOnlyPts !== recvOnlyPts) {
+            assignToRB = rushOnlyPts > recvOnlyPts;
+          } else {
+            // Tie: cached_players position is the tiebreaker.
+            // If explicitly RB → RB. Any other position (WR/TE/unknown) → receiving unit.
+            assignToRB = posMap[`${school}||${name}`] === 'RB';
+          }
+
+          if (!assignToRB) {
+            rbCandidateNames.delete(name); // player's value belongs to receiving unit
+          }
+          // If assignToRB: player stays in rbCandidateNames; receiving unit excludes them below
+        }
+
         const rbPlayerData = Array.from(rbCandidateNames).map(name => {
           const r  = schoolEntries.find((e: any) => e.name === name && e.category === 'rushing')   ?? {};
           const cv = schoolEntries.find((e: any) => e.name === name && e.category === 'receiving') ?? {};
@@ -514,19 +547,20 @@ export async function syncStats(week: number, season: number): Promise<number> {
         }
         addStatRow(null, 'unit_RB', Math.round(rbUnitRaw * mult * 10) / 10);
 
-        // ── WR / TE: separate opportunity-ranked weighted scoring ──────────
-        const allNonQBReceivers = schoolEntries.filter((e: any) =>
-          e.category === 'receiving' && !qbNames.has(e.name as string)
-        );
-        const totalWRTERec = allNonQBReceivers.reduce((s: number, e: any) => s + (e.REC || 0), 0);
+        const totalWRTERec = allNonQBReceivers
+          .filter((e: any) => !rbCandidateNames.has(e.name as string))
+          .reduce((s: number, e: any) => s + (e.REC || 0), 0);
 
-        // Strict position split: WR = known WR or unknown; TE = known TE only.
-        // Players mapped to RB are excluded from both (their receiving is in RB scoring).
+        // Strict position split after deduplication.
+        // Players claimed by RB unit are excluded from both WR and TE.
         const wrEntries = allNonQBReceivers.filter((e: any) => {
+          if (rbCandidateNames.has(e.name as string)) return false;
           const pos = posMap[`${school}||${e.name}`];
-          return pos === 'WR' || !pos; // WR or no data → default to WR
+          return pos === 'WR' || !pos; // WR or no posMap data → default to WR
         });
-        const teEntries = allNonQBReceivers.filter((e: any) => posMap[`${school}||${e.name}`] === 'TE');
+        const teEntries = allNonQBReceivers.filter((e: any) =>
+          !rbCandidateNames.has(e.name as string) && posMap[`${school}||${e.name}`] === 'TE'
+        );
 
         const scoreRecvUnit = (
           entries: any[],
