@@ -473,36 +473,38 @@ export async function syncStats(week: number, season: number): Promise<number> {
           const hasRecv   = schoolEntries.some((e: any) => e.name === name && e.category === 'receiving');
           const hasKick   = schoolEntries.some((e: any) => e.name === name && e.category === 'kicking');
 
-          // Step 1: QB override — any passer is QB regardless of cachedPos
-          // (even a player listed as WR/RB who threw a pass stays QB for this game)
-          if (hasPass) {
-            unitAssignments.set(name, 'QB');
-            continue;
-          }
-
-          // Step 2: cached_players is AUTHORITATIVE for non-QBs.
-          // If we have a DB position, use it immediately — no stat-based overrides.
-          if (cachedPos === 'WR' || cachedPos === 'TE' || cachedPos === 'RB' || cachedPos === 'K') {
+          // ── Step 1: cached_players is ALWAYS the source of truth ──────────
+          // If the player exists in cached_players, use that position. Done.
+          // No stat-based logic can override a DB-registered position.
+          if (cachedPos === 'QB' || cachedPos === 'WR' || cachedPos === 'TE' ||
+              cachedPos === 'RB' || cachedPos === 'K') {
             unitAssignments.set(name, cachedPos);
             continue;
           }
 
-          // Step 3: stats-only inference (player NOT in cached_players).
+          // ── Step 2: stats-only inference (NOT in cached_players) ──────────
+          // Has passing attempts → QB
+          if (hasPass) {
+            unitAssignments.set(name, 'QB');
+            continue;
+          }
+          // Kicking only → K
           if (hasKick && !hasRush && !hasRecv) {
             unitAssignments.set(name, 'K');
             continue;
           }
+          // Rush only → RB
           if (hasRush && !hasRecv) {
             unitAssignments.set(name, 'RB');
             continue;
           }
+          // Recv only → WR (can't distinguish TE without position data)
           if (hasRecv && !hasRush) {
-            // No position data → can't distinguish WR from TE; default WR
             unitAssignments.set(name, 'WR');
             continue;
           }
+          // Rush + recv → compare contributions; higher-scoring unit wins
           if (hasRush && hasRecv) {
-            // Rush + recv with no position data → compare contributions
             const rushE = schoolEntries.find((e: any) => e.name === name && e.category === 'rushing') ?? {};
             const recvE = schoolEntries.find((e: any) => e.name === name && e.category === 'receiving') ?? {};
             const rushOnlyPts = calcRushPts(rushE);
@@ -630,8 +632,8 @@ export async function syncStats(week: number, season: number): Promise<number> {
         const totalWRTERec = [...wrEntries, ...teEntries].reduce((s: number, e: any) => s + (e.REC || 0), 0);
 
         console.log(
-          `[syncStats TE] ${school} wk${week}: teEntries=${teEntries.length}` +
-          ` players=[${teEntries.map((e: any) => `${e.name}(${e.REC}rec,${e.YDS}yds)`).join(', ') || 'NONE'}]` +
+          `[TE-debug] ${school} wk${week}: tePlayers=${teEntries.length}` +
+          ` names=${teEntries.map((e: any) => e.name).join(',') || 'NONE'}` +
           ` totalWRTERec=${totalWRTERec}`
         );
 
@@ -639,8 +641,8 @@ export async function syncStats(week: number, season: number): Promise<number> {
         const teUnitRaw = scoreRecvUnit(teEntries, TE_WEIGHTS, 'te', totalWRTERec);
 
         console.log(
-          `[syncStats TE] ${school} wk${week}: teUnitRaw=${teUnitRaw.toFixed(2)}` +
-          ` teUnitFinal=${Math.round(teUnitRaw * mult * 10) / 10} (mult=${mult.toFixed(2)})`
+          `[TE-debug] ${school} wk${week}: TE unit score = ${Math.round(teUnitRaw * mult * 10) / 10}` +
+          ` (raw=${teUnitRaw.toFixed(2)} mult=${mult.toFixed(2)})`
         );
 
         addStatRow(null, 'unit_WR', Math.round(wrUnitRaw * mult * 10) / 10);
