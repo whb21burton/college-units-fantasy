@@ -464,8 +464,6 @@ export async function syncStats(week: number, season: number): Promise<number> {
         // No player can contribute to more than one unit in a game.
         type UnitLabel = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'EXCLUDED';
         const UNIT_CODE: Record<UnitLabel, number> = { QB: 1, RB: 2, WR: 3, TE: 4, K: 5, EXCLUDED: 0 };
-        // Priority for tie-breaking (higher = wins): QB > WR > TE > RB > K
-        const UNIT_PRIORITY: Record<string, number> = { QB: 5, WR: 4, TE: 3, RB: 2, K: 1 };
 
         const unitAssignments = new Map<string, UnitLabel>();
 
@@ -612,6 +610,26 @@ export async function syncStats(week: number, season: number): Promise<number> {
         }
         addStatRow(null, 'unit_RB', Math.round(rbUnitRaw * mult * 10) / 10);
 
+        // ── WR / TE — split ALL receivers directly via posMap (bypasses unitAssignments) ──
+        // unitAssignments can misclassify TEs as WR when posMap lookup fails due to
+        // name mismatch (e.g. "T.J. Hockenson" vs "TJ Hockenson"). Instead we query
+        // posMap/posMapNorm directly on every receiving entry so TEs are never lost.
+        const allSchoolReceivers = schoolEntries.filter((e: any) => e.category === 'receiving');
+
+        const wrEntries = allSchoolReceivers.filter((e: any) => {
+          const pos = posMap[`${school}||${e.name}`] ?? posMapNorm[`${school}||${normName(e.name)}`];
+          // TE goes to TE bucket; RB/QB receivers stay out; everything else is WR
+          return pos !== 'TE' && pos !== 'RB' && pos !== 'QB' && pos !== 'K';
+        });
+
+        const teEntries = allSchoolReceivers.filter((e: any) => {
+          const pos = posMap[`${school}||${e.name}`] ?? posMapNorm[`${school}||${normName(e.name)}`];
+          return pos === 'TE';
+        });
+
+        console.log(`[WR-debug] ${school} wk${week}: ${wrEntries.length} WR receivers`);
+        console.log(`[TE-debug] ${school} wk${week}: ${teEntries.length} TE entries: [${teEntries.map((e: any) => e.name).join(', ') || 'NONE'}]`);
+
         // ── WR ────────────────────────────────────────────────────────────
         const scoreRecvUnit = (
           entries: any[],
@@ -640,30 +658,12 @@ export async function syncStats(week: number, season: number): Promise<number> {
           return total;
         };
 
-        const wrEntries = entriesFor('WR', 'receiving');
         const totalWRRec = wrEntries.reduce((s: number, e: any) => s + (e.REC || 0), 0);
         const wrUnitRaw  = scoreRecvUnit(wrEntries, WR_WEIGHTS, 'wr', totalWRRec);
         addStatRow(null, 'unit_WR', Math.round(wrUnitRaw * mult * 10) / 10);
 
         // ── TE ────────────────────────────────────────────────────────────
-        console.log(`[pre-TE] ${school} wk${week} about to calculate TE unit`);
-        // Step 1: get all receiving entries assigned to TE unit
-        const allReceivingEntries = entriesFor('TE', 'receiving');
-        console.log(
-          `[TE-debug] ${school} wk${week}: ${allReceivingEntries.length} TE receiving entries:` +
-          ` [${allReceivingEntries.map((e: any) => e.name).join(', ') || 'NONE'}]`
-        );
-
-        // Step 2: show what the registry knows about TE players for this school
-        const teInRegistry = Object.entries(posMap)
-          .filter(([k, v]) => k.startsWith(`${school}||`) && v === 'TE')
-          .map(([k]) => k.replace(`${school}||`, ''));
-        console.log(
-          `[TE-debug] ${school} wk${week}: TE in registry (posMap): [${teInRegistry.join(', ') || 'NONE'}]`
-        );
-
-        // Step 3: sort by receiving points descending (opportunity = receiving stats)
-        const tePlayers = allReceivingEntries
+        const tePlayers = teEntries
           .map((e: any) => ({ ...e, pts: calcRecvPts(e) }))
           .sort((a: any, b: any) => b.pts - a.pts);
 
@@ -679,7 +679,6 @@ export async function syncStats(week: number, season: number): Promise<number> {
           ` unit=${(teUnitRaw * mult).toFixed(1)} mult=${mult.toFixed(2)}`
         );
 
-        // Store opportunity scores for TE1/TE2
         const totalTERec = tePlayers.reduce((s: number, e: any) => s + (e.REC || 0), 0);
         if (te1) {
           const te1Share = totalTERec > 0 ? (te1.REC || 0) / totalTERec : 0;
