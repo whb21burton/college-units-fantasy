@@ -23,10 +23,9 @@ const S = {
 };
 
 // ── Unit role weights ─────────────────────────────────────────────────────────
-const RB_WEIGHTS    = [1.0, 0.7, 0.4] as const;
-const WR_WEIGHTS    = [1.0, 0.8, 0.7] as const;
-const TE_WEIGHTS    = [1.0, 0.5]      as const;
-const MIN_TOUCH_SHR = 0.05; // 5% minimum touch-share threshold (snap data unavailable)
+const RB_WEIGHTS = [1.0, 0.5, 0.25] as const; // RB1×1.0 + RB2×0.5 + RB3×0.25; RB4+ excluded
+const WR_WEIGHTS = [1.0, 0.5, 0.25] as const; // WR1×1.0 + WR2×0.5 + WR3×0.25; WR4+ excluded
+const TE_WEIGHTS = [1.0, 0.5]       as const; // TE1×1.0 + TE2×0.5; TE3+ excluded
 
 function rankMult(rank: number): number {
   if (rank <=   5) return 1.3;
@@ -578,7 +577,8 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
         }
 
         // ── RB ─────────────────────────────────────────────────────────────
-        const rbRushers = entriesFor('RB', 'rushing');
+        // Rank by raw fantasy points descending; RB4+ excluded (weight = 0).
+        const rbRushers   = entriesFor('RB', 'rushing');
         const rbReceivers = entriesFor('RB', 'receiving');
 
         const rbPlayerNames = new Set<string>([
@@ -589,25 +589,23 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
         const rbPlayerData = Array.from(rbPlayerNames).map(name => {
           const r  = rbRushers.find((e: any) => e.name === name)   ?? {};
           const cv = rbReceivers.find((e: any) => e.name === name) ?? {};
-          return { name, rushATT: r.ATT || 0, rec: cv.REC || 0, pts: calcRushPts(r) + calcRecvPts(cv), touchShare: 0 };
+          const touches = (r.ATT || 0) + (cv.REC || 0);
+          return { name, rushATT: r.ATT || 0, rec: cv.REC || 0, touches, pts: calcRushPts(r) + calcRecvPts(cv) };
         });
-        const totalRBTouches = rbPlayerData.reduce((s, p) => s + p.rushATT + p.rec, 0);
-        for (const p of rbPlayerData) p.touchShare = totalRBTouches > 0 ? (p.rushATT + p.rec) / totalRBTouches : 0;
+        const totalRBTouches = rbPlayerData.reduce((s, p) => s + p.touches, 0);
 
-        const qualifiedRBs = rbPlayerData
-          .filter(p => p.touchShare >= MIN_TOUCH_SHR)
-          .sort((a, b) => b.touchShare - a.touchShare || b.pts - a.pts);
+        // Sort by raw pts descending (tie-break: more touches wins)
+        const rankedRBs = rbPlayerData.sort((a, b) => b.pts - a.pts || b.touches - a.touches);
 
         let rbUnitRaw = 0;
-        if (qualifiedRBs.length > 0) {
-          for (let ri = 0; ri < Math.min(qualifiedRBs.length, RB_WEIGHTS.length); ri++) {
-            const w = qualifiedRBs[ri].pts * RB_WEIGHTS[ri];
-            rbUnitRaw += w;
-            addStatRow(qualifiedRBs[ri].name, `rb${ri+1}_opportunity`, Math.round(qualifiedRBs[ri].touchShare * 1000) / 1000);
-            addStatRow(qualifiedRBs[ri].name, `rb${ri+1}_rank_pts`,    Math.round(w * 100) / 100);
-          }
-        } else {
-          rbUnitRaw = (ts.rushingYards || 0) * S.rushYd + (ts.rushingTDs || 0) * S.rushTd;
+        for (let ri = 0; ri < Math.min(rankedRBs.length, RB_WEIGHTS.length); ri++) {
+          const rb = rankedRBs[ri];
+          const w  = rb.pts * RB_WEIGHTS[ri];
+          rbUnitRaw += w;
+          // Opportunity score kept for display only (not used for ranking)
+          const oppShare = totalRBTouches > 0 ? rb.touches / totalRBTouches : 0;
+          addStatRow(rb.name, `rb${ri+1}_opportunity`, Math.round(oppShare * 1000) / 1000);
+          addStatRow(rb.name, `rb${ri+1}_rank_pts`,    Math.round(w * 100) / 100);
         }
         addStatRow(null, 'unit_RB', Math.round(rbUnitRaw * mult * 10) / 10);
 
@@ -632,35 +630,22 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
         console.log(`[TE-debug] ${school} wk${week}: ${teEntries.length} TE entries: [${teEntries.map((e: any) => e.name).join(', ') || 'NONE'}]`);
 
         // ── WR ────────────────────────────────────────────────────────────
-        const scoreRecvUnit = (
-          entries: any[],
-          weights: readonly number[],
-          prefix: string,
-          denom: number,
-        ): number => {
-          const players = entries.map((e: any) => ({
-            name:       e.name as string,
-            pts:        calcRecvPts(e),
-            touchShare: denom > 0 ? (e.REC || 0) / denom : 0,
-          }));
-          const qualified = players
-            .filter(p => p.touchShare >= MIN_TOUCH_SHR)
-            .sort((a, b) => b.touchShare - a.touchShare || b.pts - a.pts);
-          if (qualified.length === 0) {
-            return entries.reduce((s: number, e: any) => s + calcRecvPts(e), 0);
-          }
-          let total = 0;
-          for (let wi = 0; wi < Math.min(qualified.length, weights.length); wi++) {
-            const w = qualified[wi].pts * weights[wi];
-            total += w;
-            addStatRow(qualified[wi].name, `${prefix}${wi+1}_opportunity`, Math.round(qualified[wi].touchShare * 1000) / 1000);
-            addStatRow(qualified[wi].name, `${prefix}${wi+1}_rank_pts`,    Math.round(w * 100) / 100);
-          }
-          return total;
-        };
+        // Rank by raw fantasy points descending; WR4+ excluded (weight = 0).
+        // Opportunity share kept for display only (not used for ranking).
+        const totalWRRec  = wrEntries.reduce((s: number, e: any) => s + (e.REC || 0), 0);
+        const rankedWRs   = wrEntries
+          .map((e: any) => ({ name: e.name as string, pts: calcRecvPts(e), rec: e.REC || 0 }))
+          .sort((a, b) => b.pts - a.pts || b.rec - a.rec);
 
-        const totalWRRec = wrEntries.reduce((s: number, e: any) => s + (e.REC || 0), 0);
-        const wrUnitRaw  = scoreRecvUnit(wrEntries, WR_WEIGHTS, 'wr', totalWRRec);
+        let wrUnitRaw = 0;
+        for (let wi = 0; wi < Math.min(rankedWRs.length, WR_WEIGHTS.length); wi++) {
+          const wr = rankedWRs[wi];
+          const w  = wr.pts * WR_WEIGHTS[wi];
+          wrUnitRaw += w;
+          const oppShare = totalWRRec > 0 ? wr.rec / totalWRRec : 0;
+          addStatRow(wr.name, `wr${wi+1}_opportunity`, Math.round(oppShare * 1000) / 1000);
+          addStatRow(wr.name, `wr${wi+1}_rank_pts`,    Math.round(w * 100) / 100);
+        }
         addStatRow(null, 'unit_WR', Math.round(wrUnitRaw * mult * 10) / 10);
 
         // ── TE ────────────────────────────────────────────────────────────
