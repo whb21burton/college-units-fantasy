@@ -4,5 +4,10 @@
     { "path": "/api/cron/sync-schedule", "schedule": "0 6 * * *"   },
     { "path": "/api/cron/sync-rosters",  "schedule": "0 4 * * *"   },
     { "path": "/api/cron/sync-stats",    "schedule": "0 3 * * 2"   }
-  ]
+  ],
+  "functions": {
+    "app/api/cron/sync-stats/route.ts": {
+      "maxDuration": 60
+    }
+  }
 }

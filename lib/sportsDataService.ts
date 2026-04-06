@@ -296,7 +296,7 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
 // ─────────────────────────────────────────────────────────────────────────────
 // syncStats — fetch completed-game stats, compute unit fantasy points, upsert
 // ─────────────────────────────────────────────────────────────────────────────
-export async function syncStats(week: number, season: number): Promise<number> {
+export async function syncStats(week: number, season: number, schoolsFilter?: string[]): Promise<number> {
   const admin = createAdminClient();
   let recordsUpdated = 0;
 
@@ -394,6 +394,7 @@ export async function syncStats(week: number, season: number): Promise<number> {
       const teams  = [game.homeTeam, game.awayTeam];
 
       for (const school of teams) {
+        if (schoolsFilter && !schoolsFilter.includes(school)) continue;
         const opponent = school === game.homeTeam ? game.awayTeam : game.homeTeam;
         const oppRank  = eloRankMap[opponent] ?? 999;
         const mult     = rankMult(oppRank);
