@@ -386,6 +386,50 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
       }
     }
 
+    const ROLE_TYPES = new Set([
+      'rb1_opportunity','rb2_opportunity','rb3_opportunity',
+      'wr1_opportunity','wr2_opportunity','wr3_opportunity',
+      'te1_opportunity','te2_opportunity',
+      'rb1_rank_pts','rb2_rank_pts','rb3_rank_pts',
+      'wr1_rank_pts','wr2_rank_pts','wr3_rank_pts',
+      'te1_rank_pts','te2_rank_pts',
+      'player_unit_assignment',
+    ]);
+
+    // Flush one school's statRows to the DB immediately after processing.
+    // Running per-school means partial progress is saved even on timeout.
+    const persistSchool = async (rows: any[], gameId: string, school: string) => {
+      const playerRows = rows.filter(r => r.player_name !== null && !ROLE_TYPES.has(r.stat_type));
+      const roleRows   = rows.filter(r => r.player_name !== null &&  ROLE_TYPES.has(r.stat_type));
+      const unitRows   = rows.filter(r => r.player_name === null);
+
+      // Delete stale unit + role rows for this school+game before re-inserting
+      await admin.from('cached_stats').delete()
+        .eq('game_id', gameId).eq('school', school).is('player_name', null);
+      if (roleRows.length > 0) {
+        await admin.from('cached_stats').delete()
+          .eq('game_id', gameId).eq('school', school).in('stat_type', Array.from(ROLE_TYPES));
+      }
+      // Remove legacy rows that have game_id=NULL (from old sync runs)
+      await admin.from('cached_stats').delete()
+        .eq('school', school).eq('week', week).eq('season', season)
+        .is('game_id', null).not('player_name', 'is', null);
+
+      const BATCH = 500;
+      for (let i = 0; i < playerRows.length; i += BATCH) {
+        const { error } = await admin.from('cached_stats')
+          .upsert(playerRows.slice(i, i + BATCH), { onConflict: 'game_id,school,player_name,stat_type' });
+        if (error) throw error;
+      }
+      for (const chunk of [roleRows, unitRows]) {
+        for (let i = 0; i < chunk.length; i += BATCH) {
+          const { error } = await admin.from('cached_stats').insert(chunk.slice(i, i + BATCH));
+          if (error) throw error;
+        }
+      }
+      return playerRows.length + roleRows.length + unitRows.length;
+    };
+
     const statRows: any[] = [];
 
     for (const game of completedGames) {
@@ -690,80 +734,12 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
         const kicker = entriesFor('K', 'kicking')
           .sort((a: any, b: any) => (b.PTS || 0) - (a.PTS || 0))[0];
         addStatRow(null, 'unit_K', kicker ? Math.round((kicker.PTS || 0) * mult * 10) / 10 : 0);
-      }
-    }
 
-    // ── Persist to cached_stats ────────────────────────────────────────────────
-    // Three categories:
-    //   unitRows   — player_name IS NULL (unit_QB, unit_RB, game_mult, team_*): delete + insert
-    //   roleRows   — player_name NOT NULL, role stat type (rb1_opportunity etc.): delete + insert
-    //   playerRows — player_name NOT NULL, raw stats (passing_YDS etc.): upsert
-    const ROLE_TYPES = new Set([
-      'rb1_opportunity','rb2_opportunity','rb3_opportunity',
-      'wr1_opportunity','wr2_opportunity','wr3_opportunity',
-      'te1_opportunity','te2_opportunity',
-      'rb1_rank_pts','rb2_rank_pts','rb3_rank_pts',
-      'wr1_rank_pts','wr2_rank_pts','wr3_rank_pts',
-      'te1_rank_pts','te2_rank_pts',
-      'player_unit_assignment',
-    ]);
-
-    const playerRows = statRows.filter(r => r.player_name !== null && !ROLE_TYPES.has(r.stat_type));
-    const roleRows   = statRows.filter(r => r.player_name !== null &&  ROLE_TYPES.has(r.stat_type));
-    const unitRows   = statRows.filter(r => r.player_name === null);
-
-    const gameIds = Array.from(new Set(completedGames.map((g: any) => String(g.id))));
-    const schools = Array.from(new Set(completedGames.flatMap((g: any) => [g.homeTeam, g.awayTeam])));
-
-    if (gameIds.length > 0) {
-      // Delete unit rows (player_name IS NULL) — re-inserted fresh each sync
-      const { error: delErr } = await admin
-        .from('cached_stats')
-        .delete()
-        .in('game_id', gameIds)
-        .is('player_name', null);
-      if (delErr) throw delErr;
-
-      // Delete role rows (opportunity/rank_pts) — re-inserted so rankings can change
-      if (roleRows.length > 0) {
-        await admin
-          .from('cached_stats')
-          .delete()
-          .in('game_id', gameIds)
-          .in('stat_type', Array.from(ROLE_TYPES));
-      }
-
-      // Delete any legacy player rows with game_id=NULL for these school+week+season combos.
-      if (schools.length > 0) {
-        const { error: delNullErr } = await admin
-          .from('cached_stats')
-          .delete()
-          .in('school', schools)
-          .eq('week', week)
-          .eq('season', season)
-          .is('game_id', null)
-          .not('player_name', 'is', null);
-        if (delNullErr) console.warn('[syncStats] Failed to delete legacy null-game_id rows:', delNullErr.message);
-      }
-    }
-
-    const BATCH = 500;
-    for (let i = 0; i < playerRows.length; i += BATCH) {
-      const batch = playerRows.slice(i, i + BATCH);
-      const { error } = await admin
-        .from('cached_stats')
-        .upsert(batch, { onConflict: 'game_id,school,player_name,stat_type' });
-      if (error) throw error;
-      recordsUpdated += batch.length;
-    }
-    for (const rows of [roleRows, unitRows]) {
-      for (let i = 0; i < rows.length; i += BATCH) {
-        const batch = rows.slice(i, i + BATCH);
-        const { error } = await admin
-          .from('cached_stats')
-          .insert(batch);
-        if (error) throw error;
-        recordsUpdated += batch.length;
+        // ── Flush this school's rows to DB immediately ─────────────────────
+        // Writing per-school means partial progress is saved even on timeout.
+        const saved = await persistSchool(statRows, gameId, school);
+        recordsUpdated += saved;
+        statRows.length = 0; // clear for next school
       }
     }
 
