@@ -370,18 +370,40 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
       .in('school', allSchools)
       .limit(10000);
 
-    // Normalize: strip all non-alphanumeric, lowercase (handles "T.J. Hockenson" vs "TJ Hockenson")
-    const normKey = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Build posLookup with exact AND space-normalized keys so name mismatches
+    // (e.g. "T.J. Hockenson" CFBD vs "TJ Hockenson" roster) are still found.
+    const normPlayerName = (n: string) =>
+      n.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 
     const posLookup: Record<string, string> = {};
     for (const p of posData ?? []) {
       if (p.school && p.player_name && p.position) {
-        posLookup[`${p.school}||${normKey(p.player_name)}`] = p.position;
+        posLookup[`${p.school}||${p.player_name}`] = p.position;                      // exact
+        posLookup[`${p.school}||${normPlayerName(p.player_name)}`] = p.position;      // normalized
       }
     }
 
-    const getPosition = (school: string, name: string): string | null =>
-      posLookup[`${school}||${normKey(name)}`] ?? null;
+    const getPosition = (school: string, name: string): string | null => {
+      // Try 1: exact match
+      let pos = posLookup[`${school}||${name}`];
+      if (pos) return pos;
+
+      // Try 2: normalized (strip punctuation, lowercase, keep spaces)
+      const norm = normPlayerName(name);
+      pos = posLookup[`${school}||${norm}`];
+      if (pos) return pos;
+
+      // Try 3: last-name-only match — TE only (avoids false positives for common names)
+      const lastName = norm.split(' ').pop() ?? '';
+      if (lastName.length > 3) {
+        const lastNameKey = Object.keys(posLookup).find(k =>
+          k.startsWith(`${school}||`) && k.endsWith(lastName) && posLookup[k] === 'TE'
+        );
+        if (lastNameKey) return 'TE';
+      }
+
+      return null;
+    }
 
     // ── Process each completed game ─────────────────────────────────────────
     for (const game of completedGames) {
@@ -517,6 +539,7 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
           teRaw += unitPlayers.TE[i].pts * TE_WEIGHTS[i];
         }
         addRow(null, 'unit_TE', Math.round(teRaw * mult * 10) / 10);
+        console.log(`[TE] ${school} wk${week}: ${unitPlayers.TE.length} TEs found, score=${teRaw.toFixed(1)}`);
 
         // DEF
         const rawDEF =
