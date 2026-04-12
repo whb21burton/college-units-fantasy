@@ -300,20 +300,15 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
   let recordsUpdated = 0;
 
   try {
-    // Fetch all data in parallel
+    // ── Fetch all data in parallel ──────────────────────────────────────────
     const [games, playerStats, teamStats, eloData] = await Promise.all([
       cfbdGet('/games',         { year: season, week }),
       cfbdGet('/games/players', { year: season, week }).catch(() => []),
       cfbdGet('/games/teams',   { year: season, week }).catch(() => []),
-      cfbdGet('/ratings/elo',   { year: season, week   }).catch(() => []),
+      cfbdGet('/ratings/elo',   { year: season, week }).catch(() => []),
     ]);
 
-    // Build Elo rank map (rank 1 = strongest)
-    const eloSorted = [...eloData].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
-    const eloRankMap: Record<string, number> = {};
-    eloSorted.forEach((t, idx) => { if (t.team) eloRankMap[t.team] = idx + 1; });
-
-    // Only process completed regular-season games (exclude bowls/postseason)
+    // ── Only completed regular-season games ────────────────────────────────
     const completedGames = (games as any[]).filter(
       (g: any) =>
         g.homePoints != null &&
@@ -321,13 +316,17 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
         (g.seasonType === 'regular' || g.season_type === 'regular'),
     );
 
-    console.log(`[syncStats] week=${week} season=${season} totalGames=${(games as any[]).length} completedRegular=${completedGames.length}`);
     if (completedGames.length === 0) {
       await logSync(`syncStats:${season}:w${week}`, 'success', 0);
       return 0;
     }
 
-    // Build team-stat map: school → { category: value }
+    // ── Elo rank map (rank 1 = strongest) ──────────────────────────────────
+    const eloSorted = [...(eloData as any[])].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
+    const eloRankMap: Record<string, number> = {};
+    eloSorted.forEach((t, idx) => { if (t.team) eloRankMap[t.team] = idx + 1; });
+
+    // ── Team stat map: school → { statCategory: value } ────────────────────
     const teamStatMap: Record<string, Record<string, number>> = {};
     for (const game of teamStats as any[]) {
       for (const team of (game.teams ?? [])) {
@@ -340,9 +339,7 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
       }
     }
 
-    // Build player-stat map: key = `gameId||school||playerName||category` → stats
-    // game_id is included so per-game filtering is exact and never mixes stats
-    // from different games played by the same school in the same week.
+    // ── Player stat map: gameId||school||name||category → stat fields ───────
     const playerStatMap: Record<string, Record<string, any>> = {};
     for (const game of playerStats as any[]) {
       const gId = String(game.id ?? '');
@@ -363,92 +360,46 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
       }
     }
 
-    // ── Fetch player positions for opportunity-based scoring ────────────────────
-    const allSchoolsInBatch = Array.from(
+    // ── STEP 1: Load positions for all schools in this week's games ─────────
+    const allSchools = Array.from(
       new Set<string>(completedGames.flatMap((g: any) => [g.homeTeam as string, g.awayTeam as string]))
     );
     const { data: posData } = await admin
       .from('cached_players')
       .select('school, player_name, position')
-      .in('school', allSchoolsInBatch)
+      .in('school', allSchools)
       .limit(10000);
 
-    // Normalize player names for fuzzy matching: strip punctuation, lowercase, collapse spaces
-    const normName = (n: string) =>
-      n.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+    // Normalize: strip all non-alphanumeric, lowercase (handles "T.J. Hockenson" vs "TJ Hockenson")
+    const normKey = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    const posMap:     Record<string, string> = {};  // exact:  school||player_name → position
-    const posMapNorm: Record<string, string> = {};  // normalized: school||normName → position
-    for (const p of (posData ?? [])) {
+    const posLookup: Record<string, string> = {};
+    for (const p of posData ?? []) {
       if (p.school && p.player_name && p.position) {
-        posMap[`${p.school}||${p.player_name}`] = p.position;
-        posMapNorm[`${p.school}||${normName(p.player_name)}`] = p.position;
+        posLookup[`${p.school}||${normKey(p.player_name)}`] = p.position;
       }
     }
 
-    const ROLE_TYPES = new Set([
-      'rb1_opportunity','rb2_opportunity','rb3_opportunity',
-      'wr1_opportunity','wr2_opportunity','wr3_opportunity',
-      'te1_opportunity','te2_opportunity',
-      'rb1_rank_pts','rb2_rank_pts','rb3_rank_pts',
-      'wr1_rank_pts','wr2_rank_pts','wr3_rank_pts',
-      'te1_rank_pts','te2_rank_pts',
-      'player_unit_assignment',
-    ]);
+    const getPosition = (school: string, name: string): string | null =>
+      posLookup[`${school}||${normKey(name)}`] ?? null;
 
-    // Flush one school's statRows to the DB immediately after processing.
-    // Running per-school means partial progress is saved even on timeout.
-    const persistSchool = async (rows: any[], gameId: string, school: string) => {
-      const playerRows = rows.filter(r => r.player_name !== null && !ROLE_TYPES.has(r.stat_type));
-      const roleRows   = rows.filter(r => r.player_name !== null &&  ROLE_TYPES.has(r.stat_type));
-      const unitRows   = rows.filter(r => r.player_name === null);
-
-      // Delete stale unit + role rows for this school+game before re-inserting
-      await admin.from('cached_stats').delete()
-        .eq('game_id', gameId).eq('school', school).is('player_name', null);
-      if (roleRows.length > 0) {
-        await admin.from('cached_stats').delete()
-          .eq('game_id', gameId).eq('school', school).in('stat_type', Array.from(ROLE_TYPES));
-      }
-      // Remove legacy rows that have game_id=NULL (from old sync runs)
-      await admin.from('cached_stats').delete()
-        .eq('school', school).eq('week', week).eq('season', season)
-        .is('game_id', null).not('player_name', 'is', null);
-
-      const BATCH = 500;
-      for (let i = 0; i < playerRows.length; i += BATCH) {
-        const { error } = await admin.from('cached_stats')
-          .upsert(playerRows.slice(i, i + BATCH), { onConflict: 'game_id,school,player_name,stat_type' });
-        if (error) throw error;
-      }
-      for (const chunk of [roleRows, unitRows]) {
-        for (let i = 0; i < chunk.length; i += BATCH) {
-          const { error } = await admin.from('cached_stats').insert(chunk.slice(i, i + BATCH));
-          if (error) throw error;
-        }
-      }
-      return playerRows.length + roleRows.length + unitRows.length;
-    };
-
-    const statRows: any[] = [];
-
+    // ── Process each completed game ─────────────────────────────────────────
     for (const game of completedGames) {
       const gameId = String(game.id);
-      const teams  = [game.homeTeam, game.awayTeam];
 
-      for (const school of teams) {
+      for (const school of [game.homeTeam, game.awayTeam] as string[]) {
         if (schoolsFilter && !schoolsFilter.includes(school)) continue;
+
         const opponent = school === game.homeTeam ? game.awayTeam : game.homeTeam;
-        const oppRank  = eloRankMap[opponent] ?? 999;
-        const mult     = rankMult(oppRank);
+        const mult     = rankMult(eloRankMap[opponent] ?? 999);
         const ts       = teamStatMap[school] ?? {};
 
-        // Filter to this specific game+school so stats from other games never bleed in
         const schoolEntries = Object.values(playerStatMap)
           .filter((e: any) => e.gameId === gameId && e.school === school);
 
-        const addStatRow = (playerName: string | null, statType: string, value: number) => {
-          statRows.push({
+        const rows: any[] = [];
+        const addRow = (playerName: string | null, statType: string, value: number) => {
+          rows.push({
             game_id:     gameId,
             school,
             player_name: playerName,
@@ -460,286 +411,136 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
           });
         };
 
-        // ── Individual player stats ─────────────────────────────────────────
-        for (const entry of schoolEntries) {
-          const n = entry.name;
-          const c = entry.category;
+        // ── STEP 2+3: Per-player stats + unit assignment ──────────────────
+        type UnitKey = 'QB' | 'RB' | 'WR' | 'TE' | 'K';
+        const unitPlayers: Record<UnitKey, Array<{ name: string; pts: number }>> = {
+          QB: [], RB: [], WR: [], TE: [], K: [],
+        };
 
-          if (c === 'passing') {
-            addStatRow(n, 'passing_YDS', entry.YDS || 0);
-            addStatRow(n, 'passing_TD',  entry.TD  || 0);
-            addStatRow(n, 'passing_INT', entry.INT || 0);
-          } else if (c === 'rushing') {
-            addStatRow(n, 'rushing_YDS', entry.YDS || 0);
-            addStatRow(n, 'rushing_TD',  entry.TD  || 0);
-            addStatRow(n, 'rushing_ATT', entry.ATT || 0);
-          } else if (c === 'receiving') {
-            addStatRow(n, 'receiving_YDS', entry.YDS || 0);
-            addStatRow(n, 'receiving_TD',  entry.TD  || 0);
-            addStatRow(n, 'receiving_REC', entry.REC || 0);
-          } else if (c === 'kicking') {
-            addStatRow(n, 'kicking_PTS', entry.PTS || 0);
-          }
-        }
-
-        // ── Team-level stats ────────────────────────────────────────────────
-        const teamCats = [
-          'rushingYards','rushingTDs','sacks','passesIntercepted',
-          'fumblesRecovered','interceptionTDs','fumbleReturnTDs',
-        ];
-        for (const cat of teamCats) {
-          addStatRow(null, `team_${cat}`, ts[cat] || 0);
-        }
-
-        // ── Store the multiplier used so game logs can display it accurately ──
-        addStatRow(null, 'game_mult', mult);
-
-        // ── Compute unit fantasy points (Elo-adjusted) ──────────────────────
-        console.log(`[unit-scoring-start] ${school} wk${week} starting unit calculations (entries=${schoolEntries.length})`);
-
-        // Individual scoring helpers
-        const calcRecvPts = (e: any) =>
-          (e.YDS || 0) * S.recYd + (e.REC || 0) * S.rec + (e.TD || 0) * S.recTd;
-        const calcRushPts = (e: any) =>
-          (e.YDS || 0) * S.rushYd + (e.TD || 0) * S.rushTd;
-
-        // ── STEP 0: Pre-assign every player to exactly ONE unit ────────────
-        // This is the single source of truth for all scoring below.
-        // No player can contribute to more than one unit in a game.
-        type UnitLabel = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'EXCLUDED';
-        const UNIT_CODE: Record<UnitLabel, number> = { QB: 1, RB: 2, WR: 3, TE: 4, K: 5, EXCLUDED: 0 };
-
-        const unitAssignments = new Map<string, UnitLabel>();
-
-        // Collect all distinct player names appearing in game stats
-        const allPlayerNames = Array.from(new Set<string>(
+        const playerNames = Array.from(new Set<string>(
           schoolEntries.map((e: any) => e.name as string).filter(Boolean)
         ));
 
-        for (const name of allPlayerNames) {
-          // Try exact match first, then normalized fallback to handle punctuation differences
-          // e.g. "T.J. Logan" (CFBD stats) vs "TJ Logan" (cached_players)
-          const cachedPos = (
-            posMap[`${school}||${name}`] ??
-            posMapNorm[`${school}||${normName(name)}`]
-          ) as UnitLabel | undefined;
-          const hasPass   = schoolEntries.some((e: any) => e.name === name && e.category === 'passing');
-          const hasRush   = schoolEntries.some((e: any) => e.name === name && e.category === 'rushing');
-          const hasRecv   = schoolEntries.some((e: any) => e.name === name && e.category === 'receiving');
-          const hasKick   = schoolEntries.some((e: any) => e.name === name && e.category === 'kicking');
+        for (const name of playerNames) {
+          const passE = schoolEntries.find((e: any) => e.name === name && e.category === 'passing');
+          const rushE = schoolEntries.find((e: any) => e.name === name && e.category === 'rushing');
+          const recvE = schoolEntries.find((e: any) => e.name === name && e.category === 'receiving');
+          const kickE = schoolEntries.find((e: any) => e.name === name && e.category === 'kicking');
 
-          // ── Step 1: cached_players is ALWAYS the source of truth ──────────
-          // If the player exists in cached_players, use that position. Done.
-          // No stat-based logic can override a DB-registered position.
-          if (cachedPos === 'QB' || cachedPos === 'WR' || cachedPos === 'TE' ||
-              cachedPos === 'RB' || cachedPos === 'K') {
-            unitAssignments.set(name, cachedPos);
-            continue;
+          // Store individual player stats
+          if (passE) {
+            addRow(name, 'passing_YDS', passE.YDS || 0);
+            addRow(name, 'passing_TD',  passE.TD  || 0);
+            addRow(name, 'passing_INT', passE.INT || 0);
+          }
+          if (rushE) {
+            addRow(name, 'rushing_YDS', rushE.YDS || 0);
+            addRow(name, 'rushing_TD',  rushE.TD  || 0);
+            addRow(name, 'rushing_ATT', rushE.ATT || 0);
+          }
+          if (recvE) {
+            addRow(name, 'receiving_YDS', recvE.YDS || 0);
+            addRow(name, 'receiving_TD',  recvE.TD  || 0);
+            addRow(name, 'receiving_REC', recvE.REC || 0);
+          }
+          if (kickE) {
+            addRow(name, 'kicking_PTS', kickE.PTS || 0);
           }
 
-          // ── Step 2: stats-only inference (NOT in cached_players) ──────────
-          // Has passing attempts → QB
-          if (hasPass) {
-            unitAssignments.set(name, 'QB');
-            continue;
-          }
-          // Kicking only → K
-          if (hasKick && !hasRush && !hasRecv) {
-            unitAssignments.set(name, 'K');
-            continue;
-          }
-          // Rush only → RB
-          if (hasRush && !hasRecv) {
-            unitAssignments.set(name, 'RB');
-            continue;
-          }
-          // Recv only → WR (can't distinguish TE without position data)
-          if (hasRecv && !hasRush) {
-            unitAssignments.set(name, 'WR');
-            continue;
-          }
-          // Rush + recv → compare contributions; higher-scoring unit wins
-          if (hasRush && hasRecv) {
-            const rushE = schoolEntries.find((e: any) => e.name === name && e.category === 'rushing') ?? {};
-            const recvE = schoolEntries.find((e: any) => e.name === name && e.category === 'receiving') ?? {};
-            const rushOnlyPts = calcRushPts(rushE);
-            const recvOnlyPts = calcRecvPts(recvE);
-            const assigned: UnitLabel = rushOnlyPts > recvOnlyPts ? 'RB' : 'WR';
-            console.log(
-              `[unit-assignment] ${name} (${school}) week ${week}: conflict` +
-              ` RB(${rushOnlyPts.toFixed(1)}pts) vs WR(${recvOnlyPts.toFixed(1)}pts)` +
-              ` cached=none → assigned to ${assigned}`
-            );
-            unitAssignments.set(name, assigned);
-            continue;
+          // ── Assign to unit: posLookup first, then stats inference ─────
+          const pos = getPosition(school, name);
+          let unit: UnitKey | null = null;
+
+          if (pos === 'QB' || pos === 'RB' || pos === 'WR' || pos === 'TE' || pos === 'K') {
+            unit = pos;
+          } else if (passE) {
+            unit = 'QB';
+          } else if (kickE && !rushE && !recvE) {
+            unit = 'K';
+          } else if (rushE && !recvE) {
+            unit = 'RB';
+          } else if (recvE && !rushE) {
+            unit = 'WR';
+          } else if (rushE && recvE) {
+            const rushPts = (rushE.YDS || 0) * S.rushYd + (rushE.TD || 0) * S.rushTd;
+            const recvPts = (recvE.YDS || 0) * S.recYd  + (recvE.REC || 0) * S.rec + (recvE.TD || 0) * S.recTd;
+            unit = rushPts >= recvPts ? 'RB' : 'WR';
           }
 
-          unitAssignments.set(name, 'EXCLUDED');
-        }
+          if (!unit) continue;
 
-        // Diagnostic log: show unit assignment counts + TE player names
-        const assignCounts: Record<string, number> = {};
-        const teAssigned: string[] = [];
-        for (const [n, lbl] of Array.from(unitAssignments.entries())) {
-          assignCounts[lbl] = (assignCounts[lbl] ?? 0) + 1;
-          if (lbl === 'TE') teAssigned.push(n);
-        }
-        console.log(
-          `[unit-assignment] ${school} wk${week}: ` +
-          Object.entries(assignCounts).map(([l, c]) => `${l}=${c}`).join(' ') +
-          ` | TE players: [${teAssigned.join(', ') || 'NONE'}]`
-        );
-
-        // Store assignments in cached_stats for auditing
-        for (const [name, label] of Array.from(unitAssignments.entries())) {
-          if (label !== 'EXCLUDED') {
-            addStatRow(name, 'player_unit_assignment', UNIT_CODE[label]);
+          // ── STEP 4: Calculate raw fantasy points ──────────────────────
+          let pts = 0;
+          if (unit === 'QB') {
+            pts = (passE ? (passE.YDS||0)*S.passYd + (passE.TD||0)*S.passTd + (passE.INT||0)*S.int : 0)
+                + (rushE ? (rushE.YDS||0)*S.rushYd  + (rushE.TD||0)*S.rushTd : 0);
+          } else if (unit === 'RB') {
+            pts = (rushE ? (rushE.YDS||0)*S.rushYd + (rushE.TD||0)*S.rushTd : 0)
+                + (recvE ? (recvE.YDS||0)*S.recYd  + (recvE.REC||0)*S.rec + (recvE.TD||0)*S.recTd : 0);
+          } else if (unit === 'WR' || unit === 'TE') {
+            pts = recvE ? (recvE.YDS||0)*S.recYd + (recvE.REC||0)*S.rec + (recvE.TD||0)*S.recTd : 0;
+          } else if (unit === 'K') {
+            pts = kickE ? (kickE.PTS || 0) : 0;
           }
+
+          unitPlayers[unit].push({ name, pts });
         }
 
-        // Helper: get entries filtered to a specific unit assignment
-        const entriesFor = (unit: UnitLabel, category: string) =>
-          schoolEntries.filter((e: any) =>
-            e.category === category && unitAssignments.get(e.name as string) === unit
-          );
+        // ── STEP 5+6: Rank within unit, apply weights × ODR mult ──────────
+        addRow(null, 'game_mult', mult);
 
-        // ── QB ─────────────────────────────────────────────────────────────
-        const passers = entriesFor('QB', 'passing')
-          .sort((a: any, b: any) => {
-            const pA = (a.YDS||0)*S.passYd + (a.TD||0)*S.passTd + (a.INT||0)*S.int;
-            const pB = (b.YDS||0)*S.passYd + (b.TD||0)*S.passTd + (b.INT||0)*S.int;
-            return pB - pA;
-          });
-        const topQB = passers[0];
-        if (topQB) {
-          const qbRushEntry = entriesFor('QB', 'rushing').find((e: any) => e.name === topQB.name);
-          const rawQB = (topQB.YDS||0)*S.passYd + (topQB.TD||0)*S.passTd + (topQB.INT||0)*S.int
-            + calcRushPts(qbRushEntry ?? {});
-          addStatRow(null, 'unit_QB', Math.round(rawQB * mult * 10) / 10);
-        } else {
-          addStatRow(null, 'unit_QB', 0);
+        // QB: top scorer only (no weight multiplier)
+        unitPlayers.QB.sort((a, b) => b.pts - a.pts);
+        const topQB = unitPlayers.QB[0];
+        addRow(null, 'unit_QB', topQB ? Math.round(topQB.pts * mult * 10) / 10 : 0);
+
+        // RB
+        unitPlayers.RB.sort((a, b) => b.pts - a.pts);
+        let rbRaw = 0;
+        for (let i = 0; i < Math.min(unitPlayers.RB.length, RB_WEIGHTS.length); i++) {
+          rbRaw += unitPlayers.RB[i].pts * RB_WEIGHTS[i];
         }
+        addRow(null, 'unit_RB', Math.round(rbRaw * mult * 10) / 10);
 
-        // ── RB ─────────────────────────────────────────────────────────────
-        // Rank by raw fantasy points descending; RB4+ excluded (weight = 0).
-        const rbRushers   = entriesFor('RB', 'rushing');
-        const rbReceivers = entriesFor('RB', 'receiving');
-
-        const rbPlayerNames = new Set<string>([
-          ...rbRushers.map((e: any) => e.name as string),
-          ...rbReceivers.map((e: any) => e.name as string),
-        ]);
-
-        const rbPlayerData = Array.from(rbPlayerNames).map(name => {
-          const r  = rbRushers.find((e: any) => e.name === name)   ?? {};
-          const cv = rbReceivers.find((e: any) => e.name === name) ?? {};
-          const touches = (r.ATT || 0) + (cv.REC || 0);
-          return { name, rushATT: r.ATT || 0, rec: cv.REC || 0, touches, pts: calcRushPts(r) + calcRecvPts(cv) };
-        });
-        const totalRBTouches = rbPlayerData.reduce((s, p) => s + p.touches, 0);
-
-        // Sort by raw pts descending (tie-break: more touches wins)
-        const rankedRBs = rbPlayerData.sort((a, b) => b.pts - a.pts || b.touches - a.touches);
-
-        let rbUnitRaw = 0;
-        for (let ri = 0; ri < Math.min(rankedRBs.length, RB_WEIGHTS.length); ri++) {
-          const rb = rankedRBs[ri];
-          const w  = rb.pts * RB_WEIGHTS[ri];
-          rbUnitRaw += w;
-          // Opportunity score kept for display only (not used for ranking)
-          const oppShare = totalRBTouches > 0 ? rb.touches / totalRBTouches : 0;
-          addStatRow(rb.name, `rb${ri+1}_opportunity`, Math.round(oppShare * 1000) / 1000);
-          addStatRow(rb.name, `rb${ri+1}_rank_pts`,    Math.round(w * 100) / 100);
+        // WR
+        unitPlayers.WR.sort((a, b) => b.pts - a.pts);
+        let wrRaw = 0;
+        for (let i = 0; i < Math.min(unitPlayers.WR.length, WR_WEIGHTS.length); i++) {
+          wrRaw += unitPlayers.WR[i].pts * WR_WEIGHTS[i];
         }
-        addStatRow(null, 'unit_RB', Math.round(rbUnitRaw * mult * 10) / 10);
+        addRow(null, 'unit_WR', Math.round(wrRaw * mult * 10) / 10);
 
-        // ── WR / TE — split ALL receivers directly via posMap (bypasses unitAssignments) ──
-        // unitAssignments can misclassify TEs as WR when posMap lookup fails due to
-        // name mismatch (e.g. "T.J. Hockenson" vs "TJ Hockenson"). Instead we query
-        // posMap/posMapNorm directly on every receiving entry so TEs are never lost.
-        const allSchoolReceivers = schoolEntries.filter((e: any) => e.category === 'receiving');
-
-        const wrEntries = allSchoolReceivers.filter((e: any) => {
-          const pos = posMap[`${school}||${e.name}`] ?? posMapNorm[`${school}||${normName(e.name)}`];
-          // TE goes to TE bucket; RB/QB receivers stay out; everything else is WR
-          return pos !== 'TE' && pos !== 'RB' && pos !== 'QB' && pos !== 'K';
-        });
-
-        const teEntries = allSchoolReceivers.filter((e: any) => {
-          const pos = posMap[`${school}||${e.name}`] ?? posMapNorm[`${school}||${normName(e.name)}`];
-          return pos === 'TE';
-        });
-
-        console.log(`[WR-debug] ${school} wk${week}: ${wrEntries.length} WR receivers`);
-        console.log(`[TE-debug] ${school} wk${week}: ${teEntries.length} TE entries: [${teEntries.map((e: any) => e.name).join(', ') || 'NONE'}]`);
-
-        // ── WR ────────────────────────────────────────────────────────────
-        // Rank by raw fantasy points descending; WR4+ excluded (weight = 0).
-        // Opportunity share kept for display only (not used for ranking).
-        const totalWRRec  = wrEntries.reduce((s: number, e: any) => s + (e.REC || 0), 0);
-        const rankedWRs   = wrEntries
-          .map((e: any) => ({ name: e.name as string, pts: calcRecvPts(e), rec: e.REC || 0 }))
-          .sort((a, b) => b.pts - a.pts || b.rec - a.rec);
-
-        let wrUnitRaw = 0;
-        for (let wi = 0; wi < Math.min(rankedWRs.length, WR_WEIGHTS.length); wi++) {
-          const wr = rankedWRs[wi];
-          const w  = wr.pts * WR_WEIGHTS[wi];
-          wrUnitRaw += w;
-          const oppShare = totalWRRec > 0 ? wr.rec / totalWRRec : 0;
-          addStatRow(wr.name, `wr${wi+1}_opportunity`, Math.round(oppShare * 1000) / 1000);
-          addStatRow(wr.name, `wr${wi+1}_rank_pts`,    Math.round(w * 100) / 100);
+        // TE
+        unitPlayers.TE.sort((a, b) => b.pts - a.pts);
+        let teRaw = 0;
+        for (let i = 0; i < Math.min(unitPlayers.TE.length, TE_WEIGHTS.length); i++) {
+          teRaw += unitPlayers.TE[i].pts * TE_WEIGHTS[i];
         }
-        addStatRow(null, 'unit_WR', Math.round(wrUnitRaw * mult * 10) / 10);
+        addRow(null, 'unit_TE', Math.round(teRaw * mult * 10) / 10);
 
-        // ── TE ────────────────────────────────────────────────────────────
-        const tePlayers = teEntries
-          .map((e: any) => ({ ...e, pts: calcRecvPts(e) }))
-          .sort((a: any, b: any) => b.pts - a.pts);
+        // DEF
+        const rawDEF =
+          (ts.sacks             || 0) * S.sack   +
+          (ts.passesIntercepted || 0) * S.defInt +
+          (ts.fumblesRecovered  || 0) * S.fumRec +
+          ((ts.interceptionTDs  || 0) + (ts.fumbleReturnTDs || 0)) * S.defTd;
+        addRow(null, 'unit_DEF', Math.round(rawDEF * mult * 10) / 10);
 
-        const te1 = tePlayers[0];
-        const te2 = tePlayers[1];
-        const te1pts = te1 ? te1.pts : 0;
-        const te2pts = te2 ? te2.pts : 0;
-        const teUnitRaw = (te1pts * TE_WEIGHTS[0]) + (te2pts * (TE_WEIGHTS[1] ?? 0));
+        // K: top kicker's PTS field directly
+        unitPlayers.K.sort((a, b) => b.pts - a.pts);
+        const topK = unitPlayers.K[0];
+        addRow(null, 'unit_K', topK ? Math.round(topK.pts * mult * 10) / 10 : 0);
 
-        console.log(
-          `[TE-debug] ${school} wk${week}: TE1=${te1?.name ?? 'none'}(${te1pts.toFixed(1)}pts)` +
-          ` TE2=${te2?.name ?? 'none'}(${te2pts.toFixed(1)}pts)` +
-          ` unit=${(teUnitRaw * mult).toFixed(1)} mult=${mult.toFixed(2)}`
-        );
+        // ── STEP 7: Persist per school ──────────────────────────────────────
+        await admin.from('cached_stats').delete()
+          .eq('game_id', gameId).eq('school', school);
 
-        const totalTERec = tePlayers.reduce((s: number, e: any) => s + (e.REC || 0), 0);
-        if (te1) {
-          const te1Share = totalTERec > 0 ? (te1.REC || 0) / totalTERec : 0;
-          addStatRow(te1.name, 'te1_opportunity', Math.round(te1Share * 1000) / 1000);
-          addStatRow(te1.name, 'te1_rank_pts',    Math.round(te1pts * TE_WEIGHTS[0] * 100) / 100);
+        const BATCH = 500;
+        for (let i = 0; i < rows.length; i += BATCH) {
+          const { error } = await admin.from('cached_stats').insert(rows.slice(i, i + BATCH));
+          if (error) throw error;
         }
-        if (te2) {
-          const te2Share = totalTERec > 0 ? (te2.REC || 0) / totalTERec : 0;
-          addStatRow(te2.name, 'te2_opportunity', Math.round(te2Share * 1000) / 1000);
-          addStatRow(te2.name, 'te2_rank_pts',    Math.round(te2pts * (TE_WEIGHTS[1] ?? 0) * 100) / 100);
-        }
-
-        addStatRow(null, 'unit_TE', Math.round(teUnitRaw * mult * 10) / 10);
-
-        // ── DEF ───────────────────────────────────────────────────────────
-        const rawDEF = (ts.sacks             || 0) * S.sack   +
-                       (ts.passesIntercepted || 0) * S.defInt +
-                       (ts.fumblesRecovered  || 0) * S.fumRec +
-                       ((ts.interceptionTDs  || 0) + (ts.fumbleReturnTDs || 0)) * S.defTd;
-        addStatRow(null, 'unit_DEF', Math.round(rawDEF * mult * 10) / 10);
-
-        // ── K ─────────────────────────────────────────────────────────────
-        const kicker = entriesFor('K', 'kicking')
-          .sort((a: any, b: any) => (b.PTS || 0) - (a.PTS || 0))[0];
-        addStatRow(null, 'unit_K', kicker ? Math.round((kicker.PTS || 0) * mult * 10) / 10 : 0);
-
-        // ── Flush this school's rows to DB immediately ─────────────────────
-        // Writing per-school means partial progress is saved even on timeout.
-        const saved = await persistSchool(statRows, gameId, school);
-        recordsUpdated += saved;
-        statRows.length = 0; // clear for next school
+        recordsUpdated += rows.length;
       }
     }
 
