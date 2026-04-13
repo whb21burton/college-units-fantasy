@@ -405,14 +405,7 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
       pos = posLookup[`${school}||${norm}`];
       if (pos) return pos;
 
-      // Try 3: last-name-only match — TE only (avoids false positives for common names)
-      const lastName = norm.split(' ').pop() ?? '';
-      if (lastName.length > 3) {
-        const lastNameKey = Object.keys(posLookup).find(k =>
-          k.startsWith(`${school}||`) && k.endsWith(lastName) && posLookup[k] === 'TE'
-        );
-        if (lastNameKey) return 'TE';
-      }
+  
 
       return null;
     }
