@@ -260,7 +260,7 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
           .from('cached_players')
           .select('player_name, position')
           .eq('school', team)
-          .eq('season', season)
+      
           .in('player_name', rows.map((r: any) => r.player_name));
 
         const existingPosMap: Record<string, string> = {};
