@@ -182,7 +182,7 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
       // WR
       WR: 'WR', 'WIDE RECEIVER': 'WR', 'WIDE RECEIVERS': 'WR',
       // TE
-      TE: 'TE', 'TIGHT END': 'TE', 'TIGHT ENDS': 'TE',
+      TE: 'TE', 'TIGHT END': 'TE', 'TIGHT ENDS': 'TE', 'T.E.': 'TE', 'TE ': 'TE',
       // K — all kicker variants CFBD uses
       K: 'K', PK: 'K', KICKER: 'K', 'PLACE KICKER': 'K',
       PLACEKICKER: 'K', 'PLACE-KICKER': 'K', KR: 'K',
@@ -212,6 +212,18 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
     for (const team of teams) {
       try {
         const roster = await cfbdGet('/roster', { team, year: rosterYear });
+
+        // ── Debug: log all raw position strings from CFBD ───────────────────
+        const rawPositions = Array.from(new Set(roster.map((p: any) => p.position ?? 'NULL')));
+        console.log(`[syncRosters] ${team} raw positions from CFBD: ${rawPositions.join(', ')}`);
+
+        const posCounts: Record<string, number> = {};
+        for (const p of roster) {
+          const raw = (p.position ?? 'NONE').toUpperCase().trim();
+          const mapped = cfbdPositionMap[raw] ?? `UNMAPPED(${raw})`;
+          posCounts[mapped] = (posCounts[mapped] ?? 0) + 1;
+        }
+        console.log(`[syncRosters] ${team} position mapping: ${JSON.stringify(posCounts)}`);
 
         const rows = roster
           .filter((p: any) => p.firstName || p.lastName)
