@@ -39,6 +39,18 @@ function rankMult(rank: number): number {
   return 0.5;
 }
 
+// ── CFBD position map (shared by syncRosters and syncStats) ──────────────────
+// Maps every known CFBD position string (uppercased) to our DB abbreviation.
+// Non-skill positions (OL, DL, LB, DB, P, LS, etc.) are absent so they map to null.
+const CFBD_POSITION_MAP: Record<string, string> = {
+  QB: 'QB', QUARTERBACK: 'QB',
+  RB: 'RB', 'RUNNING BACK': 'RB', HB: 'RB', HALFBACK: 'RB', FB: 'RB', FULLBACK: 'RB',
+  WR: 'WR', 'WIDE RECEIVER': 'WR', 'WIDE RECEIVERS': 'WR',
+  TE: 'TE', 'TIGHT END': 'TE', 'TIGHT ENDS': 'TE', 'T.E.': 'TE', 'TE ': 'TE',
+  K: 'K', PK: 'K', KICKER: 'K', 'PLACE KICKER': 'K',
+  PLACEKICKER: 'K', 'PLACE-KICKER': 'K', KR: 'K',
+};
+
 // ── CFBD fetch helper ─────────────────────────────────────────────────────────
 async function cfbdGet(path: string, params: Record<string, string | number>): Promise<any[]> {
   const apiKey = process.env.CFBD_API_KEY;
@@ -169,24 +181,8 @@ export async function syncRosters(teams: string[], season: number = 2025, cfbdYe
   let recordsUpdated = 0;
 
   try {
-    // Maps every known CFBD position string (uppercased) to our DB abbreviation.
-    // Non-skill positions (OL, DL, LB, DB, P, LS, etc.) are intentionally absent
-    // so they map to null and get filtered out before upsert.
-    // CHECK constraint: position IN ('QB','RB','WR','TE','K','DEF')
-    const cfbdPositionMap: Record<string, string> = {
-      // QB
-      QB: 'QB', QUARTERBACK: 'QB',
-      // RB
-      RB: 'RB', 'RUNNING BACK': 'RB', HB: 'RB', HALFBACK: 'RB',
-      FB: 'RB', FULLBACK: 'RB',
-      // WR
-      WR: 'WR', 'WIDE RECEIVER': 'WR', 'WIDE RECEIVERS': 'WR',
-      // TE
-      TE: 'TE', 'TIGHT END': 'TE', 'TIGHT ENDS': 'TE', 'T.E.': 'TE', 'TE ': 'TE',
-      // K — all kicker variants CFBD uses
-      K: 'K', PK: 'K', KICKER: 'K', 'PLACE KICKER': 'K',
-      PLACEKICKER: 'K', 'PLACE-KICKER': 'K', KR: 'K',
-    };
+    // Use module-level CFBD_POSITION_MAP (shared with syncStats)
+    const cfbdPositionMap = CFBD_POSITION_MAP;
 
     // Position priority: higher number = takes precedence.
     // A player already stored as WR will NOT be downgraded to RB if both appear in CFBD data.
@@ -372,45 +368,10 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
       }
     }
 
-    // ── STEP 1: Load positions for all schools in this week's games ─────────
-    const allSchools = Array.from(
-      new Set<string>(completedGames.flatMap((g: any) => [g.homeTeam as string, g.awayTeam as string]))
-    );
-    const { data: posData } = await admin
-      .from('cached_players')
-      .select('school, player_name, position')
-      .in('school', allSchools)
-      .limit(10000);
-
-    // Build posLookup with exact AND space-normalized keys so name mismatches
-    // (e.g. "T.J. Hockenson" CFBD vs "TJ Hockenson" roster) are still found.
-    const normPlayerName = (n: string) =>
-      n.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-
-    const posLookup: Record<string, string> = {};
-    for (const p of posData ?? []) {
-      if (p.school && p.player_name && p.position) {
-        posLookup[`${p.school}||${p.player_name}`] = p.position;                      // exact
-        posLookup[`${p.school}||${normPlayerName(p.player_name)}`] = p.position;      // normalized
-      }
-    }
-
-    const getPosition = (school: string, name: string): string | null => {
-      // Try 1: exact match
-      let pos = posLookup[`${school}||${name}`];
-      if (pos) return pos;
-
-      // Try 2: normalized (strip punctuation, lowercase, keep spaces)
-      const norm = normPlayerName(name);
-      pos = posLookup[`${school}||${norm}`];
-      if (pos) return pos;
-
-  
-
-      return null;
-    }
-
     // ── Process each completed game ─────────────────────────────────────────
+    // Roster cache so we fetch each school at most once per sync call
+    const rosterCache: Record<string, Record<string, string>> = {};
+
     for (const game of completedGames) {
       const gameId = String(game.id);
 
@@ -420,6 +381,23 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
         const opponent = school === game.homeTeam ? game.awayTeam : game.homeTeam;
         const mult     = rankMult(eloRankMap[opponent] ?? 999);
         const ts       = teamStatMap[school] ?? {};
+
+        // ── STEP 1: Fetch roster from CFBD to get accurate player positions ──
+        // Done per-school so we use the same source as syncRosters with no
+        // name-matching issues between cached_players and CFBD stat names.
+        if (!rosterCache[school]) {
+          const rosterData = await cfbdGet('/roster', { team: school, year: season }).catch(() => []);
+          const rosterMap: Record<string, string> = {};
+          for (const p of rosterData) {
+            const name = [p.firstName, p.lastName].filter(Boolean).join(' ').trim();
+            const pos  = CFBD_POSITION_MAP[(p.position ?? '').toUpperCase().trim()] ?? null;
+            if (name && pos) rosterMap[name] = pos;
+          }
+          rosterCache[school] = rosterMap;
+          const teCount = Object.values(rosterMap).filter(p => p === 'TE').length;
+          console.log(`[roster] ${school} wk${week}: fetched ${Object.keys(rosterMap).length} players, ${teCount} TEs`);
+        }
+        const rosterMap = rosterCache[school];
 
         const schoolEntries = Object.values(playerStatMap)
           .filter((e: any) => e.gameId === gameId && e.school === school);
@@ -474,8 +452,8 @@ export async function syncStats(week: number, season: number, schoolsFilter?: st
             addRow(name, 'kicking_PTS', kickE.PTS || 0);
           }
 
-          // ── Assign to unit: posLookup first, then stats inference ─────
-          const pos = getPosition(school, name);
+          // ── Assign to unit: rosterMap first, then stats inference ─────
+          const pos = rosterMap[name] ?? null;
           let unit: UnitKey | null = null;
 
           if (pos === 'QB' || pos === 'RB' || pos === 'WR' || pos === 'TE' || pos === 'K') {
