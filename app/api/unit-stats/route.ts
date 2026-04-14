@@ -16,41 +16,9 @@ import type { UnitType } from '@/lib/playerPool';
 
 export const dynamic = 'force-dynamic';
 
-// Role config: stat_type → role label + multiplier
-const UNIT_ROLES: Record<string, { stat: string; role: string; mult: number }[]> = {
-  RB: [
-    { stat: 'rb1_opportunity', role: 'RB1', mult: 1.0 },
-    { stat: 'rb2_opportunity', role: 'RB2', mult: 0.7 },
-    { stat: 'rb3_opportunity', role: 'RB3', mult: 0.4 },
-  ],
-  WR: [
-    { stat: 'wr1_opportunity', role: 'WR1', mult: 1.0 },
-    { stat: 'wr2_opportunity', role: 'WR2', mult: 0.8 },
-    { stat: 'wr3_opportunity', role: 'WR3', mult: 0.7 },
-  ],
-  TE: [
-    { stat: 'te1_opportunity', role: 'TE1', mult: 1.0 },
-    { stat: 'te2_opportunity', role: 'TE2', mult: 0.5 },
-  ],
-};
-
-const S = { rushYd: 0.1, rushTd: 6, rec: 1.0, recYd: 0.1, recTd: 6 };
-
-function calcRawPts(stats: Record<string, number>, ut: string): number {
-  if (ut === 'RB') {
-    return (stats['rushing_YDS']   ?? 0) * S.rushYd
-         + (stats['rushing_TD']    ?? 0) * S.rushTd
-         + (stats['receiving_REC'] ?? 0) * S.rec
-         + (stats['receiving_YDS'] ?? 0) * S.recYd
-         + (stats['receiving_TD']  ?? 0) * S.recTd;
-  }
-  if (ut === 'WR' || ut === 'TE') {
-    return (stats['receiving_REC'] ?? 0) * S.rec
-         + (stats['receiving_YDS'] ?? 0) * S.recYd
-         + (stats['receiving_TD']  ?? 0) * S.recTd;
-  }
-  return 0;
-}
+const RB_W = [1.0, 0.5, 0.25];
+const WR_W = [1.0, 0.5, 0.25];
+const TE_W = [1.0, 0.5];
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -70,13 +38,8 @@ export async function GET(req: Request) {
     const admin = createAdminClient();
 
     // ── Breakdown mode: single-week player breakdown ──────────────────────────
-    if (breakdown && weekParam) {
-      const roles = UNIT_ROLES[unitType] ?? [];
-      if (roles.length === 0) {
-        return NextResponse.json({ breakdown: null }, { headers: NO_STORE });
-      }
-
-      // Resolve game_id for this week
+    if (breakdown && weekParam !== null) {
+      // Resolve game_id
       const { data: schedRow } = await admin
         .from('cached_schedule')
         .select('game_id')
@@ -86,72 +49,149 @@ export async function GET(req: Request) {
         .maybeSingle();
 
       if (!schedRow?.game_id) {
-        return NextResponse.json({ breakdown: null }, { headers: NO_STORE });
+        return NextResponse.json({ breakdown: null, teNames: [], odrMult: 1 }, { headers: NO_STORE });
       }
 
       const gameId = schedRow.game_id;
-      const roleStatTypes = roles.map(r => r.stat);
 
-      // Fetch role rows for this game (player_name = the ranked player, value = opportunity share)
-      const { data: roleData } = await admin
-        .from('cached_stats')
-        .select('player_name, stat_type, value')
-        .eq('school', school)
-        .eq('game_id', gameId)
-        .in('stat_type', roleStatTypes)
-        .not('player_name', 'is', null);
+      // Fetch all individual player stat rows + game_mult + team DEF stats in parallel
+      const [playerRowsRes, multRes, teamRowsRes, tePlayersRes] = await Promise.all([
+        admin.from('cached_stats').select('player_name, stat_type, value')
+          .eq('game_id', gameId).eq('school', school)
+          .not('player_name', 'is', null)
+          .in('stat_type', [
+            'passing_YDS','passing_TD','passing_INT',
+            'rushing_YDS','rushing_TD','rushing_ATT',
+            'receiving_YDS','receiving_REC','receiving_TD',
+            'kicking_PTS',
+          ]),
+        admin.from('cached_stats').select('value')
+          .eq('game_id', gameId).eq('school', school)
+          .eq('stat_type', 'game_mult').is('player_name', null).maybeSingle(),
+        admin.from('cached_stats').select('stat_type, value')
+          .eq('game_id', gameId).eq('school', school).is('player_name', null)
+          .in('stat_type', [
+            'team_sacks','team_passesIntercepted',
+            'team_fumblesRecovered','team_interceptionTDs','team_fumbleReturnTDs',
+          ]),
+        admin.from('cached_players').select('player_name')
+          .eq('school', school).eq('position', 'TE').eq('season', season),
+      ]);
 
-      if (!roleData || roleData.length === 0) {
-        return NextResponse.json({ breakdown: null }, { headers: NO_STORE });
-      }
+      const odrMult  = multRes.data?.value ?? 1.0;
+      const teNames  = (tePlayersRes.data ?? []).map((p: any) => p.player_name as string);
+      const teNameSet = new Set(teNames);
 
-      // Build stat_type → { playerName, oppScore } (first row per stat_type wins)
-      const rolePlayerMap: Record<string, { playerName: string; oppScore: number }> = {};
-      for (const row of roleData) {
-        if (!row.player_name || rolePlayerMap[row.stat_type]) continue;
-        rolePlayerMap[row.stat_type] = {
-          playerName: row.player_name,
-          oppScore:   row.value ?? 0,
-        };
-      }
-
-      // Fetch individual stats for those players in this game
-      const playerNamesSet: Record<string, true> = {};
-      for (const v of Object.values(rolePlayerMap)) playerNamesSet[v.playerName] = true;
-      const playerNames = Object.keys(playerNamesSet);
-      const { data: statRows } = await admin
-        .from('cached_stats')
-        .select('player_name, stat_type, value')
-        .eq('school', school)
-        .eq('game_id', gameId)
-        .in('player_name', playerNames)
-        .not('player_name', 'is', null);
-
-      const playerStats: Record<string, Record<string, number>> = {};
-      for (const row of statRows ?? []) {
+      // Group player stats by name
+      const playerTotals: Record<string, Record<string, number>> = {};
+      for (const row of playerRowsRes.data ?? []) {
         if (!row.player_name) continue;
-        if (!playerStats[row.player_name]) playerStats[row.player_name] = {};
-        playerStats[row.player_name][row.stat_type] = row.value ?? 0;
+        playerTotals[row.player_name] ??= {};
+        playerTotals[row.player_name][row.stat_type] = row.value ?? 0;
       }
 
-      const breakdownRows = roles
-        .filter(r => rolePlayerMap[r.stat])
-        .map(r => {
-          const { playerName, oppScore } = rolePlayerMap[r.stat];
-          const stats   = playerStats[playerName] ?? {};
-          const rawPts  = calcRawPts(stats, unitType);
-          return {
-            role:        r.role,
-            playerName,
-            oppScore:    Math.round(oppScore * 1000) / 1000,
-            multiplier:  r.mult,
-            rawPts:      Math.round(rawPts * 10) / 10,
-            weightedPts: Math.round(rawPts * r.mult * 10) / 10,
-          };
-        });
+      type BdRow = {
+        role: string; playerName: string | null;
+        rawPts: number; multiplier: number; weightedPts: number;
+        stats: Record<string, number>;
+      };
+
+      let bdRows: BdRow[] | null = null;
+
+      if (unitType === 'DEF') {
+        const ts: Record<string, number> = {};
+        for (const r of teamRowsRes.data ?? []) ts[r.stat_type] = r.value ?? 0;
+        const sacks  = ts['team_sacks'] ?? 0;
+        const ints   = ts['team_passesIntercepted'] ?? 0;
+        const fumRec = ts['team_fumblesRecovered'] ?? 0;
+        const defTd  = (ts['team_interceptionTDs'] ?? 0) + (ts['team_fumbleReturnTDs'] ?? 0);
+        const rawDEF = sacks * 1 + ints * 2 + fumRec * 2 + defTd * 6;
+        bdRows = [{ role: 'DEF', playerName: null, rawPts: rawDEF, multiplier: 1.0,
+          weightedPts: Math.round(rawDEF * odrMult * 10) / 10,
+          stats: { sacks, ints, fumRec, defTd } }];
+
+      } else if (unitType === 'QB') {
+        const qbs = Object.entries(playerTotals)
+          .filter(([, s]) => (s['passing_YDS'] ?? 0) > 0 || (s['passing_TD'] ?? 0) > 0)
+          .map(([name, s]) => ({
+            name, s,
+            rawPts: (s['passing_YDS']||0)*0.1 + (s['passing_TD']||0)*4 + (s['passing_INT']||0)*-2
+                  + (s['rushing_YDS']||0)*0.1 + (s['rushing_TD']||0)*6,
+          }))
+          .sort((a, b) => b.rawPts - a.rawPts);
+        if (qbs[0]) {
+          bdRows = [{ role: 'QB', playerName: qbs[0].name, rawPts: qbs[0].rawPts,
+            multiplier: 1.0, weightedPts: Math.round(qbs[0].rawPts * odrMult * 10) / 10,
+            stats: qbs[0].s }];
+        }
+
+      } else if (unitType === 'K') {
+        const ks = Object.entries(playerTotals)
+          .filter(([, s]) => (s['kicking_PTS'] ?? 0) > 0)
+          .map(([name, s]) => ({ name, rawPts: s['kicking_PTS'] || 0, s }))
+          .sort((a, b) => b.rawPts - a.rawPts);
+        if (ks[0]) {
+          bdRows = [{ role: 'K', playerName: ks[0].name, rawPts: ks[0].rawPts,
+            multiplier: 1.0, weightedPts: Math.round(ks[0].rawPts * odrMult * 10) / 10,
+            stats: ks[0].s }];
+        }
+
+      } else if (unitType === 'RB') {
+        const rbs = Object.entries(playerTotals)
+          .filter(([, s]) => ((s['rushing_YDS'] ?? 0) > 0 || (s['rushing_ATT'] ?? 0) > 0) && !(s['passing_YDS'] ?? 0))
+          .map(([name, s]) => ({
+            name, s,
+            rawPts: (s['rushing_YDS']||0)*0.1 + (s['rushing_TD']||0)*6
+                  + (s['receiving_YDS']||0)*0.1 + (s['receiving_REC']||0)*1 + (s['receiving_TD']||0)*6,
+          }))
+          .sort((a, b) => b.rawPts - a.rawPts);
+        bdRows = rbs.slice(0, 3).map(({ name, rawPts, s }, i) => ({
+          role: `RB${i+1}`, playerName: name, rawPts,
+          multiplier: RB_W[i],
+          weightedPts: Math.round(rawPts * RB_W[i] * odrMult * 10) / 10,
+          stats: s,
+        }));
+
+      } else if (unitType === 'WR') {
+        const wrs = Object.entries(playerTotals)
+          .filter(([name, s]) => !teNameSet.has(name) && !(s['passing_YDS'] ?? 0)
+            && ((s['receiving_YDS'] ?? 0) > 0 || (s['receiving_REC'] ?? 0) > 0))
+          .map(([name, s]) => ({
+            name, s,
+            rawPts: (s['receiving_YDS']||0)*0.1 + (s['receiving_REC']||0)*1 + (s['receiving_TD']||0)*6,
+          }))
+          .sort((a, b) => b.rawPts - a.rawPts);
+        bdRows = wrs.slice(0, 3).map(({ name, rawPts, s }, i) => ({
+          role: `WR${i+1}`, playerName: name, rawPts,
+          multiplier: WR_W[i],
+          weightedPts: Math.round(rawPts * WR_W[i] * odrMult * 10) / 10,
+          stats: s,
+        }));
+
+      } else if (unitType === 'TE') {
+        const tes = Object.entries(playerTotals)
+          .filter(([name, s]) => teNameSet.has(name)
+            && ((s['receiving_YDS'] ?? 0) > 0 || (s['receiving_REC'] ?? 0) > 0))
+          .map(([name, s]) => ({
+            name, s,
+            rawPts: (s['receiving_YDS']||0)*0.1 + (s['receiving_REC']||0)*1 + (s['receiving_TD']||0)*6,
+          }))
+          .sort((a, b) => b.rawPts - a.rawPts);
+        bdRows = tes.length > 0
+          ? tes.slice(0, 2).map(({ name, rawPts, s }, i) => ({
+              role: `TE${i+1}`, playerName: name, rawPts,
+              multiplier: TE_W[i],
+              weightedPts: Math.round(rawPts * TE_W[i] * odrMult * 10) / 10,
+              stats: s,
+            }))
+          : null;
+        if (!bdRows?.length) {
+          console.log(`[unit-stats/breakdown] ${school} wk${weekParam} TE: playerTotals=${Object.keys(playerTotals).length} teNames=[${teNames.join(',')}]`);
+        }
+      }
 
       return NextResponse.json(
-        { breakdown: breakdownRows.length > 0 ? breakdownRows : null },
+        { breakdown: bdRows && bdRows.length > 0 ? bdRows : null, teNames, odrMult },
         { headers: NO_STORE },
       );
     }
