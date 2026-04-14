@@ -157,7 +157,8 @@ export async function getSchoolWeekGameLog(
       .select('week, stat_type, value')
       .eq('school', school)
       .eq('season', season)
-      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K', 'game_mult'])
+      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K', 'game_mult',
+                        'def_sacks', 'def_ints', 'def_fum_rec', 'def_tds', 'def_safeties'])
       .is('player_name', null),
     admin
       .from('cached_stats')
@@ -195,11 +196,19 @@ export async function getSchoolWeekGameLog(
 
   const unitPtsByWeek: Record<number, number> = {};
   const multByWeek:    Record<number, number> = {};
+  const defStatsByWeek: Record<number, { sacks: number; ints: number; fumRec: number; defTd: number; safeties: number }> = {};
   for (const row of unitStatRows.data ?? []) {
     if (row.stat_type === `unit_${unitType}`) {
       unitPtsByWeek[row.week] = row.value;
     } else if (row.stat_type === 'game_mult') {
       multByWeek[row.week] = row.value;
+    } else if (row.stat_type.startsWith('def_')) {
+      if (!defStatsByWeek[row.week]) defStatsByWeek[row.week] = { sacks: 0, ints: 0, fumRec: 0, defTd: 0, safeties: 0 };
+      const map: Record<string, keyof typeof defStatsByWeek[number]> = {
+        def_sacks: 'sacks', def_ints: 'ints', def_fum_rec: 'fumRec', def_tds: 'defTd', def_safeties: 'safeties',
+      };
+      const field = map[row.stat_type];
+      if (field) defStatsByWeek[row.week][field] = row.value;
     }
   }
 
@@ -320,8 +329,8 @@ export async function getSchoolWeekGameLog(
         break;
       }
       case 'DEF': {
-        const defStats = playersByWeek[week]?.['__team__'] ?? {};
-        players = [{ sacks: defStats['team_sacks'] || 0, ints: defStats['team_passesIntercepted'] || 0, fumRec: defStats['team_fumblesRecovered'] || 0, defTd: (defStats['team_interceptionTDs'] || 0) + (defStats['team_fumbleReturnTDs'] || 0) }];
+        const ds = defStatsByWeek[week] ?? { sacks: 0, ints: 0, fumRec: 0, defTd: 0, safeties: 0 };
+        players = [{ sacks: ds.sacks, ints: ds.ints, fumRec: ds.fumRec, defTd: ds.defTd, safeties: ds.safeties }];
         break;
       }
       case 'K': {
@@ -335,7 +344,8 @@ export async function getSchoolWeekGameLog(
 
     const mult      = multByWeek[week] ?? null;
     const rawPoints = mult && mult > 0 ? Math.round(pts / mult * 10) / 10 : pts;
-    return { week, opponent, completed: true, fantasyPoints: pts, rawPoints, multiplier: mult, players };
+    const defStats  = unitType === 'DEF' ? (defStatsByWeek[week] ?? null) : undefined;
+    return { week, opponent, completed: true, fantasyPoints: pts, rawPoints, multiplier: mult, players, defStats };
   });
 }
 

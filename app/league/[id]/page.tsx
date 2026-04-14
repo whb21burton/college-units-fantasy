@@ -1131,21 +1131,38 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
     const odrMult: number   = week.multiplier ?? 1.0;
 
     if (unit === 'DEF') {
-      const d = allPlayers[0] ?? {};
-      const rawDEF = (d.sacks||0)*1 + (d.ints||0)*2 + (d.fumRec||0)*2 + (d.defTd||0)*6;
-      const wPts   = Math.round(rawDEF * odrMult * 10) / 10;
+      const d = (week.defStats ?? allPlayers[0]) ?? {};
+      const sacks    = d.sacks    ?? 0;
+      const ints     = d.ints     ?? 0;
+      const fumRec   = d.fumRec   ?? 0;
+      const defTDs   = d.defTd    ?? d.defTDs ?? 0;
+      const safeties = d.safeties ?? 0;
       return (
-        <div style={{ background: '#080c15', borderLeft: '3px solid #d4a828', padding: '10px 14px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 4, marginBottom: 4 }}>
-            {['SACKS','INT','FUM REC','DEF TDS','FPTS'].map(h => (
-              <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: .5, color: '#7a90b0', textAlign: 'right' }}>{h}</div>
-            ))}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 4 }}>
-            {([d.sacks??0, d.ints??0, d.fumRec??0, d.defTd??0] as (number|string)[]).concat([wPts.toFixed(1)]).map((v, i) => (
-              <div key={i} style={{ fontFamily: i===4?'Anton,sans-serif':'Oswald,sans-serif', fontSize: i===4?13:11, color: i===4?'#d4a828':'#7a90b0', textAlign: 'right' }}>{v}</div>
-            ))}
-          </div>
+        <div style={{ background: '#080c15', borderLeft: '3px solid #d4a828', padding: '12px 16px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ color: '#7a90b0', fontSize: 10, textTransform: 'uppercase' as const }}>
+                {['SACKS','INT','FUM REC','DEF TD','SAFETY','PTS'].map((h, i) => (
+                  <th key={h} style={{ padding: '4px 8px', fontFamily: 'Oswald,sans-serif', fontWeight: 400, letterSpacing: .5, textAlign: i === 5 ? 'right' : 'left' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={{ color: '#e8edf5' }}>
+                {[sacks, ints, fumRec, defTDs, safeties].map((v, i) => (
+                  <td key={i} style={{ padding: '8px', fontFamily: 'Oswald,sans-serif', fontSize: 13 }}>{v}</td>
+                ))}
+                <td style={{ padding: '8px', color: '#d4a828', fontFamily: 'Anton,sans-serif', fontSize: 14, fontWeight: 700, textAlign: 'right' }}>
+                  {week.fantasyPoints != null ? (week.fantasyPoints as number).toFixed(1) : '—'}
+                </td>
+              </tr>
+              <tr style={{ color: '#7a90b0', borderTop: '1px solid #1e2d47' }}>
+                <td colSpan={6} style={{ padding: '6px 8px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 10 }}>
+                  Sack×1 · INT×2 · FumRec×2 · DefTD×6 · Safety×2 — then × ODR multiplier
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       );
     }

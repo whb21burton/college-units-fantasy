@@ -70,10 +70,7 @@ export async function GET(req: Request) {
           .eq('stat_type', 'game_mult').is('player_name', null).maybeSingle(),
         admin.from('cached_stats').select('stat_type, value')
           .eq('game_id', gameId).eq('school', school).is('player_name', null)
-          .in('stat_type', [
-            'team_sacks','team_passesIntercepted',
-            'team_fumblesRecovered','team_interceptionTDs','team_fumbleReturnTDs',
-          ]),
+          .in('stat_type', ['def_sacks','def_ints','def_fum_rec','def_tds','def_safeties']),
         admin.from('cached_players').select('player_name')
           .eq('school', school).eq('position', 'TE').eq('season', season),
       ]);
@@ -101,14 +98,15 @@ export async function GET(req: Request) {
       if (unitType === 'DEF') {
         const ts: Record<string, number> = {};
         for (const r of teamRowsRes.data ?? []) ts[r.stat_type] = r.value ?? 0;
-        const sacks  = ts['team_sacks'] ?? 0;
-        const ints   = ts['team_passesIntercepted'] ?? 0;
-        const fumRec = ts['team_fumblesRecovered'] ?? 0;
-        const defTd  = (ts['team_interceptionTDs'] ?? 0) + (ts['team_fumbleReturnTDs'] ?? 0);
-        const rawDEF = sacks * 1 + ints * 2 + fumRec * 2 + defTd * 6;
+        const sacks    = ts['def_sacks']    ?? 0;
+        const ints     = ts['def_ints']     ?? 0;
+        const fumRec   = ts['def_fum_rec']  ?? 0;
+        const defTd    = ts['def_tds']      ?? 0;
+        const safeties = ts['def_safeties'] ?? 0;
+        const rawDEF   = sacks*1 + ints*2 + fumRec*2 + defTd*6 + safeties*2;
         bdRows = [{ role: 'DEF', playerName: null, rawPts: rawDEF, multiplier: 1.0,
           weightedPts: Math.round(rawDEF * odrMult * 10) / 10,
-          stats: { sacks, ints, fumRec, defTd } }];
+          stats: { sacks, ints, fumRec, defTd, safeties } }];
 
       } else if (unitType === 'QB') {
         const qbs = Object.entries(playerTotals)

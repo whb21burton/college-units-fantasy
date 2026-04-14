@@ -348,10 +348,26 @@ export async function syncStats(
       add(null, 'unit_TE', Math.round(teRaw * mult * 10) / 10)
       console.log(`[TE] ${school} wk${week}: ${units.TE.length} TEs → ${teRaw.toFixed(1)} raw pts (top: ${units.TE[0]?.name ?? 'none'})`)
 
-      // DEF
-      const defRaw = (ts.sacks||0)*SCORING.sack + (ts.passesIntercepted||0)*SCORING.defInt
-        + (ts.fumblesRecovered||0)*SCORING.fumRec + ((ts.interceptionTDs||0)+(ts.fumbleReturnTDs||0))*SCORING.defTd
-      add(null, 'unit_DEF', Math.round(defRaw * mult * 10) / 10)
+      // DEF — fallback field names handle CFBD's inconsistent casing
+      const defSacks  = ts['sacks']             ?? ts['Sacks']             ?? 0
+      const defInts   = ts['passesIntercepted'] ?? ts['Interceptions']     ?? ts['interceptions'] ?? 0
+      const defFumRec = ts['fumblesRecovered']  ?? ts['Fumbles Recovered'] ?? 0
+      const defTDs    = (ts['interceptionTDs']  ?? 0) + (ts['fumbleReturnTDs'] ?? 0) + (ts['defensiveTDs'] ?? 0)
+      const defSafety = ts['safeties']          ?? 0
+      const defRaw    = defSacks*1 + defInts*2 + defFumRec*2 + defTDs*6 + defSafety*2
+      add(null, 'unit_DEF',    Math.round(defRaw * mult * 10) / 10)
+      add(null, 'def_sacks',   defSacks)
+      add(null, 'def_ints',    defInts)
+      add(null, 'def_fum_rec', defFumRec)
+      add(null, 'def_tds',     defTDs)
+      add(null, 'def_safeties',defSafety)
+      console.log(`[DEF] ${school} wk${week}: sacks=${defSacks} ints=${defInts} fumRec=${defFumRec} defTDs=${defTDs} safety=${defSafety} → raw=${defRaw} final=${Math.round(defRaw * mult * 10) / 10}`)
+
+      // Part 4 — log raw CFBD team stat field names for first school to verify
+      if (schoolsFilter && school === schoolsFilter[0]) {
+        console.log(`[teamStats] ${school} wk${week} categories: ${Object.keys(ts).join(', ')}`)
+        console.log(`[teamStats] ${school} wk${week} values: ${JSON.stringify(ts)}`)
+      }
 
       // K
       units.K.sort((a, b) => b.pts - a.pts)
