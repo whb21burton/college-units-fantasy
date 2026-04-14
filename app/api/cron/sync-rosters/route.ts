@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       new Set(Object.values(CONFERENCES).flatMap(teams => teams)),
     );
 
-    const recordsUpdated = await syncRosters(allTeams, CURRENT_SEASON, cfbdYear);
+    const recordsUpdated = await syncRosters(allTeams, cfbdYear ?? CURRENT_SEASON);
     const duration = Date.now() - start;
 
     return NextResponse.json({
