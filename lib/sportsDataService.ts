@@ -227,6 +227,12 @@ export async function syncStats(
     }
   }))
 
+  const teInLookup = Object.values(posLookup).filter(p => p === 'TE').length
+  console.log(`[posLookup] total=${Object.keys(posLookup).length} TEs=${teInLookup}`)
+  if (teInLookup === 0) {
+    console.error('[posLookup] WARNING: 0 TEs found in lookup — position registry failed')
+  }
+
   // Helper: look up a player's position
   const getPos = (school: string, name: string): string | null => {
     return posLookup[`${school}||${name}`]
