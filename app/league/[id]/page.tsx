@@ -1124,6 +1124,111 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
   );
 }
 
+/* ── Safe Breakdown (no async — uses data already in wk.players) ── */
+function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
+  try {
+    const allPlayers: any[] = week.players ?? [];
+    const odrMult: number   = week.multiplier ?? 1.0;
+
+    if (unit === 'DEF') {
+      const d = allPlayers[0] ?? {};
+      const rawDEF = (d.sacks||0)*1 + (d.ints||0)*2 + (d.fumRec||0)*2 + (d.defTd||0)*6;
+      const wPts   = Math.round(rawDEF * odrMult * 10) / 10;
+      return (
+        <div style={{ background: '#080c15', borderLeft: '3px solid #d4a828', padding: '10px 14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 4, marginBottom: 4 }}>
+            {['SACKS','INT','FUM REC','DEF TDS','FPTS'].map(h => (
+              <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: .5, color: '#7a90b0', textAlign: 'right' }}>{h}</div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 4 }}>
+            {([d.sacks??0, d.ints??0, d.fumRec??0, d.defTd??0] as (number|string)[]).concat([wPts.toFixed(1)]).map((v, i) => (
+              <div key={i} style={{ fontFamily: i===4?'Anton,sans-serif':'Oswald,sans-serif', fontSize: i===4?13:11, color: i===4?'#d4a828':'#7a90b0', textAlign: 'right' }}>{v}</div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    const named = allPlayers.filter((p: any) => p.name);
+    const withRaw = named.map((p: any) => {
+      let rawPts = 0;
+      if (unit === 'QB') rawPts = (p.passYd||0)*0.1 + (p.passTd||0)*4 + (p.int||0)*(-2) + (p.rushYd||0)*0.1 + (p.rushTd||0)*6;
+      else if (unit === 'RB') rawPts = (p.rushYd||0)*0.1 + (p.rushTd||0)*6 + (p.rec||0)*1 + (p.recYd||0)*0.1;
+      else if (unit === 'WR' || unit === 'TE') rawPts = (p.rec||0)*1 + (p.recYd||0)*0.1 + (p.recTd||0)*6;
+      else if (unit === 'K') rawPts = p.pts || 0;
+      return { ...p, rawPts };
+    }).sort((a: any, b: any) => b.rawPts - a.rawPts);
+
+    if (!withRaw.length) {
+      return (
+        <div style={{ padding: '12px 16px', color: '#7a90b0', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontStyle: 'italic' }}>
+          No player data available for this week
+        </div>
+      );
+    }
+
+    const unitWeights: Record<string, number[]> = { RB: [1.0,0.5,0.25], WR: [1.0,0.5,0.25], TE: [1.0,0.5], QB: [1.0], K: [1.0] };
+    const weights   = unitWeights[unit] ?? [1.0];
+    const roleLabels: Record<string, string[]> = { RB: ['RB1','RB2','RB3'], WR: ['WR1','WR2','WR3'], TE: ['TE1','TE2'] };
+    const roles     = roleLabels[unit] ?? [];
+    const rankColors = ['#d4a828','#9e9e9e','#cd7f32'];
+    const displayed  = withRaw.slice(0, weights.length);
+    const unitTotal  = week.fantasyPoints != null
+      ? (week.fantasyPoints as number).toFixed(1)
+      : displayed.reduce((s: number, p: any, i: number) => s + Math.round((p.rawPts??0)*(weights[i]??0)*odrMult*10)/10, 0).toFixed(1);
+
+    return (
+      <div style={{ background: '#080c15', borderLeft: '3px solid #d4a828' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <tbody>
+            {displayed.map((p: any, i: number) => {
+              const mult     = weights[i] ?? 0;
+              const weighted = Math.round((p.rawPts??0) * mult * odrMult * 10) / 10;
+              const rc       = rankColors[i] ?? rankColors[rankColors.length - 1];
+              return (
+                <tr key={p.name ?? i} style={{ borderBottom: '1px solid #1e2d47' }}>
+                  <td style={{ padding: '6px 8px', color: rc, fontWeight: 700, fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, width: 44 }}>{roles[i] ?? ''}</td>
+                  <td style={{ padding: '6px 8px', color: '#e8edf5', fontFamily: "'Space Grotesk',sans-serif", fontSize: 11 }}>{p.name}</td>
+                  {unit === 'QB' && <>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.passYd??0} YDS</td>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.passTd??0} TD</td>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.int??0} INT</td>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rushYd??0} RSH</td>
+                  </>}
+                  {unit === 'RB' && <>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rushAtt??0} ATT</td>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rushYd??0} YDS</td>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rushTd??0} TD</td>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rec??0} REC</td>
+                  </>}
+                  {(unit === 'WR' || unit === 'TE') && <>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rec??0} REC</td>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.recYd??0} YDS</td>
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.recTd??0} TD</td>
+                  </>}
+                  {unit === 'K' && (
+                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.pts??0} PTS</td>
+                  )}
+                  <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, textAlign: 'right' }}>×{mult.toFixed(2)}</td>
+                  <td style={{ padding: '6px 8px', color: '#d4a828', fontFamily: 'Anton,sans-serif', fontSize: 13, fontWeight: 700, textAlign: 'right' }}>{weighted.toFixed(1)}</td>
+                </tr>
+              );
+            })}
+            <tr style={{ borderTop: '2px solid #d4a828' }}>
+              <td colSpan={99} style={{ padding: '6px 8px', color: '#d4a828', fontFamily: 'Anton,sans-serif', fontSize: 12, fontWeight: 700, textAlign: 'right' }}>
+                UNIT TOTAL: {unitTotal}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    );
+  } catch (_e) {
+    return <div style={{ padding: '12px', color: '#f44336' }}>Error loading breakdown</div>;
+  }
+}
+
 /* ── Player Detail View ──────────────────────────────────────── */
 const UNIT_COLORS: Record<string, string> = {
   QB:  '#e84545',   // vivid red
@@ -1148,28 +1253,8 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
 }) {
   const [stats,         setStats]         = useState<any | null>(null);
   const [loading,       setLoading]       = useState(true);
-  const [expandedWk,    setExpandedWk]    = useState<number | null>(null);
-  const [bdCache,       setBdCache]       = useState<Record<number, { rows: any[]; odrMult: number } | null | 'loading'>>({});
-
-  const toggleWeek = (wk: number) => {
-    setExpandedWk(prev => {
-      const next = prev === wk ? null : wk;
-      // Lazy-fetch breakdown if not yet cached
-      if (next !== null && bdCache[next] === undefined) {
-        setBdCache(c => ({ ...c, [next]: 'loading' }));
-        fetch(
-          `/api/unit-stats?school=${encodeURIComponent(player.school)}&unitType=${player.unitType}&season=2025&breakdown=true&week=${next}`
-        )
-          .then(r => r.json())
-          .then(d => setBdCache(c => ({
-            ...c,
-            [next]: d.breakdown ? { rows: d.breakdown, odrMult: d.odrMult ?? 1 } : null,
-          })))
-          .catch(() => setBdCache(c => ({ ...c, [next]: null })));
-      }
-      return next;
-    });
-  };
+  const [expandedWk, setExpandedWk] = useState<number | null>(null);
+  const toggleWeek = (wk: number) => setExpandedWk(prev => prev === wk ? null : wk);
 
   useEffect(() => {
     setLoading(true);
@@ -1227,8 +1312,6 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
     if (ut === 'K')  return p.pts || 0;
     return 0;
   };
-
-  const BD_RANK_COLORS = ['#d4a828', '#9ca3af', '#cd7f32'] as const; // gold, silver, bronze
 
   // Top contributors: all named players sorted by fantasy pts desc
   const contributors = sortedPlayers
@@ -1394,9 +1477,8 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
           {weeks.map((wk: any) => {
             const p0           = wk.players?.[0] ?? {};
             const isPlayoff    = wk.week > 11;
-            const canExpand    = wk.completed;
-            const isExpanded   = expandedWk === wk.week;
-            const bdData       = bdCache[wk.week]; // any[] | null | 'loading' | undefined
+            const canExpand  = wk.completed;
+            const isExpanded = expandedWk === wk.week;
 
             return (
               <div key={wk.week} style={{ borderBottom: `1px solid ${C.surf3}22` }}>
@@ -1443,144 +1525,8 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                 </div>
 
                 {/* Collapsible breakdown panel */}
-                {canExpand && (
-                  <div style={{
-                    overflow: 'hidden',
-                    maxHeight: isExpanded ? '320px' : '0px',
-                    transition: 'max-height .25s ease',
-                  }}>
-                    <div style={{ background: '#131d30', borderLeft: '3px solid #d4a828' }}>
-
-                      {/* Loading spinner */}
-                      {bdData === 'loading' && (
-                        <div style={{ padding: '12px 16px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
-                          Loading breakdown…
-                        </div>
-                      )}
-
-                      {/* No data */}
-                      {(bdData === null || (bdData !== 'loading' && (!bdData.rows || bdData.rows.length === 0))) && (
-                        <div style={{ padding: '12px 16px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.muted, fontStyle: 'italic' }}>
-                          Detailed breakdown not available for this week
-                        </div>
-                      )}
-
-                      {/* Breakdown table */}
-                      {bdData !== null && bdData !== 'loading' && bdData.rows && bdData.rows.length > 0 && (() => {
-                        const rows: any[] = bdData.rows;
-                        const odrMult: number = bdData.odrMult;
-                        const total = rows.reduce((s: number, r: any) => s + (r.weightedPts ?? 0), 0);
-                        const ut = player.unitType;
-
-                        // DEF: single stats row
-                        if (ut === 'DEF') {
-                          const s = rows[0]?.stats ?? {};
-                          return (
-                            <>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 4, padding: '5px 14px', background: '#0f1a2e' }}>
-                                {['SACKS','INT','FUM REC','DEF TDS','FPTS'].map((h, i) => (
-                                  <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: .5, color: '#7a90b0', textAlign: i === 0 ? 'left' : 'right' }}>{h}</div>
-                                ))}
-                              </div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 4, padding: '7px 14px', alignItems: 'center' }}>
-                                {[s.sacks??0, s.ints??0, s.fumRec??0, s.defTd??0].map((v, i) => (
-                                  <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textAlign: i === 0 ? 'left' : 'right' }}>{v}</div>
-                                ))}
-                                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold, textAlign: 'right' }}>{total.toFixed(1)}</div>
-                              </div>
-                            </>
-                          );
-                        }
-
-                        // QB: passing + rushing stats for top passer
-                        if (ut === 'QB') {
-                          const r = rows[0]; const s = r?.stats ?? {};
-                          return (
-                            <>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 52px 40px 40px 52px 40px 60px', gap: 4, padding: '5px 14px', background: '#0f1a2e' }}>
-                                {['PLAYER','PASS YDS','TD','INT','RUSH YDS','RTD','FPTS'].map((h, i) => (
-                                  <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: .5, color: '#7a90b0', textAlign: i === 0 ? 'left' : 'right' }}>{h}</div>
-                                ))}
-                              </div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 52px 40px 40px 52px 40px 60px', gap: 4, padding: '7px 14px', alignItems: 'center' }}>
-                                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r?.playerName ?? '—'}</div>
-                                {[s.passing_YDS??0, s.passing_TD??0, s.passing_INT??0, s.rushing_YDS??0, s.rushing_TD??0].map((v, i) => (
-                                  <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textAlign: 'right' }}>{v}</div>
-                                ))}
-                                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold, textAlign: 'right' }}>{total.toFixed(1)}</div>
-                              </div>
-                            </>
-                          );
-                        }
-
-                        // K: single player, PTS
-                        if (ut === 'K') {
-                          const r = rows[0];
-                          return (
-                            <>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px', gap: 4, padding: '5px 14px', background: '#0f1a2e' }}>
-                                {['PLAYER','FPTS'].map((h, i) => (
-                                  <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: .5, color: '#7a90b0', textAlign: i === 0 ? 'left' : 'right' }}>{h}</div>
-                                ))}
-                              </div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px', gap: 4, padding: '7px 14px', alignItems: 'center' }}>
-                                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.text }}>{r?.playerName ?? '—'}</div>
-                                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold, textAlign: 'right' }}>{total.toFixed(1)}</div>
-                              </div>
-                            </>
-                          );
-                        }
-
-                        // RB: ranked with rush + recv stats
-                        const isRB = ut === 'RB';
-                        const colDef = isRB
-                          ? { cols: '1fr 44px 40px 52px 40px 40px 52px 52px 44px 64px', headers: ['PLAYER','ROLE','ATT','RUSH YDS','RTD','REC','REC YDS','RAW PTS','MULT','WTD PTS'] }
-                          : { cols: '1fr 44px 40px 56px 40px 52px 44px 64px',            headers: ['PLAYER','ROLE','REC','YDS','TD','RAW PTS','MULT','WTD PTS'] };
-
-                        return (
-                          <>
-                            {/* Header */}
-                            <div style={{ display: 'grid', gridTemplateColumns: colDef.cols, gap: 4, padding: '5px 14px', background: '#0f1a2e' }}>
-                              {colDef.headers.map((h, i) => (
-                                <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: .5, color: '#7a90b0', textAlign: i === 0 ? 'left' : 'right' }}>{h}</div>
-                              ))}
-                            </div>
-
-                            {/* Player rows */}
-                            {rows.map((r: any, idx: number) => {
-                              const rc = BD_RANK_COLORS[idx] ?? BD_RANK_COLORS[BD_RANK_COLORS.length - 1];
-                              const s  = r.stats ?? {};
-                              const cells = isRB
-                                ? [s.rushing_ATT??0, s.rushing_YDS??0, s.rushing_TD??0, s.receiving_REC??0, s.receiving_YDS??0, (r.rawPts??0).toFixed(1), `×${r.multiplier.toFixed(2)}`, (r.weightedPts??0).toFixed(1)]
-                                : [s.receiving_REC??0, s.receiving_YDS??0, s.receiving_TD??0, (r.rawPts??0).toFixed(1), `×${r.multiplier.toFixed(2)}`, (r.weightedPts??0).toFixed(1)];
-                              return (
-                                <div key={r.role} style={{ display: 'grid', gridTemplateColumns: colDef.cols, gap: 4, padding: '7px 14px', borderTop: `1px solid ${C.surf3}22`, alignItems: 'center' }}>
-                                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.playerName}</div>
-                                  <div style={{ textAlign: 'right' }}>
-                                    <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 8, fontWeight: 700, padding: '2px 5px', borderRadius: 10, background: rc+'22', border: `1px solid ${rc}55`, color: rc, letterSpacing: .3 }}>{r.role}</span>
-                                  </div>
-                                  {cells.map((v, i) => (
-                                    <div key={i} style={{ fontFamily: i === cells.length - 1 ? 'Anton,sans-serif' : 'Oswald,sans-serif', fontSize: i === cells.length - 1 ? 13 : 11, color: i === cells.length - 1 ? C.gold : C.sub, textAlign: 'right' }}>{v}</div>
-                                  ))}
-                                </div>
-                              );
-                            })}
-
-                            {/* ODR note + Total row */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 14px', borderTop: `1px solid ${C.surf3}55`, background: '#0e1828' }}>
-                              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, color: C.muted }}>
-                                ODR ×{odrMult.toFixed(1)} applied
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.gold, letterSpacing: 1, textTransform: 'uppercase' }}>Unit Total</div>
-                                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>{total.toFixed(1)}</div>
-                              </div>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
+                {canExpand && isExpanded && (
+                  <SafeBreakdown week={wk} unit={player.unitType} />
                 )}
               </div>
             );
