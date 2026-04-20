@@ -1275,7 +1275,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
   const toggleWeek = (wk: number) => setExpandedWk(prev => prev === wk ? null : wk);
 
   useEffect(() => {
-    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d ?? {})).catch(() => {});
+    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d.logos ?? {})).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1699,7 +1699,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
   useEffect(() => {
-    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d ?? {})).catch(() => {});
+    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d.logos ?? {})).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -2659,7 +2659,7 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   const [logos,         setLogos]         = useState<Record<string, string>>({});
 
   useEffect(() => {
-    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d ?? {})).catch(() => {});
+    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d.logos ?? {})).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -2842,7 +2842,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const isCommissioner = league?.commissioner_id === userId;
 
   useEffect(() => {
-    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d ?? {})).catch(() => {});
+    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d.logos ?? {})).catch(() => {});
   }, []);
 
   useEffect(() => {
