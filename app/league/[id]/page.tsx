@@ -1271,7 +1271,12 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
   const [stats,         setStats]         = useState<any | null>(null);
   const [loading,       setLoading]       = useState(true);
   const [expandedWk, setExpandedWk] = useState<number | null>(null);
+  const [logos,         setLogos]         = useState<Record<string, string>>({});
   const toggleWeek = (wk: number) => setExpandedWk(prev => prev === wk ? null : wk);
+
+  useEffect(() => {
+    fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d ?? {})).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -1364,6 +1369,10 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
         boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+          {/* School logo */}
+          <div style={{ flexShrink: 0 }}>
+            <SchoolLogo school={player.school} posColor={posColor} logos={logos} size={44} />
+          </div>
           {/* Large pill badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -1511,10 +1520,16 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                   }}
                 >
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isPlayoff ? '#a855f7' : C.muted }}>{wk.week}</div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {wk.opponent
-                      ? `vs ${wk.opponent.length > 12 ? wk.opponent.slice(0, 12) + '…' : wk.opponent}`
-                      : (isPlayoff ? 'PLAYOFF' : '—')}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                    {wk.opponent && logos[wk.opponent] && (
+                      <img src={logos[wk.opponent]} alt={wk.opponent} style={{ width: 16, height: 16, objectFit: 'contain', flexShrink: 0 }}
+                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                    )}
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {wk.opponent
+                        ? `vs ${wk.opponent.length > 10 ? wk.opponent.slice(0, 10) + '…' : wk.opponent}`
+                        : (isPlayoff ? 'PLAYOFF' : '—')}
+                    </span>
                   </div>
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: wk.fantasyPoints != null ? C.gold : C.muted, textAlign: 'right' }}>
                     {wk.fantasyPoints != null
