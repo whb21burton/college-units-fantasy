@@ -23,12 +23,15 @@ export async function POST(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  const baseName    = String(body.name ?? '').trim();
-  const leagueSize  = Math.max(2, Math.min(10000, parseInt(body.league_size) || 8));
-  const buyIn       = Math.max(0, Math.min(10000, parseFloat(body.buy_in) || 0));
-  const isCapped    = leagueSize <= 100;  // auto-derived from size
-  const copies      = Math.max(1, Math.min(20, parseInt(body.copies) || 1));
-  const settings    = body.settings && typeof body.settings === 'object' ? body.settings : {};
+  const baseName           = String(body.name ?? '').trim();
+  const leagueSize         = Math.max(2, Math.min(10000, parseInt(body.league_size) || 8));
+  const buyIn              = Math.max(0, Math.min(10000, parseFloat(body.buy_in) || 0));
+  const isCapped           = leagueSize <= 100;  // auto-derived from size
+  const copies             = Math.max(1, Math.min(20, parseInt(body.copies) || 1));
+  const settings           = body.settings && typeof body.settings === 'object' ? body.settings : {};
+  const maxEntriesPerUser  = body.max_entries_per_user != null
+    ? Math.max(1, Math.min(100, parseInt(body.max_entries_per_user) || 1))
+    : null;
 
   const storedConferenceFilter = isPublic ? (body.conference_filter ?? 'ALL') : 'ALL';
   console.log('[leagues/create] creating:', {
@@ -62,10 +65,11 @@ export async function POST(req: NextRequest) {
         is_public:         isPublic,
         league_type:       body.league_type ?? 'season',
         week:              body.week ?? null,
-        is_capped:         isCapped,
-        invite_code:       '',
-        status:            'forming',
-        settings:          settings,
+        is_capped:              isCapped,
+        max_entries_per_user:   maxEntriesPerUser,
+        invite_code:            '',
+        status:                 'forming',
+        settings:               settings,
       })
       .select('id, invite_code, name')
       .single();

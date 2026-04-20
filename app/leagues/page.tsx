@@ -41,6 +41,7 @@ type League = {
   member_count: number;
   is_capped: boolean | null;
   is_featured: boolean | null;
+  max_entries_per_user: number | null;
   settings: { allowed_schools?: string[] } | null;
 };
 
@@ -67,11 +68,10 @@ const STYLE_OPTIONS = [
 ] as const;
 
 const TYPE_OPTIONS = [
-  { value: 'all',      label: 'All'           },
-  { value: 'capped',   label: '🧢 Capped'    },
-  { value: 'nocap',    label: '∞ No Cap'     },
-  { value: 'featured', label: '⭐ Featured'  },
-  { value: 'h2h',      label: '1v1'          },
+  { value: 'all',    label: 'All'        },
+  { value: 'capped', label: '🧢 Capped' },
+  { value: 'nocap',  label: '∞ No Cap'  },
+  { value: '1v1',    label: '1v1'       },
 ] as const;
 
 function formatStartTime(league: League): string {
@@ -792,10 +792,9 @@ function PublicLeaguesContent() {
         if (!cf.includes(styleFilter)) return false;
       }
     }
-    if (typeFilter === 'capped'   && l.is_capped === false)       return false;
-    if (typeFilter === 'nocap'    && l.is_capped !== false)        return false;
-    if (typeFilter === 'featured' && !isFeatured(l))              return false;
-    if (typeFilter === 'h2h'      && l.league_size !== 2)         return false;
+    if (typeFilter === 'capped' && !((l.max_entries_per_user ?? 0) > 0 && l.league_size > 2)) return false;
+    if (typeFilter === 'nocap'  && !(!(l.max_entries_per_user) && l.league_size > 2))         return false;
+    if (typeFilter === '1v1'    && l.league_size !== 2)                                        return false;
     const fMin = fieldMin ? parseInt(fieldMin) : null;
     const fMax = fieldMax ? parseInt(fieldMax) : null;
     if (fMin !== null && l.league_size < fMin) return false;
@@ -898,7 +897,7 @@ function PublicLeaguesContent() {
           </div>
 
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 6, padding: '0 12px' }}>Contest Types</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 6, padding: '0 12px' }}>Entry Amount</div>
             {TYPE_OPTIONS.map(o => (
               <SideRow key={o.value} active={typeFilter === o.value} onClick={() => setTypeFilter(o.value)}>{o.label}</SideRow>
             ))}
@@ -977,16 +976,15 @@ function PublicLeaguesContent() {
                         <span style={tagStyle('rgba(245,166,35,.15)', '#f5a623')}>
                           ⚡ Weekly{league.week ? ` · Wk ${league.week}` : ''}
                         </span>
-                        {league.league_size === 2 && (
-                          <span style={tagStyle('rgba(58,134,255,.15)', '#3a86ff')}>1v1</span>
-                        )}
+                        {league.league_size === 2
+                          ? <span style={tagStyle('rgba(58,134,255,.15)', '#3a86ff')}>1v1</span>
+                          : (league.max_entries_per_user ?? 0) > 0
+                            ? <span style={tagStyle('rgba(74,93,122,.12)', '#7a90b0')}>🧢 Capped</span>
+                            : <span style={tagStyle('rgba(46,204,113,.12)', '#2ecc71')}>∞ No Cap</span>
+                        }
                         {league.is_featured && (
                           <span style={tagStyle('rgba(212,168,40,.15)', '#d4a828')}>⭐ Featured</span>
                         )}
-                        {league.is_capped === false
-                          ? <span style={tagStyle('rgba(46,204,113,.12)', '#2ecc71')}>∞ No Cap</span>
-                          : <span style={tagStyle('rgba(74,93,122,.12)', '#7a90b0')}>🧢 Capped</span>
-                        }
                       </div>
                     </div>
 

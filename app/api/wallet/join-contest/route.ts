@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     // Load league
     const { data: league } = await admin
       .from('leagues')
-      .select('id, name, buy_in, league_size, status, is_public, draft_type, league_type, settings')
+      .select('id, name, buy_in, league_size, status, is_public, draft_type, league_type, settings, max_entries_per_user')
       .eq('id', league_id)
       .single();
 
@@ -51,24 +51,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'League is not accepting members' }, { status: 400 });
     }
 
-    // Check not already a member
-    const { data: existing } = await admin
+    // Count this user's existing entries in the league
+    const { count: userEntryCount } = await admin
       .from('league_members')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .eq('league_id', league_id)
-      .eq('user_id', user.id)
-      .single();
-    if (existing) return NextResponse.json({ error: 'Already a member' }, { status: 409 });
+      .eq('user_id', user.id);
 
-    // Count current members for draft_slot assignment
+    const currentUserEntries = userEntryCount ?? 0;
+
+    if (!league.is_public) {
+      // Private leagues: only 1 entry per user
+      if (currentUserEntries >= 1) {
+        return NextResponse.json({ error: 'Already a member' }, { status: 409 });
+      }
+    } else if (league.max_entries_per_user && league.max_entries_per_user > 0) {
+      // Public capped leagues: enforce per-user limit
+      if (currentUserEntries >= league.max_entries_per_user) {
+        return NextResponse.json(
+          { error: `Maximum ${league.max_entries_per_user} entries per account reached` },
+          { status: 400 }
+        );
+      }
+    }
+    // Public no-cap (max_entries_per_user is null): no per-user limit
+
+    // Count current total members for draft_slot assignment and capacity check
     const { count: memberCount } = await admin
       .from('league_members')
       .select('*', { count: 'exact', head: true })
       .eq('league_id', league_id);
 
-    // For private leagues enforce capacity; public leagues draft with whoever joins
+    // For private leagues enforce capacity; public leagues fill remaining with CPU bots
     if (!league.is_public && (memberCount ?? 0) >= league.league_size) {
       return NextResponse.json({ error: 'League is full' }, { status: 400 });
+    }
+    // Public leagues: also check total capacity
+    if (league.is_public && (memberCount ?? 0) >= league.league_size) {
+      return NextResponse.json({ error: 'Contest is full' }, { status: 400 });
     }
 
     const buyInCents = Math.round((league.buy_in ?? 0) * 100);

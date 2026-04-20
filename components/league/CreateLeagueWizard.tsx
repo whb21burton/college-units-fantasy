@@ -44,7 +44,7 @@ const C = {
   text:'#e8edf5', sub:'#7a90b0', red:'#e74c3c', green:'#2ecc71',
 };
 
-type WizStep = 'settings' | 'team-name' | 'player-pool' | 'copies' | 'review' | 'done';
+type WizStep = 'settings' | 'team-name' | 'player-pool' | 'entry-amount' | 'copies' | 'review' | 'done';
 
 function clampInt(s: string, min: number, max: number, fallback: number): number {
   const n = parseInt(s, 10);
@@ -79,6 +79,10 @@ export function CreateLeagueWizard() {
 
   // copies
   const [copies, setCopies] = useState(1);
+
+  // entry amount (weekly public admin)
+  const [entryType,         setEntryType]         = useState<'capped' | 'nocap' | '1v1'>('capped');
+  const [maxEntriesPerUser, setMaxEntriesPerUser] = useState(3);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -154,13 +158,13 @@ export function CreateLeagueWizard() {
 
   // ── Progress bar ─────────────────────────────────────────────────────────────
   const progressLabels = isWeeklyPublicAdmin
-    ? ['Settings', 'Player Pool', 'Copies', 'Review']
+    ? ['Settings', 'Player Pool', 'Entry Type', 'Copies', 'Review']
     : !isPublic
       ? ['Settings', 'Your Team', 'Review']
       : ['Settings', 'Review'];
 
   const stepOrder: WizStep[] = isWeeklyPublicAdmin
-    ? ['settings', 'player-pool', 'copies', 'review']
+    ? ['settings', 'player-pool', 'entry-amount', 'copies', 'review']
     : !isPublic
       ? ['settings', 'team-name', 'review']
       : ['settings', 'review'];
@@ -175,24 +179,31 @@ export function CreateLeagueWizard() {
       ? null
       : Array.from(checkedSchools);
 
+    // 1v1 overrides league_size to 2
+    const finalLeagueSize = isWeeklyPublicAdmin && entryType === '1v1' ? 2 : effectiveSize;
+    const finalMaxEntries = isWeeklyPublicAdmin
+      ? (entryType === 'nocap' ? null : entryType === '1v1' ? 1 : maxEntriesPerUser)
+      : null;
+
     const res = await fetch('/api/leagues/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name:              form.name.trim(),
-        buy_in:            effectiveBuyIn,
-        league_size:       effectiveSize,
-        draft_type:        leagueType === 'season'
+        name:                  form.name.trim(),
+        buy_in:                effectiveBuyIn,
+        league_size:           finalLeagueSize,
+        draft_type:            leagueType === 'season'
           ? (isPublic ? (conferenceFilter === 'ALL' ? 'salary' : 'snake') : form.draft_type)
           : 'snake',
-        salary_cap:        form.salary_cap,
-        is_public:         isPublic,
-        conference_filter: isPublic ? (isWeeklyPublicAdmin ? conferenceForAPI : conferenceFilter) : 'ALL',
-        league_type:       leagueType,
-        week:              leagueType === 'weekly' ? week : null,
-        team_name:         form.team_name.trim() || 'My Team',
-        copies:            isWeeklyPublicAdmin ? copies : 1,
-        settings:          allowedSchools ? { allowed_schools: allowedSchools } : {},
+        salary_cap:            form.salary_cap,
+        is_public:             isPublic,
+        conference_filter:     isPublic ? (isWeeklyPublicAdmin ? conferenceForAPI : conferenceFilter) : 'ALL',
+        league_type:           leagueType,
+        week:                  leagueType === 'weekly' ? week : null,
+        team_name:             form.team_name.trim() || 'My Team',
+        copies:                isWeeklyPublicAdmin ? copies : 1,
+        settings:              allowedSchools ? { allowed_schools: allowedSchools } : {},
+        max_entries_per_user:  finalMaxEntries,
       }),
     });
 
@@ -625,7 +636,106 @@ export function CreateLeagueWizard() {
           </Card>
           <NavRow>
             <GhostBtn onClick={() => setWizStep('settings')}>← Back</GhostBtn>
-            <PrimaryBtn disabled={!canProceedPlayerPool} onClick={() => setWizStep('copies')}>
+            <PrimaryBtn disabled={!canProceedPlayerPool} onClick={() => setWizStep('entry-amount')}>
+              Next: Entry Type →
+            </PrimaryBtn>
+          </NavRow>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          ENTRY AMOUNT STEP (weekly public admin only)
+      ══════════════════════════════════════════════ */}
+      {wizStep === 'entry-amount' && (
+        <div className="wiz-step">
+          <Card>
+            <FieldLabel>Entry Amount</FieldLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+              {([
+                {
+                  key: 'capped' as const,
+                  icon: '🧢',
+                  title: 'Capped',
+                  desc: 'Limit how many entries each account can submit',
+                },
+                {
+                  key: 'nocap' as const,
+                  icon: '∞',
+                  title: 'No Cap',
+                  desc: 'Accounts can enter as many lineups as they want',
+                },
+                {
+                  key: '1v1' as const,
+                  icon: '⚔️',
+                  title: '1v1',
+                  desc: 'One entry vs one other entry — winner takes all',
+                },
+              ]).map(opt => (
+                <button
+                  key={opt.key}
+                  onClick={() => setEntryType(opt.key)}
+                  style={{
+                    padding: '14px 16px', border: `2px solid ${entryType === opt.key ? C.gold : C.surf3}`,
+                    borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                    background: entryType === opt.key ? 'rgba(212,168,40,.08)' : C.surf2,
+                    transition: 'all .15s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                    <span style={{ fontSize: 18 }}>{opt.icon}</span>
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 14, color: entryType === opt.key ? C.goldLight : C.text, letterSpacing: .5 }}>
+                      {opt.title}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 11, color: C.sub, paddingLeft: 28 }}>
+                    {opt.desc}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {entryType === 'capped' && (
+              <div style={{ padding: '12px 14px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8 }}>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+                  Max entries per account
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  {[1, 2, 3, 5, 10].map(n => (
+                    <ToggleBtn key={n} active={maxEntriesPerUser === n} onClick={() => setMaxEntriesPerUser(n)}>{n}</ToggleBtn>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, flexShrink: 0 }}>Custom:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={maxEntriesPerUser}
+                    onChange={e => setMaxEntriesPerUser(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                    style={{ ...rangeInput, width: 80 }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {entryType === '1v1' && (
+              <div style={{ padding: '10px 14px', background: 'rgba(58,134,255,.06)', border: '1px solid rgba(58,134,255,.2)', borderRadius: 8, fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.sub, lineHeight: 1.7 }}>
+                ⚔️ League size locked to 2. Each account may enter once.
+              </div>
+            )}
+
+            {effectiveBuyIn > 0 && (
+              <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(212,168,40,.06)', border: '1px solid rgba(212,168,40,.15)', borderRadius: 8, fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.sub, lineHeight: 1.7 }}>
+                Each entry costs <strong style={{ color: C.gold }}>${effectiveBuyIn.toFixed(2)}</strong>.
+                {entryType === 'capped' && maxEntriesPerUser > 1 && (
+                  <> An account submitting {maxEntriesPerUser} entries pays <strong style={{ color: C.gold }}>${(effectiveBuyIn * maxEntriesPerUser).toFixed(2)}</strong>.</>
+                )}
+              </div>
+            )}
+          </Card>
+          <NavRow>
+            <GhostBtn onClick={() => setWizStep('player-pool')}>← Back</GhostBtn>
+            <PrimaryBtn onClick={() => setWizStep('copies')}>
               Next: Copies →
             </PrimaryBtn>
           </NavRow>
@@ -679,7 +789,7 @@ export function CreateLeagueWizard() {
             )}
           </Card>
           <NavRow>
-            <GhostBtn onClick={() => setWizStep('player-pool')}>← Back</GhostBtn>
+            <GhostBtn onClick={() => setWizStep('entry-amount')}>← Back</GhostBtn>
             <PrimaryBtn onClick={() => setWizStep('review')}>
               Next: Review →
             </PrimaryBtn>
@@ -706,6 +816,7 @@ export function CreateLeagueWizard() {
               ...(isWeeklyPublicAdmin
                 ? [
                     ['Player Pool', schoolsLabel],
+                    ['Entry Type', entryType === 'capped' ? `🧢 Capped — max ${maxEntriesPerUser}/account` : entryType === '1v1' ? '⚔️ 1v1 — 1 entry per account, 2 teams' : '∞ No Cap — unlimited entries per account'],
                     ['Copies', copies === 1 ? '1 contest' : `${copies} contests (${form.name} 01 … ${String(copies).padStart(2,'0')})`],
                   ]
                 : isPublic && leagueType === 'season'
