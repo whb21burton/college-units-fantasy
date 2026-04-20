@@ -58,13 +58,13 @@ type Member = {
 };
 
 const STYLE_OPTIONS = [
-  { value: 'ALL',         label: 'All D1 Schools' },
-  { value: 'SEC',         label: 'SEC Only'       },
-  { value: 'Big Ten',     label: 'Big Ten Only'   },
-  { value: 'ACC',         label: 'ACC Only'       },
-  { value: 'Big 12',      label: 'Big 12 Only'    },
-  { value: 'Pac-12',      label: 'Pac-12 Only'    },
-  { value: 'Independent', label: 'Independent'    },
+  { value: 'All D1',      label: 'All D1'      },
+  { value: 'SEC',         label: 'SEC'         },
+  { value: 'Big Ten',     label: 'Big Ten'     },
+  { value: 'ACC',         label: 'ACC'         },
+  { value: 'Big 12',      label: 'Big 12'      },
+  { value: 'Pac-12',      label: 'Pac-12'      },
+  { value: 'Independent', label: 'Independent' },
 ] as const;
 
 const TYPE_OPTIONS = [
@@ -120,14 +120,14 @@ function formatHeaderTime(league: League): { countdown: string; date: string } {
 
 function styleLabel(cf: string): string {
   if (!cf || cf === 'ALL' || cf === 'All D1' || cf === 'All D1 Schools') return 'All D1';
-  if (cf.includes('SEC'))         return 'SEC';
-  if (cf.includes('Big Ten'))     return 'Big Ten';
-  if (cf.includes('ACC'))         return 'ACC';
-  if (cf.includes('Big 12'))      return 'Big 12';
-  if (cf.includes('Pac-12'))      return 'Pac-12';
-  if (cf.includes('Independent')) return 'Independent';
-  if (cf === 'CUSTOM')            return 'Custom';
-  return cf;
+  if (cf === 'SEC')         return 'SEC';
+  if (cf === 'Big Ten')     return 'Big Ten';
+  if (cf === 'ACC')         return 'ACC';
+  if (cf === 'Big 12')      return 'Big 12';
+  if (cf === 'Pac-12')      return 'Pac-12';
+  if (cf === 'Independent') return 'Independent';
+  if (cf === 'CUSTOM')      return 'Custom';
+  return 'All D1';
 }
 
 function isFeatured(l: League): boolean {
@@ -165,13 +165,14 @@ function payouts(l: League): { place: string; amount: number; pct: number }[] {
 }
 
 function autoSummary(l: League, members: Member[]): string {
-  const cf = l.conference_filter === 'ALL' ? 'All D1' : l.conference_filter;
+  const cf = styleLabel(l.conference_filter ?? '');
+  const confStr = cf === 'All D1' ? 'All D1' : `${cf} Only`;
   const type = l.league_type === 'weekly' ? 'weekly DFS' : 'season';
   const size = l.league_size;
   const prize = totalPrize(l);
   const po = payouts(l);
   const feeStr = l.buy_in === 0 ? 'free to enter' : `$${l.buy_in.toFixed(2)} entry fee`;
-  let summary = `This ${size}-team ${cf} ${type} league`;
+  let summary = `This ${size}-team ${confStr} ${type} league`;
   if (prize > 0) {
     summary += ` features $${prize.toFixed(2)} in total prizes.`;
     if (po.length >= 2) {
@@ -534,13 +535,11 @@ function ContestDetailModal({
               {/* Eligible Schools section */}
               {(() => {
                 const allowed = league.settings?.allowed_schools;
-                const cf = league.conference_filter;
+                const cf = styleLabel(league.conference_filter ?? '');
                 const isAll = !allowed || allowed.length === 0;
                 const schoolLabel = isAll
-                  ? 'All D1 Schools'
-                  : cf && cf !== 'ALL' && cf !== 'CUSTOM'
-                    ? `${cf} Only`
-                    : `${allowed.length} schools`;
+                  ? cf === 'All D1' ? 'All D1 Schools' : `${cf} Only`
+                  : `${allowed.length} schools`;
                 const schoolList = isAll ? null : allowed;
                 return (
                   <div style={{ marginTop: 20, background: '#0a101c', border: '1px solid ' + C.surf3, borderRadius: 6, padding: '14px 16px' }}>
@@ -784,12 +783,12 @@ function PublicLeaguesContent() {
     if (maxFee !== null && l.buy_in > maxFee) return false;
     if (styleFilter !== '__all__') {
       const cf = l.conference_filter ?? '';
-      if (styleFilter === 'ALL') {
-        // "All D1 Schools" filter — only leagues open to all schools
-        if (cf !== 'ALL' && cf !== 'All D1' && cf !== 'All D1 Schools') return false;
+      if (styleFilter === 'All D1') {
+        // All D1 — match any variant of "all schools"
+        if (cf !== 'ALL' && cf !== 'All D1' && cf !== 'All D1 Schools' && cf !== '') return false;
       } else {
-        // Specific conference — use includes so "SEC", "SEC Only", etc. all match
-        if (!cf.includes(styleFilter)) return false;
+        // Exact match for specific conferences
+        if (cf !== styleFilter) return false;
       }
     }
     if (typeFilter === 'capped' && !((l.max_entries_per_user ?? 0) > 0 && l.league_size > 2)) return false;

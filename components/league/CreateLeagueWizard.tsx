@@ -44,7 +44,18 @@ const C = {
   text:'#e8edf5', sub:'#7a90b0', red:'#e74c3c', green:'#2ecc71',
 };
 
-type WizStep = 'settings' | 'team-name' | 'player-pool' | 'entry-amount' | 'copies' | 'review' | 'done';
+type WizStep = 'settings' | 'team-name' | 'player-pool' | 'conference-style' | 'entry-amount' | 'copies' | 'review' | 'done';
+type ConfStyle = 'All D1' | 'SEC' | 'Big Ten' | 'ACC' | 'Big 12' | 'Pac-12' | 'Independent';
+
+const CONF_OPTIONS: { value: ConfStyle; icon: string; desc: string }[] = [
+  { value: 'All D1',      icon: '🌎', desc: 'All Division I schools' },
+  { value: 'SEC',         icon: '🐘', desc: 'SEC schools only' },
+  { value: 'Big Ten',     icon: '🦁', desc: 'Big Ten schools only' },
+  { value: 'ACC',         icon: '🐅', desc: 'ACC schools only' },
+  { value: 'Big 12',      icon: '🤠', desc: 'Big 12 schools only' },
+  { value: 'Pac-12',      icon: '🌊', desc: 'Pac-12 schools only' },
+  { value: 'Independent', icon: '🦅', desc: 'Independent schools only' },
+];
 
 function clampInt(s: string, min: number, max: number, fallback: number): number {
   const n = parseInt(s, 10);
@@ -83,6 +94,9 @@ export function CreateLeagueWizard() {
   // entry amount (weekly public admin)
   const [entryType,         setEntryType]         = useState<'capped' | 'nocap' | '1v1'>('capped');
   const [maxEntriesPerUser, setMaxEntriesPerUser] = useState(3);
+
+  // conference style (weekly public admin)
+  const [confStyle, setConfStyle] = useState<ConfStyle>('All D1');
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -146,7 +160,7 @@ export function CreateLeagueWizard() {
 
   // ── Navigation ───────────────────────────────────────────────────────────────
   function nextFromSettings() {
-    if (isWeeklyPublicAdmin) setWizStep('player-pool');
+    if (isWeeklyPublicAdmin) setWizStep('conference-style');
     else if (!isPublic) setWizStep('team-name');
     else setWizStep('review');
   }
@@ -158,13 +172,13 @@ export function CreateLeagueWizard() {
 
   // ── Progress bar ─────────────────────────────────────────────────────────────
   const progressLabels = isWeeklyPublicAdmin
-    ? ['Settings', 'Player Pool', 'Entry Type', 'Copies', 'Review']
+    ? ['Settings', 'Conference', 'Entry Type', 'Copies', 'Review']
     : !isPublic
       ? ['Settings', 'Your Team', 'Review']
       : ['Settings', 'Review'];
 
   const stepOrder: WizStep[] = isWeeklyPublicAdmin
-    ? ['settings', 'player-pool', 'entry-amount', 'copies', 'review']
+    ? ['settings', 'conference-style', 'entry-amount', 'copies', 'review']
     : !isPublic
       ? ['settings', 'team-name', 'review']
       : ['settings', 'review'];
@@ -197,7 +211,7 @@ export function CreateLeagueWizard() {
           : 'snake',
         salary_cap:            form.salary_cap,
         is_public:             isPublic,
-        conference_filter:     isPublic ? (isWeeklyPublicAdmin ? conferenceForAPI : conferenceFilter) : 'ALL',
+        conference_filter:     isPublic ? (isWeeklyPublicAdmin ? confStyle : conferenceFilter) : 'ALL',
         league_type:           leagueType,
         week:                  leagueType === 'weekly' ? week : null,
         team_name:             form.team_name.trim() || 'My Team',
@@ -516,7 +530,7 @@ export function CreateLeagueWizard() {
           <NavRow>
             <div />
             <PrimaryBtn disabled={!canProceedSettings} onClick={nextFromSettings}>
-              {isWeeklyPublicAdmin ? 'Next: Player Pool →' : !isPublic ? 'Next: Your Team →' : 'Next: Review →'}
+              {isWeeklyPublicAdmin ? 'Next: Conference →' : !isPublic ? 'Next: Your Team →' : 'Next: Review →'}
             </PrimaryBtn>
           </NavRow>
         </div>
@@ -644,6 +658,51 @@ export function CreateLeagueWizard() {
       )}
 
       {/* ══════════════════════════════════════════════
+          CONFERENCE STYLE STEP (weekly public admin only)
+      ══════════════════════════════════════════════ */}
+      {wizStep === 'conference-style' && (
+        <div className="wiz-step">
+          <Card>
+            <FieldLabel>Conference Style</FieldLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {CONF_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setConfStyle(opt.value)}
+                  style={{
+                    padding: '12px 16px', border: `2px solid ${confStyle === opt.value ? C.gold : C.surf3}`,
+                    borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                    background: confStyle === opt.value ? 'rgba(212,168,40,.08)' : C.surf2,
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    transition: 'all .15s',
+                  }}
+                >
+                  <span style={{ fontSize: 20 }}>{opt.icon}</span>
+                  <div>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 14, color: confStyle === opt.value ? C.goldLight : C.text, letterSpacing: .5 }}>
+                      {opt.value}
+                    </div>
+                    <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 11, color: C.sub, marginTop: 2 }}>
+                      {opt.desc}
+                    </div>
+                  </div>
+                  {confStyle === opt.value && (
+                    <span style={{ marginLeft: 'auto', color: C.gold, fontSize: 16 }}>✓</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </Card>
+          <NavRow>
+            <GhostBtn onClick={() => setWizStep('settings')}>← Back</GhostBtn>
+            <PrimaryBtn onClick={() => setWizStep('entry-amount')}>
+              Next: Entry Type →
+            </PrimaryBtn>
+          </NavRow>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
           ENTRY AMOUNT STEP (weekly public admin only)
       ══════════════════════════════════════════════ */}
       {wizStep === 'entry-amount' && (
@@ -734,7 +793,7 @@ export function CreateLeagueWizard() {
             )}
           </Card>
           <NavRow>
-            <GhostBtn onClick={() => setWizStep('player-pool')}>← Back</GhostBtn>
+            <GhostBtn onClick={() => setWizStep('conference-style')}>← Back</GhostBtn>
             <PrimaryBtn onClick={() => setWizStep('copies')}>
               Next: Copies →
             </PrimaryBtn>
@@ -815,7 +874,7 @@ export function CreateLeagueWizard() {
               ['Visibility', isPublic ? '🌐 Public — listed in leagues browser' : '🔒 Private — invite link only'],
               ...(isWeeklyPublicAdmin
                 ? [
-                    ['Player Pool', schoolsLabel],
+                    ['Conference', confStyle],
                     ['Entry Type', entryType === 'capped' ? `🧢 Capped — max ${maxEntriesPerUser}/account` : entryType === '1v1' ? '⚔️ 1v1 — 1 entry per account, 2 teams' : '∞ No Cap — unlimited entries per account'],
                     ['Copies', copies === 1 ? '1 contest' : `${copies} contests (${form.name} 01 … ${String(copies).padStart(2,'0')})`],
                   ]
