@@ -89,12 +89,17 @@ export async function GET() {
     // Non-fatal — member_count will just be 0
   }
 
-  const result = leagues.map(l => ({
-    ...l,
-    conference_filter: l.conference_filter ?? 'ALL',
-    league_type:       l.league_type ?? 'season',
-    member_count:      cm[l.id] ?? 0,
-  }));
+  const result = leagues.map(l => {
+    // Log first league for debugging
+    if (l === leagues[0]) console.log('[public-leagues] first row raw:', { conference_filter: l.conference_filter, is_capped: l.is_capped, max_entries_per_user: l.max_entries_per_user });
+    return {
+      ...l,
+      // Preserve exact DB value — only default if truly null/undefined
+      conference_filter: l.conference_filter ?? 'All D1',
+      league_type:       l.league_type ?? 'season',
+      member_count:      cm[l.id] ?? 0,
+    };
+  });
 
   return NextResponse.json(result, { headers: NO_STORE });
 }

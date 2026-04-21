@@ -764,7 +764,9 @@ function PublicLeaguesContent() {
         });
         if (!res.ok) { setLoading(false); return; }
         const data: League[] = await res.json();
-        setLeagues(Array.isArray(data) ? data : []);
+        const arr = Array.isArray(data) ? data : [];
+        if (arr[0]) console.log('[leagues] first league raw data:', arr[0]);
+        setLeagues(arr);
       } catch {
         // network error — leave leagues empty
       }
@@ -783,17 +785,19 @@ function PublicLeaguesContent() {
     if (maxFee !== null && l.buy_in > maxFee) return false;
     if (styleFilter !== '__all__') {
       const cf = l.conference_filter ?? '';
-      if (styleFilter === 'All D1') {
-        // All D1 — match any variant of "all schools"
-        if (cf !== 'ALL' && cf !== 'All D1' && cf !== 'All D1 Schools' && cf !== '') return false;
-      } else {
-        // Exact match for specific conferences
-        if (cf !== styleFilter) return false;
-      }
+      const matchesConference =
+        styleFilter === 'All D1'
+          ? (!cf || cf === 'ALL' || cf === 'All D1' || cf === 'All D1 Schools')
+          : cf === styleFilter;
+      if (!matchesConference) return false;
     }
-    if (typeFilter === 'capped' && !(l.is_capped && l.league_size > 2))  return false;
-    if (typeFilter === 'nocap'  && !(!l.is_capped && l.league_size > 2)) return false;
-    if (typeFilter === '1v1'    && l.league_size !== 2)                   return false;
+    if (typeFilter !== 'all') {
+      const matchesEntryType =
+        (typeFilter === 'capped' && l.is_capped === true  && l.league_size !== 2) ||
+        (typeFilter === 'nocap'  && (l.is_capped === false || l.is_capped === null) && l.league_size !== 2) ||
+        (typeFilter === '1v1'    && l.league_size === 2);
+      if (!matchesEntryType) return false;
+    }
     const fMin = fieldMin ? parseInt(fieldMin) : null;
     const fMax = fieldMax ? parseInt(fieldMax) : null;
     if (fMin !== null && l.league_size < fMin) return false;
@@ -977,7 +981,7 @@ function PublicLeaguesContent() {
                         </span>
                         {league.league_size === 2
                           ? <span style={tagStyle('rgba(58,134,255,.15)', '#3a86ff')}>1v1</span>
-                          : league.is_capped
+                          : league.is_capped === true
                             ? <span style={tagStyle('rgba(74,93,122,.12)', '#7a90b0')}>🧢 Capped</span>
                             : <span style={tagStyle('rgba(46,204,113,.12)', '#2ecc71')}>∞ No Cap</span>
                         }
@@ -987,7 +991,9 @@ function PublicLeaguesContent() {
                       </div>
                     </div>
 
-                    <div style={{ padding: '12px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>{league.conference_filter && league.conference_filter !== 'ALL' ? league.conference_filter : 'All D1'}</div>
+                    <div style={{ padding: '12px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>
+                      {(!league.conference_filter || league.conference_filter === 'ALL') ? 'All D1' : league.conference_filter}
+                    </div>
 
                     <div style={{ padding: '12px 8px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: league.buy_in > 0 ? C.gold : C.green, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {league.buy_in === 0 ? 'Free' : `🪙 $${league.buy_in.toFixed(2)}`}
