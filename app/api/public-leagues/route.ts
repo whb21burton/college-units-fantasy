@@ -1,12 +1,6 @@
 /**
  * GET /api/public-leagues
- *
- * Returns all public leagues with status forming/drafting/active.
- * Always served with Cache-Control: no-store so the browser never serves
- * a stale 304 after a new league is created.
- *
- * Falls back to a simpler query if columns like is_public, league_type,
- * or conference_filter don't exist yet in the schema.
+ * Returns all public weekly leagues with status forming/drafting/active.
  */
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-server';
@@ -22,57 +16,30 @@ const NO_STORE = {
 export async function GET() {
   const admin = createAdminClient();
 
-  // ── Primary query: full column set with is_public filter ──────────────────
-  let leagues: any[] | null = null;
-  let primaryOk = false;
+  const { data, error } = await admin
+    .from('leagues')
+    .select('id, name, buy_in, league_size, draft_type, league_type, week, status, invite_code, conference_filter, commissioner_id, created_at, is_capped, is_featured, max_entries_per_user, settings, is_public')
+    .eq('is_public', true)
+    .eq('league_type', 'weekly')
+    .in('status', ['forming', 'drafting', 'active'])
+    .order('created_at', { ascending: false });
 
-  try {
-    const { data, error } = await admin
-      .from('leagues')
-      .select('id, name, buy_in, league_size, draft_type, league_type, week, status, invite_code, conference_filter, commissioner_id, created_at, draft_start_time, is_capped, is_featured, max_entries_per_user, settings, is_public')
-      .eq('is_public', true)
-      .eq('league_type', 'weekly')
-      .in('status', ['forming', 'drafting', 'active'])
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('[public-leagues] primary query error (full):', error.message, error.code, error.details);
-    } else {
-      leagues = data ?? [];
-      primaryOk = true;
-      console.log('[public-leagues] primary query ok, rows:', leagues.length);
-    }
-  } catch (err: any) {
-    console.error('[public-leagues] primary query threw:', err?.message ?? err);
+  if (error) {
+    console.error('[public-leagues] query error:', error.message);
+    return NextResponse.json([], { headers: NO_STORE });
   }
 
-  // ── Fallback: minimal query if columns missing ────────────────────────────
-  if (!primaryOk) {
-    try {
-      const { data, error } = await admin
-        .from('leagues')
-        .select('id, name, buy_in, league_size, draft_type, status, invite_code, commissioner_id, created_at')
-        .eq('league_type', 'weekly')
-        .in('status', ['forming', 'drafting', 'active'])
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (error) {
-        console.error('[public-leagues] fallback query error:', error.message, error.code, error.details);
-        // Return empty array — never 500 to the client
-        return NextResponse.json([], { headers: NO_STORE });
-      }
-
-      leagues = data ?? [];
-      console.log('[public-leagues] fallback query ok, rows:', leagues.length);
-    } catch (err: any) {
-      console.error('[public-leagues] fallback query threw:', err?.message ?? err);
-      return NextResponse.json([], { headers: NO_STORE });
-    }
+  const leagues = data ?? [];
+  if (leagues[0]) {
+    console.log('[public-leagues] first row:', {
+      conference_filter: leagues[0].conference_filter,
+      is_capped: leagues[0].is_capped,
+      max_entries_per_user: leagues[0].max_entries_per_user,
+    });
   }
 
-  // ── Member counts ─────────────────────────────────────────────────────────
-  let cm: Record<string, number> = {};
+  // Count members for each league
+  const cm: Record<string, number> = {};
   try {
     const counts = await Promise.all(
       leagues.map(l =>
@@ -86,20 +53,14 @@ export async function GET() {
     counts.forEach(c => { cm[c.id] = c.count; });
   } catch (err: any) {
     console.error('[public-leagues] member count error:', err?.message ?? err);
-    // Non-fatal — member_count will just be 0
   }
 
-  const result = leagues.map(l => {
-    // Log first league for debugging
-    if (l === leagues[0]) console.log('[public-leagues] first row raw:', { conference_filter: l.conference_filter, is_capped: l.is_capped, max_entries_per_user: l.max_entries_per_user });
-    return {
-      ...l,
-      // Preserve exact DB value — only default if truly null/undefined
-      conference_filter: l.conference_filter ?? 'All D1',
-      league_type:       l.league_type ?? 'season',
-      member_count:      cm[l.id] ?? 0,
-    };
-  });
+  const result = leagues.map(l => ({
+    ...l,
+    // Preserve exact DB values — only default if truly null
+    conference_filter: l.conference_filter ?? 'All D1',
+    member_count:      cm[l.id] ?? 0,
+  }));
 
   return NextResponse.json(result, { headers: NO_STORE });
 }
