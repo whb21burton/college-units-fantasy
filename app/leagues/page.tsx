@@ -791,9 +791,9 @@ function PublicLeaguesContent() {
         if (cf !== styleFilter) return false;
       }
     }
-    if (typeFilter === 'capped' && !((l.max_entries_per_user ?? 0) > 0 && l.league_size > 2)) return false;
-    if (typeFilter === 'nocap'  && !(!(l.max_entries_per_user) && l.league_size > 2))         return false;
-    if (typeFilter === '1v1'    && l.league_size !== 2)                                        return false;
+    if (typeFilter === 'capped' && !(l.is_capped && l.league_size > 2))  return false;
+    if (typeFilter === 'nocap'  && !(!l.is_capped && l.league_size > 2)) return false;
+    if (typeFilter === '1v1'    && l.league_size !== 2)                   return false;
     const fMin = fieldMin ? parseInt(fieldMin) : null;
     const fMax = fieldMax ? parseInt(fieldMax) : null;
     if (fMin !== null && l.league_size < fMin) return false;
@@ -977,7 +977,7 @@ function PublicLeaguesContent() {
                         </span>
                         {league.league_size === 2
                           ? <span style={tagStyle('rgba(58,134,255,.15)', '#3a86ff')}>1v1</span>
-                          : (league.max_entries_per_user ?? 0) > 0
+                          : league.is_capped
                             ? <span style={tagStyle('rgba(74,93,122,.12)', '#7a90b0')}>🧢 Capped</span>
                             : <span style={tagStyle('rgba(46,204,113,.12)', '#2ecc71')}>∞ No Cap</span>
                         }
@@ -987,7 +987,7 @@ function PublicLeaguesContent() {
                       </div>
                     </div>
 
-                    <div style={{ padding: '12px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>{styleLabel(league.conference_filter)}</div>
+                    <div style={{ padding: '12px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>{league.conference_filter && league.conference_filter !== 'ALL' ? league.conference_filter : 'All D1'}</div>
 
                     <div style={{ padding: '12px 8px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: league.buy_in > 0 ? C.gold : C.green, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {league.buy_in === 0 ? 'Free' : `🪙 $${league.buy_in.toFixed(2)}`}

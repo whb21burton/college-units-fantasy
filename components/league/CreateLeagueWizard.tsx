@@ -195,9 +195,18 @@ export function CreateLeagueWizard() {
 
     // 1v1 overrides league_size to 2
     const finalLeagueSize = isWeeklyPublicAdmin && entryType === '1v1' ? 2 : effectiveSize;
-    const finalMaxEntries = isWeeklyPublicAdmin
+    const finalMaxEntries: number | null = isWeeklyPublicAdmin
       ? (entryType === 'nocap' ? null : entryType === '1v1' ? 1 : maxEntriesPerUser)
       : null;
+    const finalIsCapped = isWeeklyPublicAdmin ? (entryType !== 'nocap') : false;
+    const finalConferenceFilter = isPublic ? (isWeeklyPublicAdmin ? confStyle : conferenceFilter) : 'All D1';
+
+    console.log('[CreateLeague] submitting:', {
+      conference_filter: finalConferenceFilter,
+      max_entries_per_user: finalMaxEntries,
+      is_capped: finalIsCapped,
+      league_type: leagueType,
+    });
 
     const res = await fetch('/api/leagues/create', {
       method: 'POST',
@@ -211,13 +220,14 @@ export function CreateLeagueWizard() {
           : 'snake',
         salary_cap:            form.salary_cap,
         is_public:             isPublic,
-        conference_filter:     isPublic ? (isWeeklyPublicAdmin ? confStyle : conferenceFilter) : 'ALL',
+        conference_filter:     finalConferenceFilter,
         league_type:           leagueType,
         week:                  leagueType === 'weekly' ? week : null,
         team_name:             form.team_name.trim() || 'My Team',
         copies:                isWeeklyPublicAdmin ? copies : 1,
         settings:              allowedSchools ? { allowed_schools: allowedSchools } : {},
         max_entries_per_user:  finalMaxEntries,
+        is_capped:             finalIsCapped,
       }),
     });
 

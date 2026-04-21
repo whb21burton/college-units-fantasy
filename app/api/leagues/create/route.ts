@@ -26,24 +26,20 @@ export async function POST(req: NextRequest) {
   const baseName           = String(body.name ?? '').trim();
   const leagueSize         = Math.max(2, Math.min(10000, parseInt(body.league_size) || 8));
   const buyIn              = Math.max(0, Math.min(10000, parseFloat(body.buy_in) || 0));
-  const isCapped           = leagueSize <= 100;  // auto-derived from size
   const copies             = Math.max(1, Math.min(20, parseInt(body.copies) || 1));
   const settings           = body.settings && typeof body.settings === 'object' ? body.settings : {};
   const maxEntriesPerUser  = body.max_entries_per_user != null
     ? Math.max(1, Math.min(100, parseInt(body.max_entries_per_user) || 1))
     : null;
+  // is_capped: use explicit value from body if provided, otherwise derive from max_entries_per_user
+  const isCapped = body.is_capped !== undefined ? Boolean(body.is_capped) : maxEntriesPerUser != null;
 
-  const storedConferenceFilter = isPublic ? (body.conference_filter ?? 'ALL') : 'ALL';
-  console.log('[leagues/create] creating:', {
-    baseName,
-    is_public:         isPublic,
-    league_type:       body.league_type ?? 'season',
-    status:            'forming',
-    conference_filter: storedConferenceFilter,   // <-- exact value saved to DB
-    league_size:       leagueSize,
-    buy_in:            buyIn,
-    is_capped:         isCapped,
-    copies,
+  const storedConferenceFilter = isPublic ? (body.conference_filter ?? 'All D1') : 'All D1';
+  console.log('[leagues/create] saving:', {
+    conference_filter: storedConferenceFilter,
+    max_entries_per_user: maxEntriesPerUser,
+    is_capped: isCapped,
+    league_type: body.league_type ?? 'season',
   });
 
   const created: { id: string; invite_code: string; name: string }[] = [];
