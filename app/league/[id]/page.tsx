@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
+import DraftOrderEditor from '@/components/league/DraftOrderEditor';
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
@@ -448,6 +449,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
         <LeagueSettingsModal
           league={league}
           myMember={myMember}
+          members={members}
           isCommissioner={isCommissioner}
           userId={userId}
           onClose={() => setShowSettings(false)}
@@ -3654,8 +3656,8 @@ const SETTINGS_NAV: { key: SettingsSection; label: string; commOnly: boolean }[]
   { key: 'danger', label: 'Delete League',   commOnly: true  },
 ];
 
-function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose, onUpdate }: {
-  league: any; myMember: any; isCommissioner: boolean;
+function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId, onClose, onUpdate }: {
+  league: any; myMember: any; members: any[]; isCommissioner: boolean;
   userId: string | null; onClose: () => void; onUpdate: () => void;
 }) {
   const router = useRouter();
@@ -3687,28 +3689,31 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
   const [benchSpots, setBenchSpots]     = useState<number>(league?.settings?.bench_spots ?? 7);
 
   // ── Draft Settings ───────────────────────────────────────────
-  const [draftType,      setDraftType]      = useState<string>(league?.draft_type ?? 'snake');
-  const [pickTimer,      setPickTimer]      = useState<number>(league?.settings?.pick_timer ?? 60);
-  const [salaryCap,      setSalaryCap]      = useState<number>(league?.salary_cap ?? 200);
-  const [draftOrderList, setDraftOrderList] = useState<any[]>(league?.settings?.draft_order ?? []);
+  const [draftType,  setDraftType]  = useState<string>(league?.draft_type ?? 'snake');
+  const [pickTimer,  setPickTimer]  = useState<number>(league?.settings?.pick_timer ?? 60);
+  const [salaryCap,  setSalaryCap]  = useState<number>(league?.salary_cap ?? 200);
+
+  // Build teams list for DraftOrderEditor, sorted by existing draft_order if set
+  const existingDraftOrder: any[] = league?.settings?.draft_order ?? [];
+  const draftTeams = (() => {
+    const humanMembers = members.map((m: any) => ({ userId: m.user_id, teamName: m.team_name }));
+    if (existingDraftOrder.length > 0) {
+      // Sort by existing slot order; append any members not yet in order
+      const ordered = existingDraftOrder
+        .filter((t: any) => t.type === 'human')
+        .map((t: any) => humanMembers.find(m => m.userId === t.userId))
+        .filter(Boolean) as { userId: string; teamName: string }[];
+      const inOrder = new Set(ordered.map(t => t.userId));
+      const rest = humanMembers.filter(m => !inOrder.has(m.userId));
+      return [...ordered, ...rest];
+    }
+    return humanMembers;
+  })();
 
   const ALL_CONFS = ['SEC', 'Big Ten', 'Big 12', 'ACC', 'FBS Independents'];
 
   function toggleConf(conf: string) {
     setSelectedConfs(prev => prev.includes(conf) ? prev.filter(c => c !== conf) : [...prev, conf]);
-  }
-
-  function moveDraftOrder(idx: number, dir: -1 | 1) {
-    const next = idx + dir;
-    if (next < 0 || next >= draftOrderList.length) return;
-    const list = [...draftOrderList];
-    [list[idx], list[next]] = [list[next], list[idx]];
-    setDraftOrderList(list.map((t, i) => ({ ...t, slot: i + 1 })));
-  }
-
-  function randomizeDraftOrder() {
-    const shuffled = [...draftOrderList].sort(() => Math.random() - 0.5);
-    setDraftOrderList(shuffled.map((t, i) => ({ ...t, slot: i + 1 })));
   }
 
   function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -3752,7 +3757,7 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
           .update({
             draft_type: draftType,
             salary_cap: salaryCap,
-            settings: { ...(league.settings ?? {}), pick_timer: pickTimer, draft_order: draftOrderList },
+            settings: { ...(league.settings ?? {}), pick_timer: pickTimer },
           })
           .eq('id', league.id);
       }
@@ -4119,31 +4124,22 @@ function LeagueSettingsModal({ league, myMember, isCommissioner, userId, onClose
                 {/* Draft order */}
                 <div>
                   <label style={labelStyle}>Draft Order</label>
-                  {draftOrderList.length > 0 ? (
-                    <>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
-                        {draftOrderList.map((team: any, idx: number) => (
-                          <div key={team.userId ?? idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 7 }}>
-                            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.gold, width: 18, textAlign: 'center' }}>{idx + 1}</span>
-                            <span style={{ flex: 1, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>{team.teamName ?? team.userId}</span>
-                            {isCommissioner && (
-                              <div style={{ display: 'flex', gap: 4 }}>
-                                <button onClick={() => moveDraftOrder(idx, -1)} disabled={idx === 0} style={{ width: 22, height: 22, background: C.surf3, border: 'none', borderRadius: 4, cursor: idx === 0 ? 'default' : 'pointer', color: idx === 0 ? C.muted : C.sub, fontSize: 11 }}>↑</button>
-                                <button onClick={() => moveDraftOrder(idx, 1)} disabled={idx === draftOrderList.length - 1} style={{ width: 22, height: 22, background: C.surf3, border: 'none', borderRadius: 4, cursor: idx === draftOrderList.length - 1 ? 'default' : 'pointer', color: idx === draftOrderList.length - 1 ? C.muted : C.sub, fontSize: 11 }}>↓</button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      {isCommissioner && (
-                        <button onClick={randomizeDraftOrder} style={{ padding: '7px 16px', background: 'rgba(212,168,40,.1)', border: '1px solid rgba(212,168,40,.35)', borderRadius: 7, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.gold }}>
-                          🎲 Randomize Order
-                        </button>
-                      )}
-                    </>
+                  {draftTeams.length > 0 ? (
+                    <DraftOrderEditor
+                      teams={draftTeams}
+                      isCommissioner={isCommissioner}
+                      onSave={async (orderedUserIds) => {
+                        await fetch(`/api/leagues/${league.id}/draft-order`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ orderedUserIds }),
+                        });
+                        onUpdate();
+                      }}
+                    />
                   ) : (
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, letterSpacing: .5, padding: '10px 0' }}>
-                      Draft order is set automatically when the draft starts. Members must join first.
+                      Draft order can be set once members join the league.
                     </div>
                   )}
                 </div>
