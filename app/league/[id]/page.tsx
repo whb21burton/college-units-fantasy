@@ -1132,22 +1132,24 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
     const allPlayers: any[] = week.players ?? [];
     const odrMult: number   = week.multiplier ?? 1.0;
 
-    const TH = (align: 'left' | 'right', minW?: string, gold?: boolean): React.CSSProperties => ({
-      padding: '5px 8px', fontFamily: 'Oswald,sans-serif', fontWeight: 400,
+    const TH = (align: 'left' | 'right', gold?: boolean): React.CSSProperties => ({
+      padding: '6px 8px', fontFamily: 'Oswald,sans-serif', fontWeight: 400,
       fontSize: 11, color: gold ? '#d4a828' : '#7a90b0', textAlign: align,
-      letterSpacing: 0.5, textTransform: 'uppercase' as const, whiteSpace: 'nowrap' as const,
-      minWidth: minW,
+      letterSpacing: 0.5, textTransform: 'uppercase' as const,
+      overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const,
     });
     const TD = (align: 'left' | 'right', extra: React.CSSProperties = {}): React.CSSProperties => ({
       padding: '7px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 12,
-      color: '#e8edf5', textAlign: align, ...extra,
+      color: '#e8edf5', textAlign: align, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const,
+      ...extra,
     });
-    const GOLD_TD: React.CSSProperties = { color: '#d4a828', fontWeight: 700 };
-    const MUTED_TD: React.CSSProperties = { color: '#7a90b0', fontSize: 11 };
-    const containerStyle: React.CSSProperties = { background: '#080c15', borderLeft: '3px solid #d4a828' };
-    const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' };
-    const hdrRow: React.CSSProperties = { background: '#0a0f1a' };
-    const rowDivider: React.CSSProperties = { borderBottom: '1px solid #1e2d47' };
+    const GOLD: React.CSSProperties = { color: '#d4a828', fontWeight: 700 };
+    const DIM:  React.CSSProperties = { color: '#7a90b0' };
+    const wrap: React.CSSProperties = { background: '#080c15', borderLeft: '3px solid #d4a828' };
+    const tbl:  React.CSSProperties = { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' };
+    const hdr:  React.CSSProperties = { background: '#0a0f1a' };
+    const div:  React.CSSProperties = { borderBottom: '1px solid #1e2d47' };
+    const col = (w: string) => <col style={{ width: w }} />;
 
     if (unit === 'DEF') {
       const d        = (week.defStats ?? allPlayers[0]) ?? {};
@@ -1158,24 +1160,25 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
       const safeties = d.safeties ?? 0;
       const pts      = week.fantasyPoints != null ? (week.fantasyPoints as number).toFixed(1) : '—';
       return (
-        <div style={containerStyle}>
-          <table style={tableStyle}>
+        <div style={wrap}>
+          <table style={tbl}>
+            <colgroup>{col('17%')}{col('15%')}{col('18%')}{col('17%')}{col('17%')}{col('16%')}</colgroup>
             <thead>
-              <tr style={hdrRow}>
-                <th style={TH('right', '60px')}>SACKS</th>
-                <th style={TH('right', '55px')}>INT</th>
-                <th style={TH('right', '72px')}>FUM REC</th>
-                <th style={TH('right', '65px')}>DEF TD</th>
-                <th style={TH('right', '65px')}>SAFETY</th>
-                <th style={TH('right', '65px', true)}>PTS</th>
+              <tr style={hdr}>
+                <th style={TH('right')}>SACKS</th>
+                <th style={TH('right')}>INT</th>
+                <th style={TH('right')}>FUM REC</th>
+                <th style={TH('right')}>DEF TD</th>
+                <th style={TH('right')}>SAFETY</th>
+                <th style={TH('right', true)}>PTS</th>
               </tr>
             </thead>
             <tbody>
-              <tr style={rowDivider}>
+              <tr style={div}>
                 {[sacks, ints, fumRec, defTDs, safeties].map((v, i) => (
                   <td key={i} style={TD('right')}>{v}</td>
                 ))}
-                <td style={TD('right', GOLD_TD)}>{pts}</td>
+                <td style={TD('right', GOLD)}>{pts}</td>
               </tr>
               <tr>
                 <td colSpan={6} style={{ padding: '5px 8px', color: '#7a90b0', fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, borderTop: '1px solid #1e2d47' }}>
@@ -1215,40 +1218,58 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
       ? (week.fantasyPoints as number).toFixed(1)
       : displayed.reduce((s: number, p: any, i: number) => s + Math.round((p.rawPts??0)*(weights[i]??0)*odrMult*10)/10, 0).toFixed(1);
 
+    // QB: PLAYER(30%) PASS YDS(12%) PASS TD(10%) INT(9%) RUSH YDS(12%) RUSH TD(10%) PTS(10%) ROLE(7%)
+    // RB: PLAYER(22%) ROLE(7%) ATT(8%) RUSH YDS(12%) RUSH TD(10%) REC(8%) REC YDS(11%) PTS(8%) MULT(7%) WEIGHTED(7%)
+    // WR/TE: PLAYER(28%) ROLE(8%) REC(10%) YDS(12%) TD(9%) PTS(9%) MULT(9%) WEIGHTED(10%) — extra 5% absorbed by player
+    // K: PLAYER(70%) ROLE(10%) PTS(20%)
+    const colgroups: Record<string, React.ReactNode> = {
+      QB: <colgroup>{col('30%')}{col('12%')}{col('10%')}{col('9%')}{col('12%')}{col('10%')}{col('10%')}{col('7%')}</colgroup>,
+      RB: <colgroup>{col('22%')}{col('7%')}{col('8%')}{col('12%')}{col('10%')}{col('8%')}{col('11%')}{col('8%')}{col('7%')}{col('7%')}</colgroup>,
+      WR: <colgroup>{col('33%')}{col('8%')}{col('10%')}{col('12%')}{col('9%')}{col('9%')}{col('9%')}{col('10%')}</colgroup>,
+      TE: <colgroup>{col('33%')}{col('8%')}{col('10%')}{col('12%')}{col('9%')}{col('9%')}{col('9%')}{col('10%')}</colgroup>,
+      K:  <colgroup>{col('70%')}{col('10%')}{col('20%')}</colgroup>,
+    };
+
     return (
-      <div style={containerStyle}>
-        <table style={tableStyle}>
+      <div style={wrap}>
+        <table style={tbl}>
+          {colgroups[unit]}
           <thead>
-            <tr style={hdrRow}>
+            <tr style={hdr}>
               <th style={TH('left')}>PLAYER</th>
-              {unit !== 'K' && <th style={TH('right', '55px')}>ROLE</th>}
               {unit === 'QB' && <>
-                <th style={TH('right', '80px')}>PASS YDS</th>
-                <th style={TH('right', '70px')}>PASS TD</th>
-                <th style={TH('right', '55px')}>INT</th>
-                <th style={TH('right', '85px')}>RUSH YDS</th>
-                <th style={TH('right', '75px')}>RUSH TD</th>
-                <th style={TH('right', '65px', true)}>PTS</th>
+                <th style={TH('right')}>PASS YDS</th>
+                <th style={TH('right')}>PASS TD</th>
+                <th style={TH('right')}>INT</th>
+                <th style={TH('right')}>RUSH YDS</th>
+                <th style={TH('right')}>RUSH TD</th>
+                <th style={TH('right', true)}>PTS</th>
+                <th style={TH('right')}>ROLE</th>
               </>}
               {unit === 'RB' && <>
-                <th style={TH('right', '45px')}>ATT</th>
-                <th style={TH('right', '80px')}>RUSH YDS</th>
-                <th style={TH('right', '75px')}>RUSH TD</th>
-                <th style={TH('right', '50px')}>REC</th>
-                <th style={TH('right', '75px')}>REC YDS</th>
-                <th style={TH('right', '55px', true)}>PTS</th>
-                <th style={TH('right', '55px')}>MULT</th>
-                <th style={TH('right', '75px', true)}>WEIGHTED</th>
+                <th style={TH('right')}>ROLE</th>
+                <th style={TH('right')}>ATT</th>
+                <th style={TH('right')}>RUSH YDS</th>
+                <th style={TH('right')}>RUSH TD</th>
+                <th style={TH('right')}>REC</th>
+                <th style={TH('right')}>REC YDS</th>
+                <th style={TH('right', true)}>PTS</th>
+                <th style={TH('right')}>MULT</th>
+                <th style={TH('right', true)}>WGTD</th>
               </>}
               {(unit === 'WR' || unit === 'TE') && <>
-                <th style={TH('right', '50px')}>REC</th>
-                <th style={TH('right', '55px')}>YDS</th>
-                <th style={TH('right', '50px')}>TD</th>
-                <th style={TH('right', '55px', true)}>PTS</th>
-                <th style={TH('right', '55px')}>MULT</th>
-                <th style={TH('right', '75px', true)}>WEIGHTED</th>
+                <th style={TH('right')}>ROLE</th>
+                <th style={TH('right')}>REC</th>
+                <th style={TH('right')}>YDS</th>
+                <th style={TH('right')}>TD</th>
+                <th style={TH('right', true)}>PTS</th>
+                <th style={TH('right')}>MULT</th>
+                <th style={TH('right', true)}>WGTD</th>
               </>}
-              {unit === 'K' && <th style={TH('right', '65px', true)}>PTS</th>}
+              {unit === 'K' && <>
+                <th style={TH('right')}>ROLE</th>
+                <th style={TH('right', true)}>PTS</th>
+              </>}
             </tr>
           </thead>
           <tbody>
@@ -1258,9 +1279,8 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
               const role     = roles[i] ?? '';
               const qbPts    = (p.passYd??0)*0.1 + (p.passTd??0)*4 + (p.int??0)*(-2) + (p.rushYd??0)*0.1 + (p.rushTd??0)*6;
               return (
-                <tr key={p.name ?? i} style={rowDivider}>
+                <tr key={p.name ?? i} style={div}>
                   <td style={TD('left', { fontWeight: 600 })}>{p.name}</td>
-                  {unit !== 'K' && <td style={TD('right', MUTED_TD)}>{role}</td>}
 
                   {unit === 'QB' && <>
                     <td style={TD('right')}>{p.passYd ?? 0}</td>
@@ -1268,30 +1288,36 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
                     <td style={TD('right', { color: (p.int ?? 0) > 0 ? '#f03a5a' : '#e8edf5' })}>{p.int ?? 0}</td>
                     <td style={TD('right')}>{p.rushYd ?? 0}</td>
                     <td style={TD('right')}>{p.rushTd ?? 0}</td>
-                    <td style={TD('right', GOLD_TD)}>{qbPts.toFixed(1)}</td>
+                    <td style={TD('right', GOLD)}>{qbPts.toFixed(1)}</td>
+                    <td style={TD('right', DIM)}>{role}</td>
                   </>}
 
                   {unit === 'RB' && <>
+                    <td style={TD('right', DIM)}>{role}</td>
                     <td style={TD('right')}>{p.rushAtt ?? 0}</td>
                     <td style={TD('right')}>{p.rushYd ?? 0}</td>
                     <td style={TD('right')}>{p.rushTd ?? 0}</td>
                     <td style={TD('right')}>{p.rec ?? 0}</td>
                     <td style={TD('right')}>{p.recYd ?? 0}</td>
-                    <td style={TD('right', GOLD_TD)}>{(p.rawPts ?? 0).toFixed(1)}</td>
-                    <td style={TD('right', MUTED_TD)}>×{mult.toFixed(2)}</td>
-                    <td style={TD('right', GOLD_TD)}>{weighted.toFixed(1)}</td>
+                    <td style={TD('right', GOLD)}>{(p.rawPts ?? 0).toFixed(1)}</td>
+                    <td style={TD('right', DIM)}>×{mult.toFixed(2)}</td>
+                    <td style={TD('right', GOLD)}>{weighted.toFixed(1)}</td>
                   </>}
 
                   {(unit === 'WR' || unit === 'TE') && <>
+                    <td style={TD('right', DIM)}>{role}</td>
                     <td style={TD('right')}>{p.rec ?? 0}</td>
                     <td style={TD('right')}>{p.recYd ?? 0}</td>
                     <td style={TD('right')}>{p.recTd ?? 0}</td>
-                    <td style={TD('right', GOLD_TD)}>{(p.rawPts ?? 0).toFixed(1)}</td>
-                    <td style={TD('right', MUTED_TD)}>×{mult.toFixed(2)}</td>
-                    <td style={TD('right', GOLD_TD)}>{weighted.toFixed(1)}</td>
+                    <td style={TD('right', GOLD)}>{(p.rawPts ?? 0).toFixed(1)}</td>
+                    <td style={TD('right', DIM)}>×{mult.toFixed(2)}</td>
+                    <td style={TD('right', GOLD)}>{weighted.toFixed(1)}</td>
                   </>}
 
-                  {unit === 'K' && <td style={TD('right', GOLD_TD)}>{(p.pts ?? 0).toFixed(1)}</td>}
+                  {unit === 'K' && <>
+                    <td style={TD('right', DIM)}>{role}</td>
+                    <td style={TD('right', GOLD)}>{(p.pts ?? 0).toFixed(1)}</td>
+                  </>}
                 </tr>
               );
             })}

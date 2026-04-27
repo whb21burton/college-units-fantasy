@@ -91,6 +91,7 @@ export default function DraftPage() {
   const [unitStats,    setUnitStats]    = useState<any | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [fullPool,     setFullPool]     = useState<DraftUnit[]>([]); // original pool, never filtered
+  const [cpuPicking,   setCpuPicking]   = useState(false);
 
   const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoAttempted = useRef<Set<number>>(new Set());
@@ -258,31 +259,32 @@ export default function DraftPage() {
   }, [draftLive, draftDone, loading, isMyTurn, currentPickNum, isCpuTurn]);
 
   // ── CPU auto-pick ─────────────────────────────────────────────────────────
-  // Commissioner drives CPU picks for private leagues.
-  // For public leagues any signed-in user on the page can drive CPU picks.
+  // Fires immediately after any pick when the next team on the clock is CPU.
+  // Chains: if multiple consecutive CPU teams are in a row, they all pick back
+  // to back with no delay until it's a human's turn.
 
   useEffect(() => {
     const canDriveCpu = isCommissioner || league?.is_public;
-    if (!draftLive || draftDone || !canDriveCpu || !isCpuTurn) return;
+    if (!draftLive || draftDone || !canDriveCpu || !isCpuTurn) {
+      if (!isCpuTurn) setCpuPicking(false);
+      return;
+    }
+    if (autoAttempted.current.has(currentPickNum)) return;
+    autoAttempted.current.add(currentPickNum);
 
-    const timeout = setTimeout(() => {
-      if (autoAttempted.current.has(currentPickNum)) return;
-      autoAttempted.current.add(currentPickNum);
+    setCpuPicking(true);
 
-      // Build this CPU team's roster from picks at its slot
-      const cpuRoster: Record<UnitType, number> = { QB: 0, RB: 0, WR: 0, TE: 0, DEF: 0, K: 0 };
-      for (const pick of picks) {
-        if (numTeams > 0 && snakeIndex(pick.pick_number, numTeams) === teamIdx) {
-          const t = pick.player_data?.unitType as UnitType;
-          if (t) cpuRoster[t] = (cpuRoster[t] ?? 0) + 1;
-        }
+    // Build this CPU team's roster from picks at its slot
+    const cpuRoster: Record<UnitType, number> = { QB: 0, RB: 0, WR: 0, TE: 0, DEF: 0, K: 0 };
+    for (const pick of picks) {
+      if (numTeams > 0 && snakeIndex(pick.pick_number, numTeams) === teamIdx) {
+        const t = pick.player_data?.unitType as UnitType;
+        if (t) cpuRoster[t] = (cpuRoster[t] ?? 0) + 1;
       }
+    }
 
-      const best = autoPick(avail, cpuRoster);
-      if (best) insertPick(best);
-    }, 700);
-
-    return () => clearTimeout(timeout);
+    const best = autoPick(avail, cpuRoster);
+    if (best) insertPick(best);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPickNum, draftLive, draftDone, isCommissioner, isCpuTurn, teamIdx]);
 
@@ -801,9 +803,10 @@ export default function DraftPage() {
           </div>
         </div>
 
-        {isCpuTurn && (
-          <div style={{ padding: '8px 16px', background: 'rgba(58,130,246,.12)', borderBottom: `1px solid rgba(58,130,246,.3)`, fontSize: 11, color: C.blue, letterSpacing: .5, flexShrink: 0 }}>
-            {onClockTeam?.teamName} (CPU) is picking...
+        {(isCpuTurn || cpuPicking) && (
+          <div style={{ padding: '8px 16px', background: 'rgba(58,130,246,.12)', borderBottom: `1px solid rgba(58,130,246,.3)`, fontSize: 11, color: C.blue, letterSpacing: .5, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: C.blue, animation: 'pulse 0.8s ease-in-out infinite' }} />
+            {onClockTeam?.teamName} (CPU) picking...
           </div>
         )}
         {!isCpuTurn && !isMyTurn && (
