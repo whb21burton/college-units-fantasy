@@ -1132,34 +1132,53 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
     const allPlayers: any[] = week.players ?? [];
     const odrMult: number   = week.multiplier ?? 1.0;
 
+    const TH = (align: 'left' | 'right', minW?: string, gold?: boolean): React.CSSProperties => ({
+      padding: '5px 8px', fontFamily: 'Oswald,sans-serif', fontWeight: 400,
+      fontSize: 11, color: gold ? '#d4a828' : '#7a90b0', textAlign: align,
+      letterSpacing: 0.5, textTransform: 'uppercase' as const, whiteSpace: 'nowrap' as const,
+      minWidth: minW,
+    });
+    const TD = (align: 'left' | 'right', extra: React.CSSProperties = {}): React.CSSProperties => ({
+      padding: '7px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 12,
+      color: '#e8edf5', textAlign: align, ...extra,
+    });
+    const GOLD_TD: React.CSSProperties = { color: '#d4a828', fontWeight: 700 };
+    const MUTED_TD: React.CSSProperties = { color: '#7a90b0', fontSize: 11 };
+    const containerStyle: React.CSSProperties = { background: '#080c15', borderLeft: '3px solid #d4a828' };
+    const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' };
+    const hdrRow: React.CSSProperties = { background: '#0a0f1a' };
+    const rowDivider: React.CSSProperties = { borderBottom: '1px solid #1e2d47' };
+
     if (unit === 'DEF') {
-      const d = (week.defStats ?? allPlayers[0]) ?? {};
+      const d        = (week.defStats ?? allPlayers[0]) ?? {};
       const sacks    = d.sacks    ?? 0;
       const ints     = d.ints     ?? 0;
       const fumRec   = d.fumRec   ?? 0;
       const defTDs   = d.defTd    ?? d.defTDs ?? 0;
       const safeties = d.safeties ?? 0;
+      const pts      = week.fantasyPoints != null ? (week.fantasyPoints as number).toFixed(1) : '—';
       return (
-        <div style={{ background: '#080c15', borderLeft: '3px solid #d4a828', padding: '12px 16px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <div style={containerStyle}>
+          <table style={tableStyle}>
             <thead>
-              <tr style={{ color: '#7a90b0', fontSize: 10, textTransform: 'uppercase' as const }}>
-                {['SACKS','INT','FUM REC','DEF TD','SAFETY','PTS'].map((h, i) => (
-                  <th key={h} style={{ padding: '4px 8px', fontFamily: 'Oswald,sans-serif', fontWeight: 400, letterSpacing: .5, textAlign: i === 5 ? 'right' : 'left' }}>{h}</th>
-                ))}
+              <tr style={hdrRow}>
+                <th style={TH('right', '60px')}>SACKS</th>
+                <th style={TH('right', '55px')}>INT</th>
+                <th style={TH('right', '72px')}>FUM REC</th>
+                <th style={TH('right', '65px')}>DEF TD</th>
+                <th style={TH('right', '65px')}>SAFETY</th>
+                <th style={TH('right', '65px', true)}>PTS</th>
               </tr>
             </thead>
             <tbody>
-              <tr style={{ color: '#e8edf5' }}>
+              <tr style={rowDivider}>
                 {[sacks, ints, fumRec, defTDs, safeties].map((v, i) => (
-                  <td key={i} style={{ padding: '8px', fontFamily: 'Oswald,sans-serif', fontSize: 13 }}>{v}</td>
+                  <td key={i} style={TD('right')}>{v}</td>
                 ))}
-                <td style={{ padding: '8px', color: '#d4a828', fontFamily: 'Anton,sans-serif', fontSize: 14, fontWeight: 700, textAlign: 'right' }}>
-                  {week.fantasyPoints != null ? (week.fantasyPoints as number).toFixed(1) : '—'}
-                </td>
+                <td style={TD('right', GOLD_TD)}>{pts}</td>
               </tr>
-              <tr style={{ color: '#7a90b0', borderTop: '1px solid #1e2d47' }}>
-                <td colSpan={6} style={{ padding: '6px 8px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 10 }}>
+              <tr>
+                <td colSpan={6} style={{ padding: '5px 8px', color: '#7a90b0', fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, borderTop: '1px solid #1e2d47' }}>
                   Sack×1 · INT×2 · FumRec×2 · DefTD×6 · Safety×2 — then × ODR multiplier
                 </td>
               </tr>
@@ -1188,49 +1207,91 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
     }
 
     const unitWeights: Record<string, number[]> = { RB: [1.0,0.5,0.25], WR: [1.0,0.5,0.25], TE: [1.0,0.5], QB: [1.0], K: [1.0] };
-    const weights   = unitWeights[unit] ?? [1.0];
-    const roleLabels: Record<string, string[]> = { RB: ['RB1','RB2','RB3'], WR: ['WR1','WR2','WR3'], TE: ['TE1','TE2'] };
-    const roles     = roleLabels[unit] ?? [];
-    const rankColors = ['#d4a828','#9e9e9e','#cd7f32'];
+    const weights    = unitWeights[unit] ?? [1.0];
+    const roleLabels: Record<string, string[]> = { RB: ['RB1','RB2','RB3'], WR: ['WR1','WR2','WR3'], TE: ['TE1','TE2'], QB: ['QB'] };
+    const roles      = roleLabels[unit] ?? [];
     const displayed  = withRaw.slice(0, weights.length);
     const unitTotal  = week.fantasyPoints != null
       ? (week.fantasyPoints as number).toFixed(1)
       : displayed.reduce((s: number, p: any, i: number) => s + Math.round((p.rawPts??0)*(weights[i]??0)*odrMult*10)/10, 0).toFixed(1);
 
     return (
-      <div style={{ background: '#080c15', borderLeft: '3px solid #d4a828' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+      <div style={containerStyle}>
+        <table style={tableStyle}>
+          <thead>
+            <tr style={hdrRow}>
+              <th style={TH('left')}>PLAYER</th>
+              {unit !== 'K' && <th style={TH('right', '55px')}>ROLE</th>}
+              {unit === 'QB' && <>
+                <th style={TH('right', '80px')}>PASS YDS</th>
+                <th style={TH('right', '70px')}>PASS TD</th>
+                <th style={TH('right', '55px')}>INT</th>
+                <th style={TH('right', '85px')}>RUSH YDS</th>
+                <th style={TH('right', '75px')}>RUSH TD</th>
+                <th style={TH('right', '65px', true)}>PTS</th>
+              </>}
+              {unit === 'RB' && <>
+                <th style={TH('right', '45px')}>ATT</th>
+                <th style={TH('right', '80px')}>RUSH YDS</th>
+                <th style={TH('right', '75px')}>RUSH TD</th>
+                <th style={TH('right', '50px')}>REC</th>
+                <th style={TH('right', '75px')}>REC YDS</th>
+                <th style={TH('right', '55px', true)}>PTS</th>
+                <th style={TH('right', '55px')}>MULT</th>
+                <th style={TH('right', '75px', true)}>WEIGHTED</th>
+              </>}
+              {(unit === 'WR' || unit === 'TE') && <>
+                <th style={TH('right', '50px')}>REC</th>
+                <th style={TH('right', '55px')}>YDS</th>
+                <th style={TH('right', '50px')}>TD</th>
+                <th style={TH('right', '55px', true)}>PTS</th>
+                <th style={TH('right', '55px')}>MULT</th>
+                <th style={TH('right', '75px', true)}>WEIGHTED</th>
+              </>}
+              {unit === 'K' && <th style={TH('right', '65px', true)}>PTS</th>}
+            </tr>
+          </thead>
           <tbody>
             {displayed.map((p: any, i: number) => {
               const mult     = weights[i] ?? 0;
               const weighted = Math.round((p.rawPts??0) * mult * odrMult * 10) / 10;
-              const rc       = rankColors[i] ?? rankColors[rankColors.length - 1];
+              const role     = roles[i] ?? '';
+              const qbPts    = (p.passYd??0)*0.1 + (p.passTd??0)*4 + (p.int??0)*(-2) + (p.rushYd??0)*0.1 + (p.rushTd??0)*6;
               return (
-                <tr key={p.name ?? i} style={{ borderBottom: '1px solid #1e2d47' }}>
-                  <td style={{ padding: '6px 8px', color: rc, fontWeight: 700, fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, width: 44 }}>{roles[i] ?? ''}</td>
-                  <td style={{ padding: '6px 8px', color: '#e8edf5', fontFamily: "'Space Grotesk',sans-serif", fontSize: 11 }}>{p.name}</td>
+                <tr key={p.name ?? i} style={rowDivider}>
+                  <td style={TD('left', { fontWeight: 600 })}>{p.name}</td>
+                  {unit !== 'K' && <td style={TD('right', MUTED_TD)}>{role}</td>}
+
                   {unit === 'QB' && <>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.passYd??0} YDS</td>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.passTd??0} TD</td>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.int??0} INT</td>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rushYd??0} RSH</td>
+                    <td style={TD('right')}>{p.passYd ?? 0}</td>
+                    <td style={TD('right')}>{p.passTd ?? 0}</td>
+                    <td style={TD('right', { color: (p.int ?? 0) > 0 ? '#f03a5a' : '#e8edf5' })}>{p.int ?? 0}</td>
+                    <td style={TD('right')}>{p.rushYd ?? 0}</td>
+                    <td style={TD('right')}>{p.rushTd ?? 0}</td>
+                    <td style={TD('right', GOLD_TD)}>{qbPts.toFixed(1)}</td>
                   </>}
+
                   {unit === 'RB' && <>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rushAtt??0} ATT</td>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rushYd??0} YDS</td>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rushTd??0} TD</td>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rec??0} REC</td>
+                    <td style={TD('right')}>{p.rushAtt ?? 0}</td>
+                    <td style={TD('right')}>{p.rushYd ?? 0}</td>
+                    <td style={TD('right')}>{p.rushTd ?? 0}</td>
+                    <td style={TD('right')}>{p.rec ?? 0}</td>
+                    <td style={TD('right')}>{p.recYd ?? 0}</td>
+                    <td style={TD('right', GOLD_TD)}>{(p.rawPts ?? 0).toFixed(1)}</td>
+                    <td style={TD('right', MUTED_TD)}>×{mult.toFixed(2)}</td>
+                    <td style={TD('right', GOLD_TD)}>{weighted.toFixed(1)}</td>
                   </>}
+
                   {(unit === 'WR' || unit === 'TE') && <>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.rec??0} REC</td>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.recYd??0} YDS</td>
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.recTd??0} TD</td>
+                    <td style={TD('right')}>{p.rec ?? 0}</td>
+                    <td style={TD('right')}>{p.recYd ?? 0}</td>
+                    <td style={TD('right')}>{p.recTd ?? 0}</td>
+                    <td style={TD('right', GOLD_TD)}>{(p.rawPts ?? 0).toFixed(1)}</td>
+                    <td style={TD('right', MUTED_TD)}>×{mult.toFixed(2)}</td>
+                    <td style={TD('right', GOLD_TD)}>{weighted.toFixed(1)}</td>
                   </>}
-                  {unit === 'K' && (
-                    <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>{p.pts??0} PTS</td>
-                  )}
-                  <td style={{ padding: '6px 4px', color: '#7a90b0', fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, textAlign: 'right' }}>×{mult.toFixed(2)}</td>
-                  <td style={{ padding: '6px 8px', color: '#d4a828', fontFamily: 'Anton,sans-serif', fontSize: 13, fontWeight: 700, textAlign: 'right' }}>{weighted.toFixed(1)}</td>
+
+                  {unit === 'K' && <td style={TD('right', GOLD_TD)}>{(p.pts ?? 0).toFixed(1)}</td>}
                 </tr>
               );
             })}
@@ -1593,18 +1654,19 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
             {/* QB */}
             {player.unitType === 'QB' && sortedPlayers.length > 0 && (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 44px 44px 60px', gap: 4, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2 }}>
-                  {['PLAYER','PASS YDS','TD','INT','RUSH YDS'].map(h => (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 56px 44px 68px 60px', gap: 4, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2 }}>
+                  {['PLAYER','PASS YDS','PASS TD','INT','RUSH YDS','RUSH TD'].map(h => (
                     <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: h === 'PLAYER' ? 'left' : 'right', letterSpacing: .5 }}>{h}</div>
                   ))}
                 </div>
                 {sortedPlayers.map((p: any) => (
-                  <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 44px 44px 60px', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22` }}>
+                  <div key={p.name} style={{ display: 'grid', gridTemplateColumns: '1fr 64px 56px 44px 68px 60px', gap: 4, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22` }}>
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
                     <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.passYd || 0}</div>
                     <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.gold, textAlign: 'right' }}>{p.passTd || 0}</div>
                     <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.red, textAlign: 'right' }}>{p.int || 0}</div>
                     <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub, textAlign: 'right' }}>{p.rushYd || 0}</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.gold, textAlign: 'right' }}>{p.rushTd || 0}</div>
                   </div>
                 ))}
               </>
