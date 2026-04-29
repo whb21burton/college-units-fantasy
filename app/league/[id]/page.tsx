@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 import DraftOrderEditor from '@/components/league/DraftOrderEditor';
+import { odrLabelFromMult, getODRColor } from '@/lib/odr';
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
@@ -80,15 +81,7 @@ function matchupProj(
 
 /** Higher multiplier = harder opponent (rank 1 defense/offense is toughest). */
 function multLabel(mult: number): { label: string; color: string } {
-  if (mult >= 1.25) return { label: 'Toughest',            color: '#e74c3c' };
-  if (mult >= 1.15) return { label: 'Hard',                color: '#e67e22' };
-  if (mult >= 1.05) return { label: 'Good',                color: '#f1c40f' };
-  if (mult >= 0.95) return { label: 'Average',             color: '#95a5a6' };
-  if (mult >= 0.85) return { label: 'Not Bad',             color: '#a3c65e' };
-  if (mult >= 0.75) return { label: 'Not good',            color: '#2ecc71' };
-  if (mult >= 0.65) return { label: 'Bad',                 color: '#1abc9c' };
-  if (mult >= 0.55) return { label: 'Weenie Hut Jr.',      color: '#3498db' };
-  return                   { label: 'Super Weenie Hut Jr', color: '#9b59b6' };
+  return { label: odrLabelFromMult(mult), color: getODRColor(mult) };
 }
 
 /** Ranks all schools per unit type by projectedPoints desc (rank 1 = best). */
@@ -1580,71 +1573,71 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
       ) : (() => {
         const ut = player.unitType;
 
-        // Per-unit colgroup definitions — widths must add to 100%
+        // Per-unit colgroup definitions — ODR column is wider to fit label+mult
         // Columns: WK | OPP | FPTS | ODR | ...stat cols | chevron
         const unitCols: Record<string, { label: string; key: string; align: 'left' | 'right'; w: string }[]> = {
           QB: [
             { label: 'WK',       key: '_wk',   align: 'left',  w: '5%'  },
-            { label: 'OPP',      key: '_opp',  align: 'left',  w: '20%' },
-            { label: 'FPTS',     key: '_fpts', align: 'right', w: '9%'  },
-            { label: 'ODR',      key: '_odr',  align: 'right', w: '7%'  },
-            { label: 'PASS YDS', key: 'passYd', align: 'right', w: '11%' },
+            { label: 'OPP',      key: '_opp',  align: 'left',  w: '16%' },
+            { label: 'FPTS',     key: '_fpts', align: 'right', w: '8%'  },
+            { label: 'ODR',      key: '_odr',  align: 'right', w: '13%' },
+            { label: 'PASS YDS', key: 'passYd', align: 'right', w: '10%' },
             { label: 'PASS TD',  key: 'passTd', align: 'right', w: '9%'  },
             { label: 'INT',      key: 'int',    align: 'right', w: '7%'  },
-            { label: 'RUSH YDS', key: 'rushYd', align: 'right', w: '11%' },
+            { label: 'RUSH YDS', key: 'rushYd', align: 'right', w: '10%' },
             { label: 'RUSH TD',  key: 'rushTd', align: 'right', w: '9%'  },
-            { label: '',         key: '_exp',  align: 'right', w: '5%'  },
+            { label: '',         key: '_exp',  align: 'right', w: '4%'  },
           ],
           RB: [
             { label: 'WK',      key: '_wk',   align: 'left',  w: '5%'  },
-            { label: 'OPP',     key: '_opp',  align: 'left',  w: '18%' },
-            { label: 'FPTS',    key: '_fpts', align: 'right', w: '9%'  },
-            { label: 'ODR',     key: '_odr',  align: 'right', w: '7%'  },
-            { label: 'ATT',     key: 'rushAtt', align: 'right', w: '8%'  },
-            { label: 'RUSH YDS',key: 'rushYd',  align: 'right', w: '11%' },
+            { label: 'OPP',     key: '_opp',  align: 'left',  w: '14%' },
+            { label: 'FPTS',    key: '_fpts', align: 'right', w: '8%'  },
+            { label: 'ODR',     key: '_odr',  align: 'right', w: '13%' },
+            { label: 'ATT',     key: 'rushAtt', align: 'right', w: '7%'  },
+            { label: 'RUSH YDS',key: 'rushYd',  align: 'right', w: '10%' },
             { label: 'RUSH TD', key: 'rushTd',  align: 'right', w: '9%'  },
-            { label: 'REC',     key: 'rec',     align: 'right', w: '8%'  },
-            { label: 'REC YDS', key: 'recYd',   align: 'right', w: '11%' },
-            { label: '',        key: '_exp',  align: 'right', w: '5%'  },
+            { label: 'REC',     key: 'rec',     align: 'right', w: '7%'  },
+            { label: 'REC YDS', key: 'recYd',   align: 'right', w: '10%' },
+            { label: '',        key: '_exp',  align: 'right', w: '4%'  },
           ],
           WR: [
             { label: 'WK',   key: '_wk',   align: 'left',  w: '5%'  },
-            { label: 'OPP',  key: '_opp',  align: 'left',  w: '25%' },
-            { label: 'FPTS', key: '_fpts', align: 'right', w: '11%' },
-            { label: 'ODR',  key: '_odr',  align: 'right', w: '9%'  },
+            { label: 'OPP',  key: '_opp',  align: 'left',  w: '20%' },
+            { label: 'FPTS', key: '_fpts', align: 'right', w: '10%' },
+            { label: 'ODR',  key: '_odr',  align: 'right', w: '14%' },
             { label: 'REC',  key: 'rec',   align: 'right', w: '13%' },
             { label: 'YDS',  key: 'recYd', align: 'right', w: '13%' },
             { label: 'TD',   key: 'recTd', align: 'right', w: '13%' },
-            { label: '',     key: '_exp',  align: 'right', w: '5%'  },
+            { label: '',     key: '_exp',  align: 'right', w: '4%'  },
           ],
           TE: [
             { label: 'WK',   key: '_wk',   align: 'left',  w: '5%'  },
-            { label: 'OPP',  key: '_opp',  align: 'left',  w: '25%' },
-            { label: 'FPTS', key: '_fpts', align: 'right', w: '11%' },
-            { label: 'ODR',  key: '_odr',  align: 'right', w: '9%'  },
+            { label: 'OPP',  key: '_opp',  align: 'left',  w: '20%' },
+            { label: 'FPTS', key: '_fpts', align: 'right', w: '10%' },
+            { label: 'ODR',  key: '_odr',  align: 'right', w: '14%' },
             { label: 'REC',  key: 'rec',   align: 'right', w: '13%' },
             { label: 'YDS',  key: 'recYd', align: 'right', w: '13%' },
             { label: 'TD',   key: 'recTd', align: 'right', w: '13%' },
-            { label: '',     key: '_exp',  align: 'right', w: '5%'  },
+            { label: '',     key: '_exp',  align: 'right', w: '4%'  },
           ],
           DEF: [
             { label: 'WK',      key: '_wk',   align: 'left',  w: '5%'  },
-            { label: 'OPP',     key: '_opp',  align: 'left',  w: '20%' },
-            { label: 'FPTS',    key: '_fpts', align: 'right', w: '9%'  },
-            { label: 'ODR',     key: '_odr',  align: 'right', w: '8%'  },
-            { label: 'SACKS',   key: 'sacks',  align: 'right', w: '11%' },
-            { label: 'INT',     key: 'ints',   align: 'right', w: '9%'  },
+            { label: 'OPP',     key: '_opp',  align: 'left',  w: '16%' },
+            { label: 'FPTS',    key: '_fpts', align: 'right', w: '8%'  },
+            { label: 'ODR',     key: '_odr',  align: 'right', w: '13%' },
+            { label: 'SACKS',   key: 'sacks',  align: 'right', w: '10%' },
+            { label: 'INT',     key: 'ints',   align: 'right', w: '8%'  },
             { label: 'FUM REC', key: 'fumRec', align: 'right', w: '11%' },
-            { label: 'DEF TD',  key: 'defTd',  align: 'right', w: '11%' },
-            { label: '',        key: '_exp',  align: 'right', w: '5%'  },
+            { label: 'DEF TD',  key: 'defTd',  align: 'right', w: '10%' },
+            { label: '',        key: '_exp',  align: 'right', w: '4%'  },
           ],
           K: [
             { label: 'WK',   key: '_wk',   align: 'left',  w: '6%'  },
-            { label: 'OPP',  key: '_opp',  align: 'left',  w: '35%' },
-            { label: 'FPTS', key: '_fpts', align: 'right', w: '14%' },
-            { label: 'ODR',  key: '_odr',  align: 'right', w: '11%' },
-            { label: 'PTS',  key: 'pts',   align: 'right', w: '28%' },
-            { label: '',     key: '_exp',  align: 'right', w: '6%'  },
+            { label: 'OPP',  key: '_opp',  align: 'left',  w: '28%' },
+            { label: 'FPTS', key: '_fpts', align: 'right', w: '12%' },
+            { label: 'ODR',  key: '_odr',  align: 'right', w: '16%' },
+            { label: 'PTS',  key: 'pts',   align: 'right', w: '30%' },
+            { label: '',     key: '_exp',  align: 'right', w: '4%'  },
           ],
         };
         const tableCols = unitCols[ut] ?? unitCols['QB'];
@@ -1683,8 +1676,6 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                   const isPlayoff = wk.week > 11;
                   const canExpand = wk.completed;
                   const isExpanded = expandedWk === wk.week;
-                  const multColor = wk.multiplier == null ? C.muted : wk.multiplier > 1 ? C.green : wk.multiplier < 1 ? C.red : C.sub;
-
                   const fpts = wk.fantasyPoints != null
                     ? wk.fantasyPoints.toFixed(1)
                     : wk.opponent != null
@@ -1731,9 +1722,20 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                           if (c.key === '_fpts') return (
                             <td key={i} style={tdStyle('right', { color: wk.fantasyPoints != null ? C.gold : C.muted, fontFamily: 'Anton,sans-serif', fontWeight: 700, fontSize: 12 })}>{fpts}</td>
                           );
-                          if (c.key === '_odr') return (
-                            <td key={i} style={tdStyle('right', { color: multColor })}>{wk.multiplier != null ? `×${wk.multiplier.toFixed(1)}` : '—'}</td>
-                          );
+                          if (c.key === '_odr') {
+                            const odrColor = getODRColor(wk.multiplier);
+                            const label    = odrLabelFromMult(wk.multiplier);
+                            return (
+                              <td key={i} style={{ ...tdStyle('right'), whiteSpace: 'normal', lineHeight: 1.3, verticalAlign: 'middle' }}>
+                                {wk.multiplier != null ? (
+                                  <>
+                                    <div style={{ color: odrColor, fontWeight: 700, fontSize: 11 }}>{label}</div>
+                                    <div style={{ color: C.muted, fontSize: 10 }}>×{wk.multiplier.toFixed(1)}</div>
+                                  </>
+                                ) : '—'}
+                              </td>
+                            );
+                          }
                           if (c.key === '_exp') return (
                             <td key={i} style={tdStyle('right', { color: C.muted, fontSize: 8, transition: 'transform .2s', ...(canExpand && isExpanded ? { transform: 'rotate(180deg)', display: 'block' } : {}) })}>
                               {canExpand ? '▼' : ''}

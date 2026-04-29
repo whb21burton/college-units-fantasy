@@ -5,6 +5,9 @@
  */
 
 import { createAdminClient } from '@/lib/supabase-server'
+import { odrLabel, odrMult } from '@/lib/odr'
+
+export { odrLabel, odrMult }
 
 const BASE_URL = 'https://apinext.collegefootballdata.com'
 
@@ -27,17 +30,6 @@ const CFBD_POS: Record<string, string> = {
   K: 'K', PK: 'K', KICKER: 'K', PLACEKICKER: 'K', 'PLACE KICKER': 'K',
 }
 
-function odrMult(rank: number): number {
-  if (rank <=  5) return 1.3
-  if (rank <= 10) return 1.2
-  if (rank <= 15) return 1.1
-  if (rank <= 25) return 1.0
-  if (rank <= 35) return 0.9
-  if (rank <= 50) return 0.8
-  if (rank <= 80) return 0.7
-  if (rank <= 100) return 0.6
-  return 0.5
-}
 
 async function cfbdGet(path: string, params: Record<string, string | number>): Promise<any[]> {
   const apiKey = process.env.CFBD_API_KEY
@@ -248,7 +240,8 @@ export async function syncStats(
       if (schoolsFilter?.length && !schoolsFilter.includes(school)) continue
 
       const opponent = school === game.homeTeam ? game.awayTeam : game.homeTeam
-      const mult = odrMult(eloRank[opponent] ?? 999)
+      const oppRank  = eloRank[opponent] ?? 999
+      const mult = odrMult(oppRank)
       const ts = teamStatMap[school] ?? {}
       const entries = Object.values(playerStatMap)
         .filter((e: any) => e.gameId === gameId && e.school === school)
@@ -323,7 +316,8 @@ export async function syncStats(
       }
 
       // ── Score each unit ───────────────────────────────────────────────────
-      add(null, 'game_mult', mult)
+      add(null, 'game_mult',     mult)
+      add(null, 'opp_elo_rank',  oppRank)
 
       // QB — top scorer only
       units.QB.sort((a, b) => b.pts - a.pts)

@@ -140,6 +140,7 @@ export async function getSchoolWeekGameLog(
   fantasyPoints: number | null;
   rawPoints: number | null;
   multiplier: number | null;
+  oppRank: number | null;
   players: any[];
 }[]> {
   const admin = createAdminClient();
@@ -157,7 +158,7 @@ export async function getSchoolWeekGameLog(
       .select('week, stat_type, value')
       .eq('school', school)
       .eq('season', season)
-      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K', 'game_mult',
+      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K', 'game_mult', 'opp_elo_rank',
                         'def_sacks', 'def_ints', 'def_fum_rec', 'def_tds', 'def_safeties'])
       .is('player_name', null),
     admin
@@ -196,12 +197,15 @@ export async function getSchoolWeekGameLog(
 
   const unitPtsByWeek: Record<number, number> = {};
   const multByWeek:    Record<number, number> = {};
+  const oppRankByWeek: Record<number, number> = {};
   const defStatsByWeek: Record<number, { sacks: number; ints: number; fumRec: number; defTd: number; safeties: number }> = {};
   for (const row of unitStatRows.data ?? []) {
     if (row.stat_type === `unit_${unitType}`) {
       unitPtsByWeek[row.week] = row.value;
     } else if (row.stat_type === 'game_mult') {
       multByWeek[row.week] = row.value;
+    } else if (row.stat_type === 'opp_elo_rank') {
+      oppRankByWeek[row.week] = row.value;
     } else if (row.stat_type.startsWith('def_')) {
       if (!defStatsByWeek[row.week]) defStatsByWeek[row.week] = { sacks: 0, ints: 0, fumRec: 0, defTd: 0, safeties: 0 };
       const map: Record<string, keyof typeof defStatsByWeek[number]> = {
@@ -233,7 +237,7 @@ export async function getSchoolWeekGameLog(
     const completed = pts !== undefined;
 
     if (!completed) {
-      return { week, opponent, completed: false, fantasyPoints: null, rawPoints: null, multiplier: null, players: [] };
+      return { week, opponent, completed: false, fantasyPoints: null, rawPoints: null, multiplier: null, oppRank: null, players: [] };
     }
 
     // Build per-unit player list from cached stats
@@ -345,7 +349,8 @@ export async function getSchoolWeekGameLog(
     const mult      = multByWeek[week] ?? null;
     const rawPoints = mult && mult > 0 ? Math.round(pts / mult * 10) / 10 : pts;
     const defStats  = unitType === 'DEF' ? (defStatsByWeek[week] ?? null) : undefined;
-    return { week, opponent, completed: true, fantasyPoints: pts, rawPoints, multiplier: mult, players, defStats };
+    const oppRank   = oppRankByWeek[week] ?? null;
+    return { week, opponent, completed: true, fantasyPoints: pts, rawPoints, multiplier: mult, oppRank, players, defStats };
   });
 }
 
