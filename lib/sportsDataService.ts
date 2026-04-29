@@ -5,9 +5,30 @@
  */
 
 import { createAdminClient } from '@/lib/supabase-server'
-import { odrLabel, odrMult } from '@/lib/odr'
 
-export { odrLabel, odrMult }
+function odrMult(rank: number): number {
+  if (rank <=   5) return 1.3
+  if (rank <=  10) return 1.2
+  if (rank <=  15) return 1.1
+  if (rank <=  25) return 1.0
+  if (rank <=  35) return 0.9
+  if (rank <=  50) return 0.8
+  if (rank <=  80) return 0.7
+  if (rank <= 100) return 0.6
+  return 0.5
+}
+
+export function multToLabel(mult: number): string {
+  if (mult >= 1.3) return 'Elite'
+  if (mult >= 1.2) return 'Hard'
+  if (mult >= 1.1) return 'Good'
+  if (mult >= 1.0) return 'Average'
+  if (mult >= 0.9) return 'Not Bad'
+  if (mult >= 0.8) return 'Bad'
+  if (mult >= 0.7) return 'Really Bad'
+  if (mult >= 0.6) return 'Weenie Hut Jr.'
+  return 'Super Weenie Hut Jr.'
+}
 
 const BASE_URL = 'https://apinext.collegefootballdata.com'
 
