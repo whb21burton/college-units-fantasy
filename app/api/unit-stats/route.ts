@@ -12,7 +12,7 @@
 import { NextResponse } from 'next/server';
 import { getSchoolWeekGameLog } from '@/lib/sportsDataReader';
 import { createAdminClient } from '@/lib/supabase-server';
-import { odrLabel, odrMult as calcOdrMult } from '@/lib/odr';
+import { odrLabelFromMult } from '@/lib/odr';
 import type { UnitType } from '@/lib/playerPool';
 
 export const dynamic = 'force-dynamic';
@@ -55,8 +55,8 @@ export async function GET(req: Request) {
 
       const gameId = schedRow.game_id;
 
-      // Fetch all individual player stat rows + game_mult + opp_elo_rank + team DEF stats in parallel
-      const [playerRowsRes, multRes, oppRankRes, teamRowsRes, tePlayersRes] = await Promise.all([
+      // Fetch all individual player stat rows + game_mult + team DEF stats in parallel
+      const [playerRowsRes, multRes, teamRowsRes, tePlayersRes] = await Promise.all([
         admin.from('cached_stats').select('player_name, stat_type, value')
           .eq('game_id', gameId).eq('school', school)
           .not('player_name', 'is', null)
@@ -69,9 +69,6 @@ export async function GET(req: Request) {
         admin.from('cached_stats').select('value')
           .eq('game_id', gameId).eq('school', school)
           .eq('stat_type', 'game_mult').is('player_name', null).maybeSingle(),
-        admin.from('cached_stats').select('value')
-          .eq('game_id', gameId).eq('school', school)
-          .eq('stat_type', 'opp_elo_rank').is('player_name', null).maybeSingle(),
         admin.from('cached_stats').select('stat_type, value')
           .eq('game_id', gameId).eq('school', school).is('player_name', null)
           .in('stat_type', ['def_sacks','def_ints','def_fum_rec','def_tds','def_safeties']),
@@ -80,7 +77,6 @@ export async function GET(req: Request) {
       ]);
 
       const odrMult  = multRes.data?.value ?? 1.0;
-      const oppRank  = oppRankRes.data?.value ?? null;
       const teNames  = (tePlayersRes.data ?? []).map((p: any) => p.player_name as string);
       const teNameSet = new Set(teNames);
 
@@ -193,15 +189,12 @@ export async function GET(req: Request) {
         }
       }
 
-      const resolvedRank = oppRank ?? 999;
       return NextResponse.json(
         {
           breakdown: bdRows && bdRows.length > 0 ? bdRows : null,
           teNames,
           odrMult,
-          oppRank:  resolvedRank,
-          odrLabel: odrLabel(resolvedRank),
-          odrMultCalc: calcOdrMult(resolvedRank),
+          odrLabel: odrLabelFromMult(odrMult),
         },
         { headers: NO_STORE },
       );

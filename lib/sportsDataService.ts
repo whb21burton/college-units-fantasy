@@ -316,8 +316,7 @@ export async function syncStats(
       }
 
       // ── Score each unit ───────────────────────────────────────────────────
-      add(null, 'game_mult',     mult)
-      add(null, 'opp_elo_rank',  oppRank)
+      add(null, 'game_mult', mult)
 
       // QB — top scorer only
       units.QB.sort((a, b) => b.pts - a.pts)
