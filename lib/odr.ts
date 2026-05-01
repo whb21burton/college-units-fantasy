@@ -43,13 +43,13 @@ export function odrLabelFromMult(mult: number | null | undefined): string {
 
 export function getODRColor(mult: number | null | undefined): string {
   if (mult == null) return '#4a5d7a'
-  if (mult >= 1.3) return '#ff6b35'   // Elite — orange
-  if (mult >= 1.2) return '#ff9f1c'   // Hard — amber
-  if (mult >= 1.1) return '#d4a828'   // Good — gold
-  if (mult >= 1.0) return '#2ecc71'   // Average — green
-  if (mult >= 0.9) return '#7a90b0'   // Not Bad — blue-gray
-  if (mult >= 0.8) return '#7a90b0'   // Bad — blue-gray
-  if (mult >= 0.7) return '#e74c3c'   // Really Bad — red
-  if (mult >= 0.6) return '#c0392b'   // Weenie Hut Jr. — dark red
-  return '#922b21'                     // Super Weenie Hut Jr. — darkest red
+  if (mult >= 1.3) return '#39ff14'   // Elite — bright highlighter green
+  if (mult >= 1.2) return '#90ee90'   // Hard — light green
+  if (mult >= 1.1) return '#228b22'   // Good — green
+  if (mult >= 1.0) return '#ffff00'   // Average — yellow
+  if (mult >= 0.9) return '#ff8c00'   // Not Bad — orange
+  if (mult >= 0.8) return '#ff4500'   // Bad — red/orange
+  if (mult >= 0.7) return '#cc0000'   // Really Bad — red
+  if (mult >= 0.6) return '#9400d3'   // Weenie Hut Jr. — purple
+  return '#ff69b4'                     // Super Weenie Hut Jr. — pink
 }
