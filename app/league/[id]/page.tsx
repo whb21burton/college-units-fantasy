@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 import DraftOrderEditor from '@/components/league/DraftOrderEditor';
-import { odrLabelFromMult, getODRColor } from '@/lib/odr';
+import { odrLabelFromMult, getODRColor, odrMult } from '@/lib/odr';
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
@@ -1723,14 +1723,18 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                             <td key={i} style={tdStyle('right', { color: wk.fantasyPoints != null ? C.gold : C.muted, fontFamily: 'Anton,sans-serif', fontWeight: 700, fontSize: 12 })}>{fpts}</td>
                           );
                           if (c.key === '_odr') {
-                            const odrColor = getODRColor(wk.multiplier);
-                            const label    = odrLabelFromMult(wk.multiplier);
+                            // wk.multiplier is the stored game_mult (0.5–1.3).
+                            // If it's somehow a raw rank number (>1.3), convert it first.
+                            const rawMult  = wk.multiplier;
+                            const safeMult = rawMult != null && rawMult > 1.3 ? odrMult(rawMult) : rawMult;
+                            const odrColor = getODRColor(safeMult);
+                            const label    = odrLabelFromMult(safeMult);
                             return (
                               <td key={i} style={{ ...tdStyle('right'), whiteSpace: 'normal', lineHeight: 1.3, verticalAlign: 'middle' }}>
-                                {wk.multiplier != null ? (
+                                {safeMult != null ? (
                                   <>
                                     <div style={{ color: odrColor, fontWeight: 700, fontSize: 11 }}>{label}</div>
-                                    <div style={{ color: C.muted, fontSize: 10 }}>×{wk.multiplier.toFixed(1)}</div>
+                                    <div style={{ color: C.muted, fontSize: 10 }}>×{safeMult.toFixed(2)}</div>
                                   </>
                                 ) : '—'}
                               </td>
