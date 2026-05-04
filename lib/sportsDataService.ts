@@ -18,17 +18,6 @@ function odrMult(rank: number): number {
   return 0.5
 }
 
-export function multToLabel(mult: number): string {
-  if (mult >= 1.3) return 'Elite'
-  if (mult >= 1.2) return 'Hard'
-  if (mult >= 1.1) return 'Good'
-  if (mult >= 1.0) return 'Average'
-  if (mult >= 0.9) return 'Not Bad'
-  if (mult >= 0.8) return 'Bad'
-  if (mult >= 0.7) return 'Really Bad'
-  if (mult >= 0.6) return 'Weenie Hut Jr.'
-  return 'Super Weenie Hut Jr.'
-}
 
 const BASE_URL = 'https://apinext.collegefootballdata.com'
 
@@ -234,14 +223,12 @@ export async function syncStats(
         posLookup[`${school}||${norm}`] = pos
         if (pos === 'TE') teCount++
       }
-      console.log(`[posRegistry] ${school}: ${roster.length} players, ${teCount} TEs`)
     } catch (e: any) {
       console.error(`[posRegistry] ${school} failed:`, e.message)
     }
   }))
 
   const teInLookup = Object.values(posLookup).filter(p => p === 'TE').length
-  console.log(`[posLookup] total=${Object.keys(posLookup).length} TEs=${teInLookup}`)
   if (teInLookup === 0) {
     console.error('[posLookup] WARNING: 0 TEs found in lookup — position registry failed')
   }
@@ -360,7 +347,6 @@ export async function syncStats(
       let teRaw = 0
       for (let i = 0; i < Math.min(units.TE.length, TE_WEIGHTS.length); i++) teRaw += units.TE[i].pts * TE_WEIGHTS[i]
       add(null, 'unit_TE', Math.round(teRaw * mult * 10) / 10)
-      console.log(`[TE] ${school} wk${week}: ${units.TE.length} TEs → ${teRaw.toFixed(1)} raw pts (top: ${units.TE[0]?.name ?? 'none'})`)
 
       // DEF — fallback field names handle CFBD's inconsistent casing
       const defSacks  = ts['sacks']             ?? ts['Sacks']             ?? 0
@@ -375,13 +361,6 @@ export async function syncStats(
       add(null, 'def_fum_rec', defFumRec)
       add(null, 'def_tds',     defTDs)
       add(null, 'def_safeties',defSafety)
-      console.log(`[DEF] ${school} wk${week}: sacks=${defSacks} ints=${defInts} fumRec=${defFumRec} defTDs=${defTDs} safety=${defSafety} → raw=${defRaw} final=${Math.round(defRaw * mult * 10) / 10}`)
-
-      // Part 4 — log raw CFBD team stat field names for first school to verify
-      if (schoolsFilter && school === schoolsFilter[0]) {
-        console.log(`[teamStats] ${school} wk${week} categories: ${Object.keys(ts).join(', ')}`)
-        console.log(`[teamStats] ${school} wk${week} values: ${JSON.stringify(ts)}`)
-      }
 
       // K
       units.K.sort((a, b) => b.pts - a.pts)
@@ -401,9 +380,3 @@ export async function syncStats(
   return total
 }
 
-// ─── getActiveGames ──────────────────────────────────────────────────────────
-export async function getActiveGames(): Promise<any[]> {
-  const db = createAdminClient()
-  const { data } = await db.from('cached_scores').select('*').eq('status', 'in_progress').order('start_time')
-  return data ?? []
-}

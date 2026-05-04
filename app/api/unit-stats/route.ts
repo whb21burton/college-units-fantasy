@@ -185,7 +185,7 @@ export async function GET(req: Request) {
             }))
           : null;
         if (!bdRows?.length) {
-          console.log(`[unit-stats/breakdown] ${school} wk${weekParam} TE: playerTotals=${Object.keys(playerTotals).length} teNames=[${teNames.join(',')}]`);
+          console.error(`[unit-stats/breakdown] ${school} wk${weekParam} TE: no TE stats found (playerTotals=${Object.keys(playerTotals).length} teNames=[${teNames.join(',')}])`);
         }
       }
 

@@ -8,7 +8,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase-server';
-import { FULL_POOL, CONFERENCES, type UnitType, type DraftUnit } from '@/lib/playerPool';
+import { FULL_POOL, type UnitType, type DraftUnit } from '@/lib/playerPool';
 
 // ── getScoresForWeek ─────────────────────────────────────────────────────────
 export async function getScoresForWeek(week: number, season: number) {
@@ -108,7 +108,6 @@ export async function getUnitPointsForWeek(
     .limit(50000);
 
   const rows = data ?? [];
-  console.log(`[getUnitPointsForWeek] week=${week} gameIds=${gameIds.length} rows=${rows.length} first5=${JSON.stringify(rows.slice(0,5))}`);
 
   const schoolPoints: Record<string, Partial<Record<UnitType, number>>> = {};
   const schoolMults:  Record<string, number> = {};

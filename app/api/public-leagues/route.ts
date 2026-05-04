@@ -30,13 +30,6 @@ export async function GET() {
   }
 
   const leagues = data ?? [];
-  if (leagues[0]) {
-    console.log('[public-leagues] first row:', {
-      conference_filter: leagues[0].conference_filter,
-      is_capped: leagues[0].is_capped,
-      max_entries_per_user: leagues[0].max_entries_per_user,
-    });
-  }
 
   // Count members for each league
   const cm: Record<string, number> = {};

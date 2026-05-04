@@ -43,10 +43,6 @@ function autoStarters(picks: any[]): any[] {
   }
   const used = new Set<string>();
   const take = (arr: any[]) => { const p = arr.find(x => !used.has(x.id)) ?? null; if (p) used.add(p.id); return p; };
-  const flex = [...byPos.RB, ...byPos.WR, ...byPos.TE]
-    .filter(p => !used.has(p.id))
-    .sort((a, b) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0))[0] ?? null;
-
   const slots = [
     take(byPos.QB),
     take(byPos.RB), take(byPos.RB),
@@ -62,7 +58,6 @@ function autoStarters(picks: any[]): any[] {
     .sort((a, b) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0))[0] ?? null;
   if (flexPick) used.add(flexPick.id);
   slots[6] = flexPick;
-  void flex; // suppress unused warning
   return slots.filter(Boolean);
 }
 

@@ -32,9 +32,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const confParam  = searchParams.get('conference') ?? null; // "SEC" or "SEC,ACC,Big Ten" or null = all
-    const confFilter = confParam; // kept as original name for compat
-    const confList   = confParam ? confParam.split(',').map(c => c.trim()).filter(Boolean) : null;
+    const confParam = searchParams.get('conference') ?? null; // "SEC" or "SEC,ACC,Big Ten" or null = all
+    const confList  = confParam ? confParam.split(',').map(c => c.trim()).filter(Boolean) : null;
 
     const admin = createAdminClient();
 

@@ -765,7 +765,6 @@ function PublicLeaguesContent() {
         if (!res.ok) { setLoading(false); return; }
         const data: League[] = await res.json();
         const arr = Array.isArray(data) ? data : [];
-        if (arr[0]) console.log('[leagues] first league raw data:', arr[0]);
         setLeagues(arr);
       } catch {
         // network error — leave leagues empty

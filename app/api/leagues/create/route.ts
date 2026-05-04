@@ -35,12 +35,6 @@ export async function POST(req: NextRequest) {
   const isCapped = body.is_capped !== undefined ? Boolean(body.is_capped) : maxEntriesPerUser != null;
 
   const storedConferenceFilter = isPublic ? (body.conference_filter ?? 'All D1') : 'All D1';
-  console.log('[leagues/create] saving:', {
-    conference_filter: storedConferenceFilter,
-    max_entries_per_user: maxEntriesPerUser,
-    is_capped: isCapped,
-    league_type: body.league_type ?? 'season',
-  });
 
   const created: { id: string; invite_code: string; name: string }[] = [];
 

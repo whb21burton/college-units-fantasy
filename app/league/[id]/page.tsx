@@ -1123,7 +1123,7 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
 function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
   try {
     const allPlayers: any[] = week.players ?? [];
-    const odrMult: number   = week.multiplier ?? 1.0;
+    const weekMult: number  = week.multiplier ?? 1.0;
 
     const TH = (align: 'left' | 'right', gold?: boolean): React.CSSProperties => ({
       padding: '6px 8px', fontFamily: 'Oswald,sans-serif', fontWeight: 400,
@@ -1209,7 +1209,7 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
     const displayed  = withRaw.slice(0, weights.length);
     const unitTotal  = week.fantasyPoints != null
       ? (week.fantasyPoints as number).toFixed(1)
-      : displayed.reduce((s: number, p: any, i: number) => s + Math.round((p.rawPts??0)*(weights[i]??0)*odrMult*10)/10, 0).toFixed(1);
+      : displayed.reduce((s: number, p: any, i: number) => s + Math.round((p.rawPts??0)*(weights[i]??0)*weekMult*10)/10, 0).toFixed(1);
 
     // QB: PLAYER(30%) PASS YDS(12%) PASS TD(10%) INT(9%) RUSH YDS(12%) RUSH TD(10%) PTS(10%) ROLE(7%)
     // RB: PLAYER(22%) ROLE(7%) ATT(8%) RUSH YDS(12%) RUSH TD(10%) REC(8%) REC YDS(11%) PTS(8%) MULT(7%) WEIGHTED(7%)
@@ -1268,7 +1268,7 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
           <tbody>
             {displayed.map((p: any, i: number) => {
               const mult     = weights[i] ?? 0;
-              const weighted = Math.round((p.rawPts??0) * mult * odrMult * 10) / 10;
+              const weighted = Math.round((p.rawPts??0) * mult * weekMult * 10) / 10;
               const role     = roles[i] ?? '';
               const qbPts    = (p.passYd??0)*0.1 + (p.passTd??0)*4 + (p.int??0)*(-2) + (p.rushYd??0)*0.1 + (p.rushTd??0)*6;
               return (

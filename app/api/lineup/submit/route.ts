@@ -7,15 +7,6 @@ export const dynamic = 'force-dynamic';
 
 const BUDGET = 200;
 
-// Pricing tiers by position rank
-function rankPrice(rank: number): number {
-  if (rank <= 10) return 50;
-  if (rank <= 20) return 40;
-  if (rank <= 30) return 30;
-  if (rank <= 40) return 20;
-  return 10;
-}
-
 // Required slots for a valid DFS lineup
 const REQUIRED_SLOTS: Record<string, number> = {
   QB:   1,
