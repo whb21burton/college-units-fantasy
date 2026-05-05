@@ -1721,8 +1721,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                           if (c.key === '_odr') {
                             // wk.multiplier is the stored game_mult (0.5–1.3).
                             // If it's somehow a raw rank number (>1.3), convert it first.
-                            const rawMult  = wk.multiplier;
-                            const safeMult = rawMult != null && rawMult > 1.3 ? odrMult(rawMult) : rawMult;
+                            const safeMult = wk.odrMult ?? wk.multiplier ?? null;
                             const odrColor = getODRColor(safeMult);
                             const label    = odrLabelFromMult(safeMult);
                             return (
