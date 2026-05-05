@@ -1719,17 +1719,26 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                             <td key={i} style={tdStyle('right', { color: wk.fantasyPoints != null ? C.gold : C.muted, fontFamily: 'Anton,sans-serif', fontWeight: 700, fontSize: 12 })}>{fpts}</td>
                           );
                           if (c.key === '_odr') {
-                            // wk.multiplier is the stored game_mult (0.5–1.3).
-                            // If it's somehow a raw rank number (>1.3), convert it first.
-                            const safeMult = wk.odrMult ?? wk.multiplier ?? null;
-                            const odrColor = getODRColor(safeMult);
-                            const label    = odrLabelFromMult(safeMult);
+                            const m = wk.multiplier;
+                            let label = '—';
+                            let color = '#4a5d7a';
+                            if (m != null) {
+                              if      (m >= 1.3) { label = 'Elite';                color = '#39ff14'; }
+                              else if (m >= 1.2) { label = 'Hard';                 color = '#90ee90'; }
+                              else if (m >= 1.1) { label = 'Good';                 color = '#228b22'; }
+                              else if (m >= 1.0) { label = 'Average';              color = '#ffff00'; }
+                              else if (m >= 0.9) { label = 'Not Bad';              color = '#ff8c00'; }
+                              else if (m >= 0.8) { label = 'Bad';                  color = '#ff4500'; }
+                              else if (m >= 0.7) { label = 'Really Bad';           color = '#cc0000'; }
+                              else if (m >= 0.6) { label = 'Weenie Hut Jr.';       color = '#9400d3'; }
+                              else               { label = 'Super Weenie Hut Jr.'; color = '#ff69b4'; }
+                            }
                             return (
                               <td key={i} style={{ ...tdStyle('right'), whiteSpace: 'normal', lineHeight: 1.3, verticalAlign: 'middle' }}>
-                                {safeMult != null ? (
+                                {m != null ? (
                                   <>
-                                    <div style={{ color: odrColor, fontWeight: 700, fontSize: 11 }}>{label}</div>
-                                    <div style={{ color: C.muted, fontSize: 10 }}>×{safeMult.toFixed(2)}</div>
+                                    <div style={{ color, fontWeight: 700, fontSize: 11 }}>{label}</div>
+                                    <div style={{ color: '#3e5470', fontSize: 10 }}>×{m.toFixed(2)}</div>
                                   </>
                                 ) : '—'}
                               </td>
