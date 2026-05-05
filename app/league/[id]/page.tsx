@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 import DraftOrderEditor from '@/components/league/DraftOrderEditor';
-import { odrLabelFromMult, getODRColor, odrMult } from '@/lib/odr';
+import { odrLabelFromMult, getODRColor } from '@/lib/odr';
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
@@ -1672,6 +1672,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                   const isPlayoff = wk.week > 11;
                   const canExpand = wk.completed;
                   const isExpanded = expandedWk === wk.week;
+                  const multColor = wk.multiplier == null ? C.muted : wk.multiplier > 1 ? C.green : wk.multiplier < 1 ? C.red : C.sub;
                   const fpts = wk.fantasyPoints != null
                     ? wk.fantasyPoints.toFixed(1)
                     : wk.opponent != null
@@ -1718,32 +1719,9 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                           if (c.key === '_fpts') return (
                             <td key={i} style={tdStyle('right', { color: wk.fantasyPoints != null ? C.gold : C.muted, fontFamily: 'Anton,sans-serif', fontWeight: 700, fontSize: 12 })}>{fpts}</td>
                           );
-                          if (c.key === '_odr') {
-                            const m = wk.multiplier;
-                            let label = '—';
-                            let color = '#4a5d7a';
-                            if (m != null) {
-                              if      (m >= 1.3) { label = 'Elite';                color = '#39ff14'; }
-                              else if (m >= 1.2) { label = 'Hard';                 color = '#90ee90'; }
-                              else if (m >= 1.1) { label = 'Good';                 color = '#228b22'; }
-                              else if (m >= 1.0) { label = 'Average';              color = '#ffff00'; }
-                              else if (m >= 0.9) { label = 'Not Bad';              color = '#ff8c00'; }
-                              else if (m >= 0.8) { label = 'Bad';                  color = '#ff4500'; }
-                              else if (m >= 0.7) { label = 'Really Bad';           color = '#cc0000'; }
-                              else if (m >= 0.6) { label = 'Weenie Hut Jr.';       color = '#9400d3'; }
-                              else               { label = 'Super Weenie Hut Jr.'; color = '#ff69b4'; }
-                            }
-                            return (
-                              <td key={i} style={{ ...tdStyle('right'), whiteSpace: 'normal', lineHeight: 1.3, verticalAlign: 'middle' }}>
-                                {m != null ? (
-                                  <>
-                                    <div style={{ color, fontWeight: 700, fontSize: 11 }}>{label}</div>
-                                    <div style={{ color: '#3e5470', fontSize: 10 }}>×{m.toFixed(2)}</div>
-                                  </>
-                                ) : '—'}
-                              </td>
-                            );
-                          }
+                          if (c.key === '_odr') return (
+                            <td key={i} style={tdStyle('right', { color: multColor })}>{wk.multiplier != null ? `×${wk.multiplier.toFixed(1)}` : '—'}</td>
+                          );
                           if (c.key === '_exp') return (
                             <td key={i} style={tdStyle('right', { color: C.muted, fontSize: 9 })}>
                               {canExpand ? (isExpanded ? '▲' : '▼') : ''}
