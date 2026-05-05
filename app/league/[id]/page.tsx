@@ -1577,67 +1577,63 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
         // Columns: WK | OPP | FPTS | ODR | ...stat cols | chevron
         const unitCols: Record<string, { label: string; key: string; align: 'left' | 'right'; w: string }[]> = {
           QB: [
-            { label: 'WK',       key: '_wk',   align: 'left',  w: '5%'  },
-            { label: 'OPP',      key: '_opp',  align: 'left',  w: '16%' },
-            { label: 'FPTS',     key: '_fpts', align: 'right', w: '8%'  },
-            { label: 'ODR',      key: '_odr',  align: 'right', w: '13%' },
-            { label: 'PASS YDS', key: 'passYd', align: 'right', w: '10%' },
+            { label: 'WK',       key: '_wk',   align: 'left',  w: '6%'  },
+            { label: 'OPP',      key: '_opp',  align: 'left',  w: '20%' },
+            { label: 'FPTS',     key: '_fpts', align: 'right', w: '10%' },
+            { label: 'ODR',      key: '_odr',  align: 'right', w: '14%' },
+            { label: 'PASS YDS', key: 'passYd', align: 'right', w: '11%' },
             { label: 'PASS TD',  key: 'passTd', align: 'right', w: '9%'  },
-            { label: 'INT',      key: 'int',    align: 'right', w: '7%'  },
-            { label: 'RUSH YDS', key: 'rushYd', align: 'right', w: '10%' },
-            { label: 'RUSH TD',  key: 'rushTd', align: 'right', w: '9%'  },
-            { label: '',         key: '_exp',  align: 'right', w: '4%'  },
+            { label: 'INT',      key: 'int',    align: 'right', w: '8%'  },
+            { label: 'RUSH YDS', key: 'rushYd', align: 'right', w: '11%' },
+            { label: 'RUSH TD',  key: 'rushTd', align: 'right', w: '11%' },
           ],
           RB: [
-            { label: 'WK',      key: '_wk',   align: 'left',  w: '5%'  },
-            { label: 'OPP',     key: '_opp',  align: 'left',  w: '14%' },
-            { label: 'FPTS',    key: '_fpts', align: 'right', w: '8%'  },
-            { label: 'ODR',     key: '_odr',  align: 'right', w: '13%' },
-            { label: 'ATT',     key: 'rushAtt', align: 'right', w: '7%'  },
-            { label: 'RUSH YDS',key: 'rushYd',  align: 'right', w: '10%' },
-            { label: 'RUSH TD', key: 'rushTd',  align: 'right', w: '9%'  },
-            { label: 'REC',     key: 'rec',     align: 'right', w: '7%'  },
-            { label: 'REC YDS', key: 'recYd',   align: 'right', w: '10%' },
-            { label: '',        key: '_exp',  align: 'right', w: '4%'  },
+            { label: 'WK',       key: '_wk',     align: 'left',  w: '6%'  },
+            { label: 'OPP',      key: '_opp',    align: 'left',  w: '20%' },
+            { label: 'FPTS',     key: '_fpts',   align: 'right', w: '10%' },
+            { label: 'ODR',      key: '_odr',    align: 'right', w: '14%' },
+            { label: 'ATT',      key: 'rushAtt', align: 'right', w: '8%'  },
+            { label: 'RUSH YDS', key: 'rushYd',  align: 'right', w: '11%' },
+            { label: 'RUSH TD',  key: 'rushTd',  align: 'right', w: '9%'  },
+            { label: 'REC',      key: 'rec',     align: 'right', w: '7%'  },
+            { label: 'REC YDS',  key: 'recYd',   align: 'right', w: '11%' },
+            { label: '',         key: '_exp',    align: 'right', w: '4%'  },
           ],
           WR: [
-            { label: 'WK',   key: '_wk',   align: 'left',  w: '5%'  },
-            { label: 'OPP',  key: '_opp',  align: 'left',  w: '20%' },
-            { label: 'FPTS', key: '_fpts', align: 'right', w: '10%' },
-            { label: 'ODR',  key: '_odr',  align: 'right', w: '14%' },
-            { label: 'REC',  key: 'rec',   align: 'right', w: '13%' },
-            { label: 'YDS',  key: 'recYd', align: 'right', w: '13%' },
-            { label: 'TD',   key: 'recTd', align: 'right', w: '13%' },
-            { label: '',     key: '_exp',  align: 'right', w: '4%'  },
-          ],
-          TE: [
-            { label: 'WK',   key: '_wk',   align: 'left',  w: '5%'  },
-            { label: 'OPP',  key: '_opp',  align: 'left',  w: '20%' },
-            { label: 'FPTS', key: '_fpts', align: 'right', w: '10%' },
-            { label: 'ODR',  key: '_odr',  align: 'right', w: '14%' },
-            { label: 'REC',  key: 'rec',   align: 'right', w: '13%' },
-            { label: 'YDS',  key: 'recYd', align: 'right', w: '13%' },
-            { label: 'TD',   key: 'recTd', align: 'right', w: '13%' },
-            { label: '',     key: '_exp',  align: 'right', w: '4%'  },
-          ],
-          DEF: [
-            { label: 'WK',      key: '_wk',   align: 'left',  w: '5%'  },
-            { label: 'OPP',     key: '_opp',  align: 'left',  w: '16%' },
-            { label: 'FPTS',    key: '_fpts', align: 'right', w: '8%'  },
-            { label: 'ODR',     key: '_odr',  align: 'right', w: '13%' },
-            { label: 'SACKS',   key: 'sacks',  align: 'right', w: '10%' },
-            { label: 'INT',     key: 'ints',   align: 'right', w: '8%'  },
-            { label: 'FUM REC', key: 'fumRec', align: 'right', w: '11%' },
-            { label: 'DEF TD',  key: 'defTd',  align: 'right', w: '10%' },
-            { label: '',        key: '_exp',  align: 'right', w: '4%'  },
-          ],
-          K: [
             { label: 'WK',   key: '_wk',   align: 'left',  w: '6%'  },
-            { label: 'OPP',  key: '_opp',  align: 'left',  w: '28%' },
+            { label: 'OPP',  key: '_opp',  align: 'left',  w: '22%' },
             { label: 'FPTS', key: '_fpts', align: 'right', w: '12%' },
             { label: 'ODR',  key: '_odr',  align: 'right', w: '16%' },
-            { label: 'PTS',  key: 'pts',   align: 'right', w: '30%' },
-            { label: '',     key: '_exp',  align: 'right', w: '4%'  },
+            { label: 'REC',  key: 'rec',   align: 'right', w: '14%' },
+            { label: 'YDS',  key: 'recYd', align: 'right', w: '15%' },
+            { label: 'TD',   key: 'recTd', align: 'right', w: '15%' },
+          ],
+          TE: [
+            { label: 'WK',   key: '_wk',   align: 'left',  w: '6%'  },
+            { label: 'OPP',  key: '_opp',  align: 'left',  w: '22%' },
+            { label: 'FPTS', key: '_fpts', align: 'right', w: '12%' },
+            { label: 'ODR',  key: '_odr',  align: 'right', w: '16%' },
+            { label: 'REC',  key: 'rec',   align: 'right', w: '14%' },
+            { label: 'YDS',  key: 'recYd', align: 'right', w: '15%' },
+            { label: 'TD',   key: 'recTd', align: 'right', w: '15%' },
+          ],
+          DEF: [
+            { label: 'WK',      key: '_wk',      align: 'left',  w: '6%'  },
+            { label: 'OPP',     key: '_opp',     align: 'left',  w: '20%' },
+            { label: 'FPTS',    key: '_fpts',    align: 'right', w: '10%' },
+            { label: 'ODR',     key: '_odr',     align: 'right', w: '14%' },
+            { label: 'SACKS',   key: 'sacks',    align: 'right', w: '10%' },
+            { label: 'INT',     key: 'ints',     align: 'right', w: '10%' },
+            { label: 'FUM REC', key: 'fumRec',   align: 'right', w: '10%' },
+            { label: 'DEF TD',  key: 'defTd',    align: 'right', w: '10%' },
+            { label: 'SAFETY',  key: 'safeties', align: 'right', w: '10%' },
+          ],
+          K: [
+            { label: 'WK',   key: '_wk',   align: 'left',  w: '8%'  },
+            { label: 'OPP',  key: '_opp',  align: 'left',  w: '30%' },
+            { label: 'FPTS', key: '_fpts', align: 'right', w: '15%' },
+            { label: 'ODR',  key: '_odr',  align: 'right', w: '20%' },
+            { label: 'PTS',  key: 'pts',   align: 'right', w: '27%' },
           ],
         };
         const tableCols = unitCols[ut] ?? unitCols['QB'];
@@ -1741,8 +1737,8 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                             );
                           }
                           if (c.key === '_exp') return (
-                            <td key={i} style={tdStyle('right', { color: C.muted, fontSize: 8, transition: 'transform .2s', ...(canExpand && isExpanded ? { transform: 'rotate(180deg)', display: 'block' } : {}) })}>
-                              {canExpand ? '▼' : ''}
+                            <td key={i} style={tdStyle('right', { color: C.muted, fontSize: 9 })}>
+                              {canExpand ? (isExpanded ? '▲' : '▼') : ''}
                             </td>
                           );
                           return (

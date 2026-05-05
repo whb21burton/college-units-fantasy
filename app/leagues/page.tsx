@@ -786,14 +786,14 @@ function PublicLeaguesContent() {
       const cf = l.conference_filter ?? '';
       const matchesConference =
         styleFilter === 'All D1'
-          ? (!cf || cf === 'ALL' || cf === 'All D1' || cf === 'All D1 Schools')
+          ? (!cf || cf === 'All D1')
           : cf === styleFilter;
       if (!matchesConference) return false;
     }
     if (typeFilter !== 'all') {
       const matchesEntryType =
-        (typeFilter === 'capped' && l.is_capped === true  && l.league_size !== 2) ||
-        (typeFilter === 'nocap'  && (l.is_capped === false || l.is_capped === null) && l.league_size !== 2) ||
+        (typeFilter === 'capped' && l.is_capped === true && l.league_size !== 2) ||
+        (typeFilter === 'nocap'  && !l.is_capped          && l.league_size !== 2) ||
         (typeFilter === '1v1'    && l.league_size === 2);
       if (!matchesEntryType) return false;
     }
@@ -991,7 +991,7 @@ function PublicLeaguesContent() {
                     </div>
 
                     <div style={{ padding: '12px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>
-                      {(!league.conference_filter || league.conference_filter === 'ALL') ? 'All D1' : league.conference_filter}
+                      {league.conference_filter || 'All D1'}
                     </div>
 
                     <div style={{ padding: '12px 8px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: league.buy_in > 0 ? C.gold : C.green, textAlign: 'right', whiteSpace: 'nowrap' }}>

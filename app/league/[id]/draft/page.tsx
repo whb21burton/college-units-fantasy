@@ -264,8 +264,7 @@ export default function DraftPage() {
   // to back with no delay until it's a human's turn.
 
   useEffect(() => {
-    const canDriveCpu = isCommissioner || league?.is_public;
-    if (!draftLive || draftDone || !canDriveCpu || !isCpuTurn) {
+    if (!draftLive || draftDone || !isCpuTurn || !userId) {
       if (!isCpuTurn) setCpuPicking(false);
       return;
     }
@@ -286,7 +285,7 @@ export default function DraftPage() {
     const best = autoPick(avail, cpuRoster);
     if (best) insertPick(best);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPickNum, draftLive, draftDone, isCommissioner, isCpuTurn, teamIdx]);
+  }, [currentPickNum, draftLive, draftDone, userId, isCpuTurn, teamIdx]);
 
   // ── Draft complete ────────────────────────────────────────────────────────
 
