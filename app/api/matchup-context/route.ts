@@ -102,8 +102,25 @@ export async function GET(req: Request) {
       }
     }
 
+    // ── multMap: stored game_mult from cached_stats for each school playing this week ──
+    const schools = Object.keys(opponentMap);
+    const multMap: Record<string, number> = {};
+    if (schools.length) {
+      const { data: multRows } = await admin
+        .from('cached_stats')
+        .select('school, value')
+        .eq('stat_type', 'game_mult')
+        .eq('week', week)
+        .eq('season', season)
+        .is('player_name', null)
+        .in('school', schools);
+      for (const row of multRows ?? []) {
+        if (row.school && row.value != null) multMap[row.school] = row.value;
+      }
+    }
+
     return NextResponse.json(
-      { week, season, opponentMap, rankMap, defRankMap, offRankMap, gameTimeMap, homeMap, firstGameTime },
+      { week, season, opponentMap, rankMap, multMap, defRankMap, offRankMap, gameTimeMap, homeMap, firstGameTime },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (err: any) {

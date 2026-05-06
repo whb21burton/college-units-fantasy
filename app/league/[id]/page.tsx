@@ -34,6 +34,7 @@ function poolUrl(conf?: string | null): string {
 type MatchupCtx = {
   opponentMap: Record<string, string>;
   rankMap:     Record<string, number>; // Elo rank (display only)
+  multMap:     Record<string, number>; // stored game_mult from cached_stats
   defRankMap:  Record<string, number>; // SP+ defensive rank (1 = best defense)
   offRankMap:  Record<string, number>; // SP+ offensive rank (1 = best offense)
 } | null;
@@ -74,8 +75,7 @@ function matchupProj(
   const opponent = ctx?.opponentMap[school] ?? null;
   if (!opponent || !ctx) return { pts: base, mult: 1.0, opponent };
 
-  const relevantRank = ctx.rankMap[opponent] ?? null;
-  const mult = relevantRank != null ? rankMult(relevantRank) : 1.0;
+  const mult = ctx.multMap?.[school] ?? 1.0;
   return { pts: base * mult, mult, opponent };
 }
 
@@ -151,10 +151,8 @@ function PlayerInfoLines({
   const schoolRank = unitRankMaps?.[unitType]?.[school] ?? null;
   const oppRank    = opponent ? (unitRankMaps?.['DEF']?.[opponent] ?? null) : null;
 
-  const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? null) : null;
-
-  // No opponent (BYE) = 1.0x display; has opponent but no rank data = 1.0 neutral
-  const mult = relevantRank != null ? rankMult(relevantRank) : 1.0;
+  const storedMult = ctx?.multMap?.[school] ?? null;
+  const mult = storedMult ?? 1.0;
   const { label: diffLabel, color: diffColor } = multLabel(mult);
 
   // Team units show "School UnitType Unit"; QB/K show player name
@@ -226,9 +224,8 @@ function effectivePts(
     return { pts: 0, isActual: true, base: 0, storedMult: null };
   }
 
-  // Game not yet played — use live Elo projection (null = no rank data → neutral 1.0)
-  const relevantRank = opponent && ctx ? (ctx.rankMap[opponent] ?? null) : null;
-  const mult         = relevantRank != null ? rankMult(relevantRank) : 1.0;
+  // Game not yet played — use stored game_mult (null = no data → neutral 1.0)
+  const mult = ctx?.multMap?.[school] ?? 1.0;
   const base         = weeklyProj(seasonPts);
   return { pts: base * mult, isActual: false, base, storedMult: null };
 }
