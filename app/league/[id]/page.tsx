@@ -74,8 +74,8 @@ function matchupProj(
   const opponent = ctx?.opponentMap[school] ?? null;
   if (!opponent || !ctx) return { pts: base, mult: 1.0, opponent };
 
-  const relevantRank = ctx.rankMap[opponent] ?? 999;
-  const mult = rankMult(relevantRank);
+  const relevantRank = ctx.rankMap[opponent] ?? null;
+  const mult = relevantRank != null ? rankMult(relevantRank) : 1.0;
   return { pts: base * mult, mult, opponent };
 }
 
@@ -151,9 +151,9 @@ function PlayerInfoLines({
   const schoolRank = unitRankMaps?.[unitType]?.[school] ?? null;
   const oppRank    = opponent ? (unitRankMaps?.['DEF']?.[opponent] ?? null) : null;
 
-  const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? 999) : null;
+  const relevantRank = opponent ? (ctx?.rankMap[opponent] ?? null) : null;
 
-  // No opponent (BYE) = 1.0x display; has opponent = use rank
+  // No opponent (BYE) = 1.0x display; has opponent but no rank data = 1.0 neutral
   const mult = relevantRank != null ? rankMult(relevantRank) : 1.0;
   const { label: diffLabel, color: diffColor } = multLabel(mult);
 
@@ -226,9 +226,9 @@ function effectivePts(
     return { pts: 0, isActual: true, base: 0, storedMult: null };
   }
 
-  // Game not yet played — use live Elo projection
-  const relevantRank = opponent && ctx ? (ctx.rankMap[opponent] ?? 999) : 999;
-  const mult         = rankMult(relevantRank);
+  // Game not yet played — use live Elo projection (null = no rank data → neutral 1.0)
+  const relevantRank = opponent && ctx ? (ctx.rankMap[opponent] ?? null) : null;
+  const mult         = relevantRank != null ? rankMult(relevantRank) : 1.0;
   const base         = weeklyProj(seasonPts);
   return { pts: base * mult, isActual: false, base, storedMult: null };
 }
