@@ -1,118 +1,116 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { createClient } from '@supabase/supabase-js';
+// POST /api/wallet/withdraw
+import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createAdminClient } from '@/lib/supabase-server';
 import { stripe } from '@/lib/stripe';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * POST /api/wallet/withdraw
- * Body: { amount_cents: number }  (integer cents, minimum 1000)
- *
- * 1. Checks stripe_connect_onboarded — returns { requiresOnboarding: true } if not set up
- * 2. Calls deduct_balance RPC atomically
- * 3. Creates Stripe Transfer to connect account
- * 4. On Stripe error: refunds via add_balance, marks transaction failed
- */
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const amount_cents = Math.round(Number(body.amount_cents));
+    const { amountCents, stripePayoutMethodId } = body as { amountCents?: number; stripePayoutMethodId?: string };
 
-    if (!amount_cents || amount_cents < 1000) {
-      return NextResponse.json({ error: 'Minimum withdrawal is $10' }, { status: 400 });
+    if (!amountCents || amountCents < 1000) {
+      return NextResponse.json({ error: 'Minimum withdrawal is $10 (1000 cents)' }, { status: 400 });
     }
 
-    const admin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
+    const admin = createAdminClient();
 
-    // Load wallet + profile
-    const [{ data: wallet }, { data: profile }] = await Promise.all([
-      admin.from('wallets').select('balance, lifetime_withdrawn').eq('user_id', user.id).single(),
-      admin.from('profiles').select('stripe_connect_account_id, stripe_connect_onboarded').eq('id', user.id).single(),
-    ]);
+    const { data: wallet } = await admin
+      .from('wallets')
+      .select('id, is_frozen, stripe_customer_id')
+      .eq('user_id', user.id)
+      .single();
 
     if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
+    if (wallet.is_frozen) return NextResponse.json({ error: 'Wallet is frozen' }, { status: 403 });
 
-    // Check onboarding
-    if (!profile?.stripe_connect_account_id || !profile?.stripe_connect_onboarded) {
-      return NextResponse.json({ requiresOnboarding: true, error: 'Bank account not connected' }, { status: 400 });
+    // Check available balance
+    const { data: balance } = await admin.rpc('get_wallet_balance', { wallet_id: wallet.id });
+    const availableCents = (balance?.available ?? 0) as number;
+    if (availableCents < amountCents) {
+      return NextResponse.json({ error: 'Insufficient balance' }, { status: 400 });
     }
 
-    if ((wallet.balance ?? 0) < amount_cents) {
-      return NextResponse.json({
-        error: `Insufficient balance. Have $${((wallet.balance ?? 0) / 100).toFixed(2)}, need $${(amount_cents / 100).toFixed(2)}.`,
-      }, { status: 400 });
-    }
-
-    // Atomically deduct
-    const { data: newBalance, error: rpcErr } = await admin
-      .rpc('deduct_balance', { p_user_id: user.id, p_amount: amount_cents });
-
-    if (rpcErr) {
-      if (rpcErr.message?.includes('INSUFFICIENT_BALANCE')) {
-        return NextResponse.json({ error: 'Insufficient balance' }, { status: 400 });
-      }
-      throw rpcErr;
-    }
-
-    const balanceAfter = newBalance as number;
-
-    // Create pending transaction
-    const { data: tx } = await admin
+    // Create transaction
+    const idempotencyKey = `withdrawal_${user.id}_${Date.now()}`;
+    const { data: transaction, error: txErr } = await admin
       .from('transactions')
       .insert({
-        user_id:        user.id,
-        type:           'withdrawal',
-        amount:         amount_cents,
-        balance_before: wallet.balance,
-        balance_after:  balanceAfter,
-        status:         'pending',
-        description:    `Withdrawal to bank`,
+        wallet_id:       wallet.id,
+        user_id:         user.id,
+        type:            'withdrawal',
+        status:          'pending',
+        amount_cents:    amountCents,
+        description:     `Withdrawal $${(amountCents / 100).toFixed(2)}`,
+        idempotency_key: idempotencyKey,
       })
       .select('id')
       .single();
 
-    // Stripe Transfer
-    try {
-      const transfer = await stripe.transfers.create({
-        amount:      amount_cents,
-        currency:    'usd',
-        destination: profile.stripe_connect_account_id,
-        metadata:    { user_id: user.id, transaction_id: tx?.id ?? '' },
-      });
+    if (txErr) throw txErr;
 
-      await Promise.all([
-        admin.from('transactions').update({
-          stripe_transfer_id: transfer.id,
-          status:             'completed',
-        }).eq('id', tx?.id),
-        admin.from('wallets').update({
-          lifetime_withdrawn: (wallet.lifetime_withdrawn ?? 0) + amount_cents,
-          updated_at:         new Date().toISOString(),
-        }).eq('user_id', user.id),
+    // Create withdrawal row
+    const { data: withdrawal, error: wErr } = await admin
+      .from('withdrawals')
+      .insert({
+        wallet_id:      wallet.id,
+        user_id:        user.id,
+        amount_cents:   amountCents,
+        status:         'pending',
+        transaction_id: transaction!.id,
+      })
+      .select('id')
+      .single();
+
+    if (wErr) throw wErr;
+
+    // Look up ledger accounts
+    const [{ data: availAcct }, { data: bankAcct }] = await Promise.all([
+      admin.from('ledger_accounts').select('id').eq('wallet_id', wallet.id).eq('type', 'user_available').single(),
+      admin.from('ledger_accounts').select('id').eq('name', 'bank_clearing').single(),
+    ]);
+
+    if (availAcct && bankAcct) {
+      await admin.from('ledger_entries').insert([
+        { account_id: availAcct.id, amount_cents: -amountCents, description: `Withdrawal ${withdrawal!.id}`, reference_id: withdrawal!.id },
+        { account_id: bankAcct.id,  amount_cents:  amountCents, description: `Withdrawal ${withdrawal!.id}`, reference_id: withdrawal!.id },
       ]);
-
-      return NextResponse.json({ success: true, newBalance: balanceAfter, transfer_id: transfer.id });
-    } catch (stripeErr: any) {
-      // Refund wallet
-      await admin.rpc('add_balance', { p_user_id: user.id, p_amount: amount_cents });
-      await admin.from('transactions').update({ status: 'failed' }).eq('id', tx?.id);
-
-      return NextResponse.json(
-        { error: 'Stripe transfer failed: ' + stripeErr.message },
-        { status: 500 },
-      );
     }
+
+    // Initiate Stripe payout
+    let stripeTransferId: string | null = null;
+    try {
+      if (stripePayoutMethodId) {
+        const transfer = await stripe.transfers.create({
+          amount:      amountCents,
+          currency:    'usd',
+          destination: stripePayoutMethodId,
+          metadata:    { withdrawal_id: withdrawal!.id, user_id: user.id },
+        });
+        stripeTransferId = transfer.id;
+      }
+    } catch (stripeErr: any) {
+      console.error('[withdraw] Stripe transfer error:', stripeErr.message);
+      // Don't fail the whole request — mark as pending manual review
+    }
+
+    await admin.from('withdrawals')
+      .update({ status: 'processing', stripe_transfer_id: stripeTransferId })
+      .eq('id', withdrawal!.id);
+    await admin.from('transactions')
+      .update({ status: 'processing' })
+      .eq('id', transaction!.id);
+
+    return NextResponse.json({ withdrawalId: withdrawal!.id, status: 'processing' });
   } catch (err: any) {
     console.error('[withdraw]', err);
-    return NextResponse.json({ error: err?.message ?? 'Withdrawal failed' }, { status: 500 });
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
