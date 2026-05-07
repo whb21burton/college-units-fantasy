@@ -230,13 +230,14 @@ function effectivePts(
   return { pts: base * mult, isActual: false, base, storedMult: null };
 }
 
-type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'ranks' | 'lineup' | 'leaderboard';
+type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'trade' | 'ranks' | 'lineup' | 'leaderboard';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'draft',   label: 'Draft'    },
   { key: 'team',    label: 'Team'     },
   { key: 'league',  label: 'League'   },
   { key: 'players', label: 'Players'  },
+  { key: 'trade',   label: 'Trade'    },
   { key: 'ranks',   label: 'Ranks'    },
 ];
 
@@ -628,6 +629,9 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           )}
           {activeTab === 'league' && (
             <LeagueTab league={league} userId={userId} />
+          )}
+          {activeTab === 'trade' && (
+            <TradeTab league={league} userId={userId} members={members} />
           )}
           {activeTab === 'ranks' && (
             <LeagueRanksTab league={league} members={members} userId={userId} />
@@ -2326,6 +2330,405 @@ function BkMatchup({
       )}
     </div>
   );
+}
+
+/* ── Trade Tab ───────────────────────────────────────────────── */
+function TradeTab({ league, userId, members }: { league: any; userId: string | null; members: any[] }) {
+  type TView = 'teams' | 'build' | 'inbox'
+  const [view, setView] = useState<TView>('teams')
+  const [targetTeam, setTargetTeam] = useState<any>(null)
+  const [allPicks, setAllPicks] = useState<any[]>([])
+  const [trades, setTrades] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [offer, setOffer] = useState<Set<string>>(new Set())
+  const [request, setRequest] = useState<Set<string>>(new Set())
+  const [submitting, setSubmitting] = useState(false)
+  const [toast, setToast] = useState('')
+
+  const draftOrder: any[] = league?.settings?.draft_order ?? []
+  const numTeams = draftOrder.length
+  const myEntry = draftOrder.find((t: any) => t.userId === userId)
+  const mySlotIdx = myEntry ? myEntry.slot - 1 : -1
+
+  useEffect(() => {
+    if (!league?.id || !userId) return
+    async function load() {
+      const [{ data: picksData }, { data: tradesData }] = await Promise.all([
+        supabase.from('draft_picks').select('*').eq('league_id', league.id).order('pick_number'),
+        supabase.from('trades').select('*').eq('league_id', league.id)
+          .or(`proposer_id.eq.${userId},receiver_id.eq.${userId}`)
+          .order('created_at', { ascending: false }),
+      ])
+      setAllPicks(picksData ?? [])
+      setTrades(tradesData ?? [])
+      setLoading(false)
+    }
+    load()
+  }, [league?.id, userId])
+
+  function getTeamPicks(slotIdx: number): any[] {
+    if (numTeams === 0) return []
+    return allPicks.filter(p => snakeIdx(p.pick_number, numTeams) === slotIdx)
+  }
+
+  function getMyPicks(): any[] {
+    if (mySlotIdx < 0) return allPicks.filter((p: any) => p.user_id === userId)
+    return getTeamPicks(mySlotIdx)
+  }
+
+  async function submitTrade() {
+    if (!userId || offer.size === 0 || request.size === 0 || !targetTeam) return
+    setSubmitting(true)
+    const { error } = await supabase.from('trades').insert({
+      league_id: league.id,
+      proposer_id: userId,
+      receiver_id: targetTeam.userId,
+      offer_pick_ids: Array.from(offer),
+      request_pick_ids: Array.from(request),
+      status: 'pending',
+    })
+    setSubmitting(false)
+    if (!error) {
+      setToast('Trade sent!')
+      setTimeout(() => setToast(''), 3000)
+      setOffer(new Set())
+      setRequest(new Set())
+      setView('inbox')
+      const { data } = await supabase.from('trades').select('*').eq('league_id', league.id)
+        .or(`proposer_id.eq.${userId},receiver_id.eq.${userId}`)
+        .order('created_at', { ascending: false })
+      setTrades(data ?? [])
+    }
+  }
+
+  async function respondTrade(tradeId: string, status: 'accepted' | 'declined') {
+    const trade = trades.find(t => t.id === tradeId)
+    if (!trade) return
+    if (status === 'accepted') {
+      await Promise.all([
+        ...trade.offer_pick_ids.map((id: string) =>
+          supabase.from('draft_picks').update({ user_id: userId }).eq('id', id)
+        ),
+        ...trade.request_pick_ids.map((id: string) =>
+          supabase.from('draft_picks').update({ user_id: trade.proposer_id }).eq('id', id)
+        ),
+        supabase.from('trades').update({ status: 'accepted' }).eq('id', tradeId),
+      ])
+      const { data } = await supabase.from('draft_picks').select('*').eq('league_id', league.id).order('pick_number')
+      setAllPicks(data ?? [])
+    } else {
+      await supabase.from('trades').update({ status }).eq('id', tradeId)
+    }
+    setTrades(prev => prev.map(t => t.id === tradeId ? { ...t, status } : t))
+  }
+
+  const pendingIncoming = trades.filter(t => t.receiver_id === userId && t.status === 'pending')
+  const pendingOutgoing = trades.filter(t => t.proposer_id === userId && t.status === 'pending')
+  const completed = trades.filter(t => t.status !== 'pending')
+  const otherTeams = draftOrder.filter((t: any) => t.userId !== userId && t.type === 'human')
+
+  if (loading) return (
+    <div style={{ padding: 60, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
+      Loading trades…
+    </div>
+  )
+
+  // ── TRADE BUILDER ─────────────────────────────────────────
+  if (view === 'build' && targetTeam) {
+    const myPicks = getMyPicks().sort((a: any, b: any) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0))
+    const theirSlotIdx = targetTeam.slot - 1
+    const theirPicks = getTeamPicks(theirSlotIdx).sort((a: any, b: any) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0))
+
+    return (
+      <div style={{ maxWidth: 700 }}>
+        <button onClick={() => { setView('teams'); setOffer(new Set()); setRequest(new Set()) }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, padding: '0 0 16px 0' }}>
+          ← Back
+        </button>
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 4 }}>
+          Propose Trade
+        </div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, marginBottom: 20 }}>
+          {myEntry?.teamName ?? 'You'} → {targetTeam.teamName}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+          {/* You offer */}
+          <div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>
+              You offer ({offer.size})
+            </div>
+            {myPicks.length === 0 && (
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>No players on your roster</div>
+            )}
+            {myPicks.map((pick: any) => {
+              const checked = offer.has(pick.id)
+              const pos = pick.player_data?.unitType as string
+              const col = UNIT_COLORS[pos] ?? C.muted
+              return (
+                <div key={pick.id} onClick={() => setOffer(prev => { const n = new Set(prev); n.has(pick.id) ? n.delete(pick.id) : n.add(pick.id); return n })}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', marginBottom: 4, background: checked ? 'rgba(245,166,35,.1)' : C.surf, border: `1px solid ${checked ? C.gold : C.surf3}`, borderRadius: 8, cursor: 'pointer', transition: 'all .12s' }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${checked ? C.gold : C.surf3}`, background: checked ? C.gold : 'none', flexShrink: 0 }} />
+                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: col, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: checked ? C.gold : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {pick.player_data?.playerName || pick.player_data?.school}
+                    </div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1)} pts/wk</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* You receive */}
+          <div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.green, textTransform: 'uppercase', marginBottom: 8 }}>
+              You receive ({request.size})
+            </div>
+            {theirPicks.length === 0 && (
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>No players on their roster</div>
+            )}
+            {theirPicks.map((pick: any) => {
+              const checked = request.has(pick.id)
+              const pos = pick.player_data?.unitType as string
+              const col = UNIT_COLORS[pos] ?? C.muted
+              return (
+                <div key={pick.id} onClick={() => setRequest(prev => { const n = new Set(prev); n.has(pick.id) ? n.delete(pick.id) : n.add(pick.id); return n })}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', marginBottom: 4, background: checked ? 'rgba(21,198,120,.08)' : C.surf, border: `1px solid ${checked ? C.green : C.surf3}`, borderRadius: 8, cursor: 'pointer', transition: 'all .12s' }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${checked ? C.green : C.surf3}`, background: checked ? C.green : 'none', flexShrink: 0 }} />
+                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: col, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: checked ? C.green : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {pick.player_data?.playerName || pick.player_data?.school}
+                    </div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1)} pts/wk</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Value bar */}
+        {(offer.size > 0 || request.size > 0) && (() => {
+          const offerVal = Array.from(offer).reduce((s, id) => {
+            const p = allPicks.find(x => x.id === id)
+            return s + weeklyProj(p?.player_data?.projectedPoints ?? 0)
+          }, 0)
+          const requestVal = Array.from(request).reduce((s, id) => {
+            const p = allPicks.find(x => x.id === id)
+            return s + weeklyProj(p?.player_data?.projectedPoints ?? 0)
+          }, 0)
+          const total = offerVal + requestVal || 1
+          const offerPct = Math.round((offerVal / total) * 100)
+          const requestPct = 100 - offerPct
+          const fair = Math.abs(offerPct - 50) <= 10
+          return (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.gold }}>{offerPct}% your value</span>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: fair ? C.green : C.muted }}>{fair ? '⚖ Fair trade' : '⚠ Uneven'}</span>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green }}>{requestPct}% their value</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 3, background: C.surf3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${offerPct}%`, background: `linear-gradient(90deg, ${C.gold}, ${C.green})`, borderRadius: 3, transition: 'width .3s ease' }} />
+              </div>
+            </div>
+          )
+        })()}
+
+        <button onClick={submitTrade} disabled={offer.size === 0 || request.size === 0 || submitting}
+          style={{ width: '100%', padding: '14px', background: offer.size > 0 && request.size > 0 ? C.gold : C.surf3, border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: offer.size > 0 && request.size > 0 ? C.bg : C.muted, cursor: offer.size > 0 && request.size > 0 ? 'pointer' : 'not-allowed', textTransform: 'uppercase', transition: 'all .15s' }}>
+          {submitting ? 'Sending…' : 'Send Trade Offer'}
+        </button>
+      </div>
+    )
+  }
+
+  // ── MAIN VIEW ─────────────────────────────────────────────
+  return (
+    <div style={{ maxWidth: 680 }}>
+      {toast && (
+        <div style={{ background: '#14532d', border: `1px solid ${C.green}`, borderRadius: 8, padding: '10px 16px', marginBottom: 14, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.green }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Sub-nav */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+        {(['teams', 'inbox'] as const).map(v => (
+          <button key={v} onClick={() => setView(v)}
+            style={{ padding: '7px 18px', borderRadius: 6, border: `1px solid ${view === v ? C.gold : C.surf3}`, background: view === v ? 'rgba(245,166,35,.1)' : C.surf2, color: view === v ? C.gold : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase' }}>
+            {v === 'teams' ? 'New Trade' : `Inbox${pendingIncoming.length > 0 ? ` (${pendingIncoming.length})` : ''}`}
+          </button>
+        ))}
+      </div>
+
+      {/* New Trade — team picker */}
+      {view === 'teams' && (
+        <div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 12 }}>
+            Select a team to trade with
+          </div>
+          {otherTeams.length === 0 && (
+            <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
+              No other human teams to trade with.
+            </div>
+          )}
+          {otherTeams.map((team: any) => {
+            const slotIdx = team.slot - 1
+            const teamPicks = getTeamPicks(slotIdx)
+            const bestPick = [...teamPicks].sort((a: any, b: any) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0))[0]
+            return (
+              <div key={team.userId} onClick={() => { setTargetTeam(team); setView('build') }}
+                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', marginBottom: 8, background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, cursor: 'pointer', transition: 'border-color .15s' }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = C.gold + '66'}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = C.surf3}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.sub, flexShrink: 0 }}>
+                  {(team.teamName || '?').charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text, fontWeight: 600 }}>{team.teamName}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
+                    {teamPicks.length} players · Best: {bestPick ? (bestPick.player_data?.playerName || bestPick.player_data?.school) : '—'}
+                  </div>
+                </div>
+                <div style={{ color: C.muted, fontSize: 18 }}>›</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Inbox */}
+      {view === 'inbox' && (
+        <div>
+          {trades.length === 0 && (
+            <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
+              No trades yet.
+            </div>
+          )}
+
+          {pendingIncoming.length > 0 && (
+            <>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
+                Incoming ({pendingIncoming.length})
+              </div>
+              {pendingIncoming.map(trade => {
+                const fromTeam = draftOrder.find((t: any) => t.userId === trade.proposer_id)
+                const offered = allPicks.filter(p => trade.offer_pick_ids.includes(p.id))
+                const requested = allPicks.filter(p => trade.request_pick_ids.includes(p.id))
+                return (
+                  <div key={trade.id} style={{ background: C.surf, border: `1px solid rgba(245,166,35,.3)`, borderRadius: 10, padding: '16px 18px', marginBottom: 12 }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.gold, marginBottom: 12 }}>
+                      From {fromTeam?.teamName ?? 'Unknown'}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                      <div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>They offer</div>
+                        {offered.map(p => (
+                          <div key={p.id} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 3 }}>
+                            {p.player_data?.playerName || p.player_data?.school}
+                            <span style={{ color: C.muted, fontSize: 10 }}> · {p.player_data?.unitType}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>They want</div>
+                        {requested.map(p => (
+                          <div key={p.id} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 3 }}>
+                            {p.player_data?.playerName || p.player_data?.school}
+                            <span style={{ color: C.muted, fontSize: 10 }}> · {p.player_data?.unitType}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => respondTrade(trade.id, 'accepted')}
+                        style={{ flex: 1, padding: '10px', background: 'rgba(21,198,120,.12)', border: `1px solid rgba(21,198,120,.4)`, borderRadius: 7, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, color: C.green }}>
+                        ✓ Accept
+                      </button>
+                      <button onClick={() => respondTrade(trade.id, 'declined')}
+                        style={{ flex: 1, padding: '10px', background: 'rgba(240,58,90,.08)', border: `1px solid rgba(240,58,90,.25)`, borderRadius: 7, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, color: C.red }}>
+                        ✕ Decline
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+
+          {pendingOutgoing.length > 0 && (
+            <>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.sub, textTransform: 'uppercase', marginBottom: 10, marginTop: pendingIncoming.length > 0 ? 20 : 0 }}>
+                Outgoing ({pendingOutgoing.length})
+              </div>
+              {pendingOutgoing.map(trade => {
+                const toTeam = draftOrder.find((t: any) => t.userId === trade.receiver_id)
+                const offered = allPicks.filter(p => trade.offer_pick_ids.includes(p.id))
+                const requested = allPicks.filter(p => trade.request_pick_ids.includes(p.id))
+                return (
+                  <div key={trade.id} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '16px 18px', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>To {toTeam?.teamName ?? 'Unknown'}</div>
+                      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.gold, background: 'rgba(245,166,35,.1)', padding: '2px 8px', borderRadius: 4 }}>PENDING</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>You offered</div>
+                        {offered.map(p => (
+                          <div key={p.id} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 3 }}>
+                            {p.player_data?.playerName || p.player_data?.school}
+                            <span style={{ color: C.muted, fontSize: 10 }}> · {p.player_data?.unitType}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>You requested</div>
+                        {requested.map(p => (
+                          <div key={p.id} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 3 }}>
+                            {p.player_data?.playerName || p.player_data?.school}
+                            <span style={{ color: C.muted, fontSize: 10 }}> · {p.player_data?.unitType}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+
+          {completed.length > 0 && (
+            <>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10, marginTop: 20 }}>
+                History
+              </div>
+              {completed.map(trade => {
+                const isProposer = trade.proposer_id === userId
+                const otherTeam = draftOrder.find((t: any) => t.userId === (isProposer ? trade.receiver_id : trade.proposer_id))
+                const accepted = trade.status === 'accepted'
+                return (
+                  <div key={trade.id} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '12px 18px', marginBottom: 8, opacity: 0.7 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
+                        {isProposer ? 'To' : 'From'} {otherTeam?.teamName ?? 'Unknown'}
+                      </div>
+                      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: accepted ? C.green : C.red, background: accepted ? 'rgba(21,198,120,.1)' : 'rgba(240,58,90,.1)', padding: '2px 8px', borderRadius: 4 }}>
+                        {trade.status.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function LeagueRanksTab({
