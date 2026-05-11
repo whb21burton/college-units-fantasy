@@ -248,8 +248,8 @@ export async function syncStats(
       if (schoolsFilter?.length && !schoolsFilter.includes(school)) continue
 
       const opponent = school === game.homeTeam ? game.awayTeam : game.homeTeam
-      const oppRank  = eloRank[opponent] ?? null
-      const mult = oppRank != null ? odrMult(oppRank) : 1.0
+      const oppRank  = eloRank[opponent] ?? 999
+      const mult = odrMult(oppRank)
       const ts = teamStatMap[school] ?? {}
       const entries = Object.values(playerStatMap)
         .filter((e: any) => e.gameId === gameId && e.school === school)
