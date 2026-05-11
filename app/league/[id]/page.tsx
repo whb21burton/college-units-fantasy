@@ -111,8 +111,7 @@ function buildPoolRankMaps(pool: { school: string; unitType: string; projectedPo
   for (const p of pool) {
     if (!p.school || !p.unitType) continue;
     if (!byType[p.unitType]) byType[p.unitType] = [];
-    // Use seasonTotal (actual sum) when available, fall back to projectedPoints
-    byType[p.unitType].push({ school: p.school, pts: p.seasonTotal ?? p.projectedPoints ?? 0 });
+    byType[p.unitType].push({ school: p.school, pts: p.seasonTotal ?? 0 });
   }
   const maps: Record<string, Record<string, number>> = {};
   for (const [ut, units] of Object.entries(byType)) {
@@ -1953,8 +1952,10 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         p.unitType.toLowerCase().includes(q);
     })
     .sort((a, b) => {
-      const diff = b.projectedPoints - a.projectedPoints;
-      return diff !== 0 ? diff : a.adp - b.adp;
+      const aScore = a.seasonTotal ?? 0;
+      const bScore = b.seasonTotal ?? 0;
+      if (bScore !== aScore) return bScore - aScore;
+      return a.adp - b.adp;
     });
 
   // Compute position rank from full pool (sorted by projectedPoints desc within each unit type)
@@ -1965,7 +1966,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     byUnitType[p.unitType].push(p);
   }
   for (const arr of Object.values(byUnitType)) {
-    arr.sort((a, b) => ((b.seasonTotal ?? b.projectedPoints) - (a.seasonTotal ?? a.projectedPoints)) || a.adp - b.adp);
+    arr.sort((a, b) => ((b.seasonTotal ?? 0) - (a.seasonTotal ?? 0)) || a.adp - b.adp);
     arr.forEach((p, i) => posRankMap.set(`${p.school}||${p.unitType}`, i + 1));
   }
 
@@ -2141,7 +2142,26 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
             {f}
           </button>
         ))}
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search players…" style={{ flex: 1, minWidth: 140, background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '6px 12px', color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none' }} />
+        <div style={{ position: 'relative', flex: 1, minWidth: 140 }}>
+          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.muted, fontSize: 13, pointerEvents: 'none' }}>⌕</span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…" style={{ width: '100%', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '6px 12px 6px 28px', color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+      </div>
+
+      {/* Header row + count */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px', marginBottom: 6 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {['UNIT', 'SCHOOL', 'RANK'].map(h => (
+            <span key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase' }}>{h}</span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase' }}>SEASON PTS</span>
+          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase', minWidth: 44 }}>ACTION</span>
+        </div>
+      </div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 0.5, marginBottom: 10 }}>
+        Showing {freeAgents.length} of {visiblePool.length} units
       </div>
 
       {freeAgents.length === 0 && (
@@ -2163,7 +2183,6 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         const oppLabel  = opponent
           ? `${isHome ? 'vs' : '@'} ${opponent.length > 12 ? opponent.split(' ').pop() : opponent}${oppRank ? ` (${oppRank})` : ''}`
           : 'BYE';
-        const proj      = weeklyProj(p.projectedPoints).toFixed(1);
 
         return (
           <div
@@ -2206,9 +2225,19 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
                   {name}
                 </div>
               </div>
-              {/* School + conf */}
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.3, marginBottom: 3 }}>
-                {p.unitType} · {p.school} {posRank ? `· #${posRank}` : ''}
+              {/* School + rank badge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.3 }}>
+                  {p.unitType} · {p.school}
+                </span>
+                {posRank && (() => {
+                  const rc = posRank <= 3 ? '#f5a623' : posRank <= 10 ? '#15c678' : posRank <= 25 ? '#7a92aa' : C.muted;
+                  return (
+                    <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 10, color: rc, background: rc + '22', border: `1px solid ${rc}44`, borderRadius: 4, padding: '1px 5px' }}>
+                      #{posRank}
+                    </span>
+                  );
+                })()}
               </div>
               {/* Game info */}
               {gameCtx && (
@@ -2225,10 +2254,19 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
               )}
             </div>
 
-            {/* Projected pts */}
+            {/* Season pts / projected pts */}
             <div style={{ textAlign: 'center', padding: '0 12px', flexShrink: 0 }}>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold }}>{proj}</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>proj</div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold }}>
+                {p.seasonTotal != null ? p.seasonTotal.toFixed(1) : weeklyProj(p.projectedPoints).toFixed(1)}
+              </div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>
+                {p.seasonTotal != null ? 'season pts' : 'projected'}
+              </div>
+              {p.seasonTotal != null && (
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.sub, letterSpacing: 0.5, marginTop: 1 }}>
+                  {(p.seasonTotal / 14).toFixed(1)} avg/wk
+                </div>
+              )}
             </div>
 
             {/* Action */}
