@@ -157,7 +157,7 @@ export async function GET(req: Request) {
     }
 
     // Build complete pool: every CONFERENCES school × every unit type, no gaps
-    type Entry = { school: string; unitType: UnitType; pts: number; seasonTotal: number; isLive: boolean };
+    type Entry = { school: string; unitType: UnitType; pts: number; seasonTotal: number; weeksPlayed: number; avgPerWeek: number; isLive: boolean };
     const allEntries: Entry[] = [];
 
     for (const [conf, schools] of Object.entries(CONFERENCES) as [Conference, string[]][]) {
@@ -166,13 +166,13 @@ export async function GET(req: Request) {
         for (const unitType of UNIT_TYPES) {
           const key = `${school}||${unitType}`;
           if (key in liveSums) {
-            // Project from actual avg for display; keep raw sum for ranking
-            const avgPerWeek = liveSums[key] / liveCounts[key];
-            allEntries.push({ school, unitType, pts: avgPerWeek * TOTAL_WEEKS, seasonTotal: liveSums[key], isLive: true });
+            const weeksPlayed = liveCounts[key];
+            const avgPerWeek  = liveSums[key] / weeksPlayed;
+            allEntries.push({ school, unitType, pts: avgPerWeek * TOTAL_WEEKS, seasonTotal: liveSums[key], weeksPlayed, avgPerWeek, isLive: true });
           } else {
             // Fall back to FULL_POOL static 14-week season projection
             const fp = fullPoolMap[key] ?? 0;
-            allEntries.push({ school, unitType, pts: fp, seasonTotal: fp, isLive: false });
+            allEntries.push({ school, unitType, pts: fp, seasonTotal: fp, weeksPlayed: 0, avgPerWeek: 0, isLive: false });
           }
         }
       }
@@ -202,7 +202,7 @@ export async function GET(req: Request) {
     // Assemble DraftUnit[]
     const pool: DraftUnit[] = [];
     for (const [unitType, arr] of Object.entries(byUnit) as [UnitType, Entry[]][]) {
-      arr.forEach(({ school, pts, seasonTotal }, rank) => {
+      arr.forEach(({ school, pts, seasonTotal, weeksPlayed, avgPerWeek }, rank) => {
         const conf = schoolConf[school];
         if (!conf) return;
         const starterName = (unitType === 'QB' || unitType === 'K')
@@ -225,8 +225,10 @@ export async function GET(req: Request) {
           playerName:      starterName,
           tier:            tierFromRank(rank, arr.length),
           adp:             adpMap.get(`${school}||${unitType}`) ?? rank + 1,
-          projectedPoints: Math.round(adjustedPts),
-          seasonTotal:     Math.round(seasonTotal),
+          projectedPoints: seasonTotal > 0 ? Math.round(seasonTotal) : Math.round(adjustedPts),
+          seasonTotal:     Math.round(seasonTotal * 10) / 10,
+          weeksPlayed,
+          avgPerWeek:      Math.round(avgPerWeek * 10) / 10,
           ...(badge ? { badge } : {}),
         });
       });

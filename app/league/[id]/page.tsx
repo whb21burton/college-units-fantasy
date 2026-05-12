@@ -1951,12 +1951,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         (p.playerName ?? '').toLowerCase().includes(q) ||
         p.unitType.toLowerCase().includes(q);
     })
-    .sort((a, b) => {
-      const aAvg = (a.seasonTotal ?? 0) / 12;
-      const bAvg = (b.seasonTotal ?? 0) / 12;
-      if (bAvg !== aAvg) return bAvg - aAvg;
-      return a.adp - b.adp;
-    });
+    .sort((a, b) => ((b.avgPerWeek ?? 0) - (a.avgPerWeek ?? 0)) || a.adp - b.adp);
 
   // Compute position rank from full pool (sorted by projectedPoints desc within each unit type)
   const posRankMap = new Map<string, number>();
@@ -1966,7 +1961,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     byUnitType[p.unitType].push(p);
   }
   for (const arr of Object.values(byUnitType)) {
-    arr.sort((a, b) => (((b.seasonTotal ?? 0) / 12) - ((a.seasonTotal ?? 0) / 12)) || a.adp - b.adp);
+    arr.sort((a, b) => ((b.avgPerWeek ?? 0) - (a.avgPerWeek ?? 0)) || a.adp - b.adp);
     arr.forEach((p, i) => posRankMap.set(`${p.school}||${p.unitType}`, i + 1));
   }
 
@@ -2257,8 +2252,8 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
             {/* Avg/wk */}
             <div style={{ textAlign: 'center', padding: '0 12px', flexShrink: 0 }}>
               <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold }}>
-                {p.seasonTotal != null && p.seasonTotal > 0
-                  ? (p.seasonTotal / 12).toFixed(1)
+                {(p.avgPerWeek ?? 0) > 0
+                  ? p.avgPerWeek!.toFixed(1)
                   : weeklyProj(p.projectedPoints).toFixed(1)}
               </div>
               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>
