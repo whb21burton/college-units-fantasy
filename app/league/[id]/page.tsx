@@ -1952,9 +1952,9 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         p.unitType.toLowerCase().includes(q);
     })
     .sort((a, b) => {
-      const aScore = a.seasonTotal ?? 0;
-      const bScore = b.seasonTotal ?? 0;
-      if (bScore !== aScore) return bScore - aScore;
+      const aAvg = (a.seasonTotal ?? 0) / 12;
+      const bAvg = (b.seasonTotal ?? 0) / 12;
+      if (bAvg !== aAvg) return bAvg - aAvg;
       return a.adp - b.adp;
     });
 
@@ -1966,7 +1966,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     byUnitType[p.unitType].push(p);
   }
   for (const arr of Object.values(byUnitType)) {
-    arr.sort((a, b) => ((b.seasonTotal ?? 0) - (a.seasonTotal ?? 0)) || a.adp - b.adp);
+    arr.sort((a, b) => (((b.seasonTotal ?? 0) / 12) - ((a.seasonTotal ?? 0) / 12)) || a.adp - b.adp);
     arr.forEach((p, i) => posRankMap.set(`${p.school}||${p.unitType}`, i + 1));
   }
 

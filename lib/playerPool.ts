@@ -53,7 +53,7 @@ export const CONFERENCES: Record<Conference, string[]> = {
     'Boston College', 'Georgia Tech', 'Virginia', 'Cal', 'Stanford', 'SMU',
   ],
   'FBS Independents': [
-    'Notre Dame', 'Army', 'Navy', 'Liberty', 'New Mexico State', 'Connecticut',
+    'Notre Dame', 'Army', 'Navy', 'Liberty', 'New Mexico State', 'UConn',
   ],
 };
 
@@ -390,13 +390,13 @@ export const FULL_POOL: DraftUnit[] = [
   { id: uid('Notre Dame','DEF'),                   school:'Notre Dame', conference:'FBS Independents', unitType:'DEF',tier:'Elite', adp:4,   projectedPoints:318 },
   { id: uid('Notre Dame','K','Mitch Jeter'),       school:'Notre Dame', conference:'FBS Independents', unitType:'K',  playerName:'Mitch Jeter',      tier:'Elite', adp:16,  projectedPoints:142 },
 
-  // Remaining FBS Independents (Army, Navy, Liberty, New Mexico State, Connecticut)
+  // Remaining FBS Independents (Army, Navy, Liberty, New Mexico State, UConn)
   ...([
     { school:'Army',             qb:'Bryson Daily',    rbAdp:38, wrAdp:52, defTier:'Solid' as Tier, qbTier:'Solid' as Tier, qbAdp:36 },
     { school:'Navy',             qb:'Blake Horvath',   rbAdp:42, wrAdp:56, defTier:'Solid' as Tier, qbTier:'Solid' as Tier, qbAdp:40 },
     { school:'Liberty',          qb:'Kaidon Salter',   rbAdp:46, wrAdp:60, defTier:'Depth' as Tier, qbTier:'Solid' as Tier, qbAdp:44 },
     { school:'New Mexico State', qb:'Diego Pavia',     rbAdp:55, wrAdp:70, defTier:'Depth' as Tier, qbTier:'Depth' as Tier, qbAdp:55 },
-    { school:'Connecticut',      qb:'TaQuan Roberson', rbAdp:60, wrAdp:75, defTier:'Depth' as Tier, qbTier:'Depth' as Tier, qbAdp:60 },
+    { school:'UConn',            qb:'TaQuan Roberson', rbAdp:60, wrAdp:75, defTier:'Depth' as Tier, qbTier:'Depth' as Tier, qbAdp:60 },
   ] as const).flatMap(({ school, qb, rbAdp, wrAdp, defTier, qbTier, qbAdp }, i) => [
     { id: uid(school,'QB',qb),          school, conference:'FBS Independents' as Conference, unitType:'QB' as UnitType,  playerName:qb,         tier:qbTier,           adp:qbAdp,    projectedPoints:245-i*10 },
     { id: uid(school,'QB','Backup QB'), school, conference:'FBS Independents' as Conference, unitType:'QB' as UnitType,  playerName:'Backup QB', tier:'Depth' as Tier,  adp:78+i*4,   projectedPoints:140-i*6  },

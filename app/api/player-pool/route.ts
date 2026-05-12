@@ -18,7 +18,6 @@ const UNIT_TYPES: UnitType[] = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
 // Normalize cached_stats school names to match CONFERENCES canonical names
 const SCHOOL_ALIASES: Record<string, string> = {
-  'UConn':               'Connecticut',
   'Pitt':                'Pittsburgh',
   'Ole Miss':            'Mississippi',
   'Southern Miss':       'Southern Mississippi',
