@@ -155,20 +155,12 @@ export async function GET(req: Request) {
       liveCounts[key] = (liveCounts[key] ?? 0) + 1;
     }
 
-    // Debug: verify key hits for known-good SEC schools
-    const debugSchools = ['Florida', 'Texas A&M', 'South Carolina', 'Ole Miss', 'Mississippi State'];
-    for (const s of debugSchools) {
-      const key = `${s}||QB`;
-      console.log(`[pool-debug] ${key}:`, liveSums[key] ?? 'MISS', 'weeks:', liveCounts[key] ?? 0);
-      const matchingKeys = Object.keys(liveSums).filter(k => k.startsWith(s));
-      if (matchingKeys.length === 0) {
-        // Show what DB names look similar to catch casing/spacing issues
-        const similar = Object.keys(liveSums).filter(k => k.toLowerCase().includes(s.toLowerCase().split(' ')[0]));
-        console.log(`[pool-debug] no keys for "${s}" — similar DB keys:`, similar.slice(0, 4));
-      }
-    }
-    // Also log total keys loaded so we know the query returned data
-    console.log('[pool-debug] total liveSums keys:', Object.keys(liveSums).length);
+    const debugKey   = `Florida||QB`;
+    const debugVal   = liveSums[debugKey];
+    const debugCount = liveCounts[debugKey];
+    const allKeys    = Object.keys(liveSums).slice(0, 10).join(', ');
+    const totalKeys  = Object.keys(liveSums).length;
+    console.log(`POOL_DEBUG: Florida||QB=${debugVal ?? 'MISSING'} weeks=${debugCount ?? 0} totalKeys=${totalKeys} sample=${allKeys}`);
 
     // Build complete pool: every CONFERENCES school × every unit type, no gaps
     type Entry = { school: string; unitType: UnitType; pts: number; seasonTotal: number; weeksPlayed: number; avgPerWeek: number; isLive: boolean };
@@ -254,7 +246,18 @@ export async function GET(req: Request) {
       return diff !== 0 ? diff : a.adp - b.adp;
     });
 
-    return NextResponse.json(pool, {
+    // Deduplicate by school+unitType — keep entry with highest avgPerWeek (live data wins over projection)
+    const deduped = new Map<string, DraftUnit>();
+    for (const entry of pool) {
+      const key = `${entry.school}||${entry.unitType}`;
+      const existing = deduped.get(key);
+      if (!existing || (entry.avgPerWeek ?? 0) > (existing.avgPerWeek ?? 0)) {
+        deduped.set(key, entry);
+      }
+    }
+    const dedupedPool = Array.from(deduped.values());
+
+    return NextResponse.json(dedupedPool, {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (err: any) {
