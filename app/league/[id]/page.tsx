@@ -2254,19 +2254,16 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
               )}
             </div>
 
-            {/* Season pts / projected pts */}
+            {/* Avg/wk */}
             <div style={{ textAlign: 'center', padding: '0 12px', flexShrink: 0 }}>
               <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold }}>
-                {p.seasonTotal != null ? p.seasonTotal.toFixed(1) : weeklyProj(p.projectedPoints).toFixed(1)}
+                {p.seasonTotal != null && p.seasonTotal > 0
+                  ? (p.seasonTotal / 12).toFixed(1)
+                  : weeklyProj(p.projectedPoints).toFixed(1)}
               </div>
               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>
-                {p.seasonTotal != null ? 'season pts' : 'projected'}
+                avg/wk
               </div>
-              {p.seasonTotal != null && (
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.sub, letterSpacing: 0.5, marginTop: 1 }}>
-                  {(p.seasonTotal / 14).toFixed(1)} avg/wk
-                </div>
-              )}
             </div>
 
             {/* Action */}

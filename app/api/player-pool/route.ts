@@ -16,6 +16,26 @@ const SEASON          = 2025;
 const TOTAL_WEEKS     = 14; // regular season length used to project avg → full season
 const UNIT_TYPES: UnitType[] = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
+// Normalize cached_stats school names to match CONFERENCES canonical names
+const SCHOOL_ALIASES: Record<string, string> = {
+  'UConn':               'Connecticut',
+  'Pitt':                'Pittsburgh',
+  'Ole Miss':            'Mississippi',
+  'Southern Miss':       'Southern Mississippi',
+  'USF':                 'South Florida',
+  'UAB':                 'Alabama-Birmingham',
+  'UTSA':                'Texas-San Antonio',
+  'UTEP':                'Texas-El Paso',
+  'UMass':               'Massachusetts',
+  'UNLV':                'Nevada-Las Vegas',
+  'UT San Antonio':      'Texas-San Antonio',
+  'Hawai\'i':            'Hawaii',
+  'Miami (OH)':          'Miami (Ohio)',
+  'Louisiana':           'Louisiana-Lafayette',
+  'UL Monroe':           'Louisiana-Monroe',
+  'Sam Houston':         'Sam Houston State',
+};
+
 function tierFromRank(rank: number, total: number): Tier {
   const pct = rank / total;
   if (pct <= 0.30) return 'Elite';
@@ -129,9 +149,10 @@ export async function GET(req: Request) {
     const liveSums:   Record<string, number> = {};
     const liveCounts: Record<string, number> = {};
     for (const row of data ?? []) {
-      if (!schoolConf[row.school]) continue; // skip non-P4+Ind schools
+      const canonicalSchool = SCHOOL_ALIASES[row.school] ?? row.school;
+      if (!schoolConf[canonicalSchool]) continue; // skip non-P4+Ind schools
       const unitType = row.stat_type.replace('unit_', '') as UnitType;
-      const key = `${row.school}||${unitType}`;
+      const key = `${canonicalSchool}||${unitType}`;
       liveSums[key]   = (liveSums[key]   ?? 0) + (row.value ?? 0);
       liveCounts[key] = (liveCounts[key] ?? 0) + 1;
     }
