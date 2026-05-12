@@ -74,14 +74,15 @@ export async function POST(req: Request) {
     const { data: transaction, error: txErr } = await admin
       .from('transactions')
       .insert({
-        wallet_id:       wallet.id,
-        user_id:         user.id,
-        type:            'deposit',
-        status:          'pending',
-        amount_cents:    amountCents,
-        description:     `Deposit $${(amountCents / 100).toFixed(2)}`,
-        idempotency_key: `deposit_${paymentIntent.id}`,
-        reference_id:    deposit!.id,
+        wallet_id:                wallet.id,
+        user_id:                  user.id,
+        type:                     'deposit',
+        status:                   'pending',
+        amount_cents:             amountCents,
+        stripe_payment_intent_id: paymentIntent.id,
+        description:              `Deposit $${(amountCents / 100).toFixed(2)}`,
+        idempotency_key:          `deposit_${paymentIntent.id}`,
+        reference_id:             deposit!.id,
       })
       .select('id')
       .single();
@@ -94,7 +95,13 @@ export async function POST(req: Request) {
       transactionId: transaction!.id,
     });
   } catch (err: any) {
-    console.error('[deposit/create]', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('[deposit/create] FULL ERROR:', JSON.stringify({
+      message: err?.message,
+      code:    err?.code,
+      type:    err?.type,
+      detail:  err?.detail,
+      hint:    err?.hint,
+    }));
+    return NextResponse.json({ error: 'Failed to create deposit' }, { status: 500 });
   }
 }
