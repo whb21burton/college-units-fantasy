@@ -16,23 +16,13 @@ const SEASON          = 2025;
 const TOTAL_WEEKS     = 14; // regular season length used to project avg → full season
 const UNIT_TYPES: UnitType[] = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
-// Normalize cached_stats school names to match CONFERENCES canonical names
+// Normalize cached_stats school names to match CONFERENCES canonical names.
+// Only alias names that CFBD returns differently from the CONFERENCES constant.
+// Do NOT alias names that CONFERENCES already uses (e.g. 'Ole Miss' stays 'Ole Miss').
 const SCHOOL_ALIASES: Record<string, string> = {
-  'Pitt':                'Pittsburgh',
-  'Ole Miss':            'Mississippi',
-  'Southern Miss':       'Southern Mississippi',
-  'USF':                 'South Florida',
-  'UAB':                 'Alabama-Birmingham',
-  'UTSA':                'Texas-San Antonio',
-  'UTEP':                'Texas-El Paso',
-  'UMass':               'Massachusetts',
-  'UNLV':                'Nevada-Las Vegas',
-  'UT San Antonio':      'Texas-San Antonio',
+  'Pitt':                'Pittsburgh',  // CONFERENCES uses 'Pittsburgh'
   'Hawai\'i':            'Hawaii',
   'Miami (OH)':          'Miami (Ohio)',
-  'Louisiana':           'Louisiana-Lafayette',
-  'UL Monroe':           'Louisiana-Monroe',
-  'Sam Houston':         'Sam Houston State',
 };
 
 function tierFromRank(rank: number, total: number): Tier {
@@ -76,6 +66,7 @@ export async function GET(req: Request) {
       .eq('season', SEASON)
       .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'])
       .is('player_name', null)
+      .gt('value', 0)       // exclude bye weeks (0-score rows) from weeksPlayed count
       .limit(100000);
 
     // ── RB pricing data: rb1_opportunity per school across all weeks ──────────
@@ -147,9 +138,17 @@ export async function GET(req: Request) {
     // fairly against the static FULL_POOL 14-week projections).
     const liveSums:   Record<string, number> = {};
     const liveCounts: Record<string, number> = {};
+    let debugMisses = 0;
     for (const row of data ?? []) {
       const canonicalSchool = SCHOOL_ALIASES[row.school] ?? row.school;
-      if (!schoolConf[canonicalSchool]) continue; // skip non-P4+Ind schools
+      if (!schoolConf[canonicalSchool]) {
+        // Log first few unrecognized school names to catch future alias gaps
+        if (debugMisses < 5) {
+          console.log('[pool-debug] unrecognized school:', row.school, '→', canonicalSchool);
+          debugMisses++;
+        }
+        continue;
+      }
       const unitType = row.stat_type.replace('unit_', '') as UnitType;
       const key = `${canonicalSchool}||${unitType}`;
       liveSums[key]   = (liveSums[key]   ?? 0) + (row.value ?? 0);
