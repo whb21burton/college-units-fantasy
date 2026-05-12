@@ -155,6 +155,21 @@ export async function GET(req: Request) {
       liveCounts[key] = (liveCounts[key] ?? 0) + 1;
     }
 
+    // Debug: verify key hits for known-good SEC schools
+    const debugSchools = ['Florida', 'Texas A&M', 'South Carolina', 'Ole Miss', 'Mississippi State'];
+    for (const s of debugSchools) {
+      const key = `${s}||QB`;
+      console.log(`[pool-debug] ${key}:`, liveSums[key] ?? 'MISS', 'weeks:', liveCounts[key] ?? 0);
+      const matchingKeys = Object.keys(liveSums).filter(k => k.startsWith(s));
+      if (matchingKeys.length === 0) {
+        // Show what DB names look similar to catch casing/spacing issues
+        const similar = Object.keys(liveSums).filter(k => k.toLowerCase().includes(s.toLowerCase().split(' ')[0]));
+        console.log(`[pool-debug] no keys for "${s}" — similar DB keys:`, similar.slice(0, 4));
+      }
+    }
+    // Also log total keys loaded so we know the query returned data
+    console.log('[pool-debug] total liveSums keys:', Object.keys(liveSums).length);
+
     // Build complete pool: every CONFERENCES school × every unit type, no gaps
     type Entry = { school: string; unitType: UnitType; pts: number; seasonTotal: number; weeksPlayed: number; avgPerWeek: number; isLive: boolean };
     const allEntries: Entry[] = [];
