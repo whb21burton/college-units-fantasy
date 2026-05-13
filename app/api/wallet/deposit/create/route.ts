@@ -16,55 +16,57 @@ export async function POST(req: Request) {
     stripeKeyPrefix:  process.env.STRIPE_SECRET_KEY?.slice(0, 10),
     hasSupabaseUrl:   !!process.env.NEXT_PUBLIC_SUPABASE_URL,
   });
-  try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const body = await req.json();
-    const { amountCents } = body as { amountCents?: number };
-    if (!amountCents || amountCents < 500) {
-      return NextResponse.json({ error: 'Minimum deposit is $5 (500 cents)' }, { status: 400 });
-    }
+  const supabase = createRouteHandlerClient({ cookies });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const admin = createAdminClient();
+  const body = await req.json();
+  const { amountCents } = body as { amountCents?: number };
+  if (!amountCents || amountCents < 500) {
+    return NextResponse.json({ error: 'Minimum deposit is $5 (500 cents)' }, { status: 400 });
+  }
 
-    // Get or create wallet
-    let { data: wallet } = await admin
+  const admin = createAdminClient();
+
+  // Get or create wallet
+  let { data: wallet } = await admin
+    .from('wallets')
+    .select('id, stripe_customer_id')
+    .eq('user_id', user.id)
+    .single();
+
+  if (!wallet) {
+    const { data: newWallet } = await admin
       .from('wallets')
+      .insert({ user_id: user.id })
       .select('id, stripe_customer_id')
-      .eq('user_id', user.id)
       .single();
+    wallet = newWallet;
+  }
 
-    if (!wallet) {
-      const { data: newWallet } = await admin
-        .from('wallets')
-        .insert({ user_id: user.id })
-        .select('id, stripe_customer_id')
-        .single();
-      wallet = newWallet;
-    }
+  if (!wallet) return NextResponse.json({ error: 'Failed to get wallet' }, { status: 500 });
 
-    if (!wallet) return NextResponse.json({ error: 'Failed to get wallet' }, { status: 500 });
+  // Get or create Stripe customer
+  let stripeCustomerId = wallet.stripe_customer_id as string | null;
+  if (!stripeCustomerId) {
+    const customer = await stripe.customers.create({ email: user.email, metadata: { user_id: user.id } });
+    stripeCustomerId = customer.id;
+    await admin.from('wallets').update({ stripe_customer_id: stripeCustomerId }).eq('id', wallet.id);
+  }
 
-    // Get or create Stripe customer
-    let stripeCustomerId = wallet.stripe_customer_id as string | null;
-    if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({ email: user.email, metadata: { user_id: user.id } });
-      stripeCustomerId = customer.id;
-      await admin.from('wallets').update({ stripe_customer_id: stripeCustomerId }).eq('id', wallet.id);
-    }
+  // Create Stripe PaymentIntent
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount:   amountCents,
+    currency: 'usd',
+    customer: stripeCustomerId,
+    metadata: { wallet_id: wallet.id, user_id: user.id },
+  });
 
-    // Create Stripe PaymentIntent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount:   amountCents,
-      currency: 'usd',
-      customer: stripeCustomerId,
-      metadata: { wallet_id: wallet.id, user_id: user.id },
-    });
-
-    // Insert deposit row
-    const { data: deposit, error: depositErr } = await admin
+  // Insert deposit row
+  let deposit: { id: string } | null = null;
+  try {
+    const { data, error } = await admin
       .from('deposits')
       .insert({
         wallet_id:                wallet.id,
@@ -75,11 +77,17 @@ export async function POST(req: Request) {
       })
       .select('id')
       .single();
+    if (error) throw error;
+    deposit = data;
+  } catch (err: any) {
+    console.error('[deposit/create] deposits insert failed:', err?.message);
+    return NextResponse.json({ error: 'deposits insert failed', debug: err?.message }, { status: 500 });
+  }
 
-    if (depositErr) throw depositErr;
-
-    // Insert transaction row
-    const { data: transaction, error: txErr } = await admin
+  // Insert transaction row
+  let transaction: { id: string } | null = null;
+  try {
+    const { data, error } = await admin
       .from('transactions')
       .insert({
         user_id:                  user.id,
@@ -92,22 +100,16 @@ export async function POST(req: Request) {
       })
       .select('id')
       .single();
-
-    if (txErr) throw txErr;
-
-    return NextResponse.json({
-      clientSecret:  paymentIntent.client_secret,
-      depositId:     deposit!.id,
-      transactionId: transaction!.id,
-    });
+    if (error) throw error;
+    transaction = data;
   } catch (err: any) {
-    console.error('[deposit/create] FULL ERROR:', JSON.stringify({
-      message: err?.message,
-      code:    err?.code,
-      type:    err?.type,
-      detail:  err?.detail,
-      hint:    err?.hint,
-    }));
-    return NextResponse.json({ error: 'Failed to create deposit' }, { status: 500 });
+    console.error('[deposit/create] transactions insert failed:', err?.message);
+    return NextResponse.json({ error: 'transactions insert failed', debug: err?.message }, { status: 500 });
   }
+
+  return NextResponse.json({
+    clientSecret:  paymentIntent.client_secret,
+    depositId:     deposit!.id,
+    transactionId: transaction!.id,
+  });
 }
