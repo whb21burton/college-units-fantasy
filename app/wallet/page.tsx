@@ -1,3 +1,4 @@
+// v2 — deposit route updated to /api/wallet/deposit/create
 'use client';
 
 import { Suspense, useState, useEffect, useCallback } from 'react';
