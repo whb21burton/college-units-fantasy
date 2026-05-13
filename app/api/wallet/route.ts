@@ -15,7 +15,7 @@ export async function GET() {
   // Get or auto-create wallet
   let { data: wallet, error: walletErr } = await admin
     .from('wallets')
-    .select('id, lifetime_deposited, lifetime_withdrawn')
+    .select('id, stripe_customer_id')
     .eq('user_id', user.id)
     .single();
 
@@ -23,38 +23,42 @@ export async function GET() {
     const { data: newWallet } = await admin
       .from('wallets')
       .insert({ user_id: user.id })
-      .select('id, lifetime_deposited, lifetime_withdrawn')
+      .select('id, stripe_customer_id')
       .single();
     wallet = newWallet;
   }
 
-  if (!wallet) return NextResponse.json({ error: 'Failed to get wallet' }, { status: 500 });
+  if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
-  const [balanceRes, txRes] = await Promise.all([
-    admin.rpc('get_wallet_balance', { p_wallet_id: wallet.id }),
-    admin
-      .from('transactions')
-      .select('id, type, amount_cents, status, description, created_at, completed_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50),
-  ]);
+  // Compute balance directly from ledger entries
+  const { data: ledgerRows } = await admin
+    .from('ledger_entries')
+    .select('amount_cents, ledger_accounts(type)')
+    .eq('ledger_accounts.wallet_id', wallet.id);
 
-  const available = balanceRes.data?.[0]?.available_cents ?? 0;
-  const pending   = balanceRes.data?.[0]?.pending_cents   ?? 0;
+  let availableCents = 0;
+  let pendingCents   = 0;
+  for (const row of ledgerRows ?? []) {
+    const type = (row.ledger_accounts as any)?.type;
+    if (type === 'user_available') availableCents += Number(row.amount_cents);
+    if (type === 'user_pending')   pendingCents   += Number(row.amount_cents);
+  }
+
+  // Get transactions
+  const { data: transactions } = await admin
+    .from('transactions')
+    .select('id, type, status, amount_cents, description, created_at, completed_at')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(50);
 
   return NextResponse.json({
     wallet: {
-      id:                  wallet.id,
-      balance:             available,
-      available,
-      pending,
-      lifetime_deposited:  wallet.lifetime_deposited  ?? 0,
-      lifetime_withdrawn:  wallet.lifetime_withdrawn  ?? 0,
+      id:        wallet.id,
+      balance:   availableCents,
+      available: availableCents,
+      pending:   pendingCents,
     },
-    transactions: (txRes.data ?? []).map(t => ({
-      ...t,
-      amount: t.amount_cents / 100,
-    })),
+    transactions: transactions ?? [],
   });
 }
