@@ -68,7 +68,6 @@ export async function POST(req: Request) {
     const { data: deposit, error: depositErr } = await admin
       .from('deposits')
       .insert({
-        wallet_id:                wallet.id,
         user_id:                  user.id,
         amount_cents:             amountCents,
         status:                   'pending',
