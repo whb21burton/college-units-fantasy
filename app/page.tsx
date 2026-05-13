@@ -28,6 +28,7 @@ export default function HomePage() {
   const [user, setUser] = useState<any>(null);
   const [leagues, setLeagues] = useState<any[]>([]);
   const [walletOpen, setWalletOpen] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -35,6 +36,9 @@ export default function HomePage() {
         setUser(session.user);
         setView('dashboard');
         loadLeagues(session.user.id);
+        fetch('/api/wallet').then(r => r.json()).then(d => {
+          setWalletBalance(d.wallet?.available ?? d.wallet?.balance ?? 0);
+        }).catch(() => {});
       }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -209,7 +213,9 @@ export default function HomePage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setWalletOpen(true)} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>💰 Wallet</button>
+              <button onClick={() => setWalletOpen(true)} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>
+                {walletBalance > 0 ? `$${(walletBalance / 100).toFixed(2)}` : '💰 Wallet'}
+              </button>
               <button onClick={signOut} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>Sign Out</button>
             </div>
           </div>

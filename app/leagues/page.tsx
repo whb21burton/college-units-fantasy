@@ -748,8 +748,9 @@ function PublicLeaguesContent() {
       setUser(u ?? null);
       setIsAdmin(u?.email === 'whb21burton@gmail.com');
       if (u) {
-        supabase.from('wallets').select('balance').eq('user_id', u.id).single()
-          .then(({ data }) => { if (data) setWalletBal(data.balance ?? 0); });
+        fetch('/api/wallet').then(r => r.json()).then(d => {
+          setWalletBal(d.wallet?.available ?? d.wallet?.balance ?? 0);
+        }).catch(() => {});
       }
     });
   }, []);
