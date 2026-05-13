@@ -30,18 +30,33 @@ export async function GET() {
 
   if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
-  // Compute balance directly from ledger entries
-  const { data: ledgerRows } = await admin
-    .from('ledger_entries')
-    .select('amount_cents, ledger_accounts(type)')
-    .eq('ledger_accounts.wallet_id', wallet.id);
+  // Step 1: get ledger account IDs for this wallet
+  const { data: accounts } = await admin
+    .from('ledger_accounts')
+    .select('id, type')
+    .eq('wallet_id', wallet.id);
 
+  const availableId = accounts?.find(a => a.type === 'user_available')?.id;
+  const pendingId   = accounts?.find(a => a.type === 'user_pending')?.id;
+
+  // Step 2: sum ledger entries per account
   let availableCents = 0;
   let pendingCents   = 0;
-  for (const row of ledgerRows ?? []) {
-    const type = (row.ledger_accounts as any)?.type;
-    if (type === 'user_available') availableCents += Number(row.amount_cents);
-    if (type === 'user_pending')   pendingCents   += Number(row.amount_cents);
+
+  if (availableId) {
+    const { data: entries } = await admin
+      .from('ledger_entries')
+      .select('amount_cents')
+      .eq('ledger_account_id', availableId);
+    availableCents = entries?.reduce((sum, e) => sum + Number(e.amount_cents), 0) ?? 0;
+  }
+
+  if (pendingId) {
+    const { data: entries } = await admin
+      .from('ledger_entries')
+      .select('amount_cents')
+      .eq('ledger_account_id', pendingId);
+    pendingCents = entries?.reduce((sum, e) => sum + Number(e.amount_cents), 0) ?? 0;
   }
 
   // Get transactions
