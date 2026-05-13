@@ -57,7 +57,6 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
   const [loading,       setLoading]       = useState(true);
   const [selectedCents, setSelectedCents] = useState(2500);
   const [customDollars, setCustomDollars] = useState('');
-  const [depositing,    setDepositing]    = useState(false);
   const [error,         setError]         = useState<string | null>(null);
   const [tab,           setTab]           = useState<'overview' | 'deposit'>('overview');
 
@@ -78,25 +77,8 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
     ? Math.round(parseFloat(customDollars) * 100)
     : selectedCents;
 
-  async function handleDeposit() {
-    if (depositCents < 1000) { setError('Minimum deposit is $10'); return; }
-    setError(null);
-    setDepositing(true);
-    try {
-      const res  = await fetch('/api/wallet/deposit', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ amount_cents: depositCents }),
-      });
-      let data: any = {};
-      try { data = await res.json(); } catch {}
-      if (!res.ok || !data.url) { setError(data.error ?? `Server error (${res.status})`); return; }
-      window.location.href = data.url;
-    } catch (err: any) {
-      setError(err?.message ?? 'Network error');
-    } finally {
-      setDepositing(false);
-    }
+  function handleDeposit() {
+    router.push('/wallet');
   }
 
   const balance = wallet?.balance ?? 0;
@@ -221,16 +203,15 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
 
               <button
                 onClick={handleDeposit}
-                disabled={depositing || depositCents < 1000}
                 style={{
                   width: '100%', padding: '14px', borderRadius: 10,
-                  cursor: depositing ? 'not-allowed' : 'pointer',
-                  background: depositing ? C.muted : C.gold, border: 'none',
+                  cursor: 'pointer',
+                  background: C.gold, border: 'none',
                   fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 2,
-                  color: depositing ? C.surf3 : C.bg, fontWeight: 700, transition: 'all .15s',
+                  color: C.bg, fontWeight: 700, transition: 'all .15s',
                 }}
               >
-                {depositing ? 'REDIRECTING…' : `DEPOSIT $${(depositCents / 100).toFixed(2)}`}
+                GO TO WALLET →
               </button>
             </div>
           )}
