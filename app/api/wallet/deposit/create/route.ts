@@ -8,6 +8,14 @@ import { stripe } from '@/lib/stripe';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  // Temp debug — remove after fixing
+  console.log('[deposit/create] ENV CHECK:', {
+    hasServiceKey:    !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    serviceKeyPrefix: process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 20),
+    hasStripeKey:     !!process.env.STRIPE_SECRET_KEY,
+    stripeKeyPrefix:  process.env.STRIPE_SECRET_KEY?.slice(0, 10),
+    hasSupabaseUrl:   !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+  });
   try {
     const supabase = createRouteHandlerClient({ cookies });
     const { data: { user } } = await supabase.auth.getUser();
