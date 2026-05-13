@@ -82,7 +82,6 @@ export async function POST(req: Request) {
     const { data: transaction, error: txErr } = await admin
       .from('transactions')
       .insert({
-        wallet_id:                wallet.id,
         user_id:                  user.id,
         type:                     'deposit',
         status:                   'pending',
@@ -90,7 +89,6 @@ export async function POST(req: Request) {
         stripe_payment_intent_id: paymentIntent.id,
         description:              `Deposit $${(amountCents / 100).toFixed(2)}`,
         idempotency_key:          `deposit_${paymentIntent.id}`,
-        reference_id:             deposit!.id,
       })
       .select('id')
       .single();
