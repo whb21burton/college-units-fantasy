@@ -81,7 +81,7 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
     router.push('/wallet');
   }
 
-  const balance = wallet?.balance ?? 0;
+  const balance = (wallet as any)?.available ?? wallet?.balance ?? 0;
 
   return (
     <div
@@ -157,7 +157,7 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
                         <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, color: C.muted, marginTop: 2 }}>{new Date(tx.created_at).toLocaleDateString()} · {tx.status}</div>
                       </div>
                       <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: col, letterSpacing: 0.5 }}>
-                        {isCredit ? '+' : '−'}${(tx.amount / 100).toFixed(2)}
+                        {isCredit ? '+' : '−'}${(((tx as any).amount_cents ?? tx.amount) / 100).toFixed(2)}
                       </div>
                     </div>
                   );
