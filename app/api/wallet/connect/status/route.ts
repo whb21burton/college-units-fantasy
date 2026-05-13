@@ -16,7 +16,7 @@ export async function GET() {
   try {
     const supabase = createRouteHandlerClient({ cookies });
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return NextResponse.json({ onboarded: false });
 
     const admin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
