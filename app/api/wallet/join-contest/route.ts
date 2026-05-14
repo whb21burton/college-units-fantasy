@@ -136,15 +136,36 @@ export async function POST(req: NextRequest) {
         }, { status: 402 });
       }
 
-      const { data: newBal, error: rpcErr } = await admin
-        .rpc('deduct_balance', { p_user_id: user.id, p_amount: buyInCents });
+      const pendingAcctId = accounts?.find(a => a.type === 'user_pending')?.id;
 
-      if (rpcErr) {
-        if (rpcErr.message?.includes('INSUFFICIENT_BALANCE')) {
-          return NextResponse.json({ error: 'Insufficient balance', code: 'INSUFFICIENT_BALANCE' }, { status: 402 });
-        }
-        throw rpcErr;
+      if (!availableId || !pendingAcctId) {
+        return NextResponse.json({ error: 'Ledger accounts not found' }, { status: 500 });
       }
+
+      // Create transaction record
+      const { data: tx, error: txErr } = await admin
+        .from('transactions')
+        .insert({
+          user_id:         user.id,
+          type:            'contest_entry',
+          status:          'completed',
+          amount_cents:    buyInCents,
+          league_id,
+          idempotency_key: `entry_${league_id}_${user.id}_${Date.now()}`,
+          description:     `Contest entry: ${league.name}`,
+        })
+        .select('id')
+        .single();
+
+      if (txErr) {
+        return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 });
+      }
+
+      // Double-entry: debit user_available, credit user_pending
+      await admin.from('ledger_entries').insert([
+        { transaction_id: tx!.id, ledger_account_id: availableId,   amount_cents: -buyInCents },
+        { transaction_id: tx!.id, ledger_account_id: pendingAcctId, amount_cents: +buyInCents },
+      ]);
 
       await admin.from('league_members').insert({
         league_id,
@@ -152,17 +173,6 @@ export async function POST(req: NextRequest) {
         team_name:  team_name.trim(),
         draft_slot: (memberCount ?? 0) + 1,
         paid:       true,
-      });
-
-      await admin.from('transactions').insert({
-        user_id:        user.id,
-        type:           'contest_entry',
-        amount:         buyInCents,
-        balance_before: currentBalance,
-        balance_after:  newBal as number,
-        league_id,
-        status:         'completed',
-        description:    `Entry — ${league.name}`,
       });
     }
 
