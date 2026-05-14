@@ -305,7 +305,7 @@ export default function CreateLeaguePage() {
   const maxUnitCount    = Math.max(...startingPositions
     .filter(pos => rosterConfig[pos].enabled)
     .map(pos => rosterConfig[pos].count));
-  const minSchoolsNeeded = entries * maxUnitCount * 2;
+  const minSchoolsNeeded = Math.ceil(entries * maxUnitCount * 1.5);
   const hasEnoughSchools = schools.size === 0 || schools.size >= minSchoolsNeeded;
   const step2Valid       = hasEnoughSchools;
 
@@ -606,7 +606,7 @@ export default function CreateLeaguePage() {
                     ⚠️ Not enough schools selected
                   </div>
                   <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: '#f87a8a', marginBottom: 4 }}>
-                    • You need at least {minSchoolsNeeded} schools ({entries} teams × {maxUnitCount} max units × 2 = {minSchoolsNeeded} minimum). You have {schools.size}.
+                    • You need at least {minSchoolsNeeded} schools ({entries} teams × {maxUnitCount} max units × 1.5 = {minSchoolsNeeded} minimum). You have {schools.size}.
                   </div>
                   <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: C.muted, marginTop: 6 }}>
                     ℹ️ Remember: each college school provides exactly 1 unit per position. With only {schools.size} schools there is a possibility that each team in the league won't be able to fill their roster.
