@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase-server';
 import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
@@ -34,10 +34,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'league_id and team_name are required' }, { status: 400 });
     }
 
-    const admin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
+    const admin = createAdminClient();
 
     // Load league
     const { data: league } = await admin
@@ -106,11 +103,29 @@ export async function POST(req: NextRequest) {
       // ── Paid league — deduct from wallet atomically ────────────────────────
       const { data: wallet } = await admin
         .from('wallets')
-        .select('balance')
+        .select('id')
         .eq('user_id', user.id)
         .single();
 
-      const currentBalance = wallet?.balance ?? 0;
+      if (!wallet) {
+        return NextResponse.json({ error: 'Wallet not found', code: 'INSUFFICIENT_BALANCE', balance: 0, required: buyInCents }, { status: 402 });
+      }
+
+      // Compute balance from ledger entries (same as /api/wallet)
+      const { data: accounts } = await admin
+        .from('ledger_accounts')
+        .select('id, type')
+        .eq('wallet_id', wallet.id);
+
+      const availableId = accounts?.find(a => a.type === 'user_available')?.id;
+      let currentBalance = 0;
+      if (availableId) {
+        const { data: entries } = await admin
+          .from('ledger_entries')
+          .select('amount_cents')
+          .eq('ledger_account_id', availableId);
+        currentBalance = entries?.reduce((sum, e) => sum + Number(e.amount_cents), 0) ?? 0;
+      }
 
       if (currentBalance < buyInCents) {
         return NextResponse.json({
