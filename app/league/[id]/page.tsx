@@ -605,6 +605,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               league={league}
               members={members}
               userId={userId}
+              userEmail={userEmail}
               spotsLeft={spotsLeft}
               isFull={isFull}
               isCommissioner={isCommissioner}
@@ -989,8 +990,8 @@ function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
 }
 
 /* ── Draft Tab ──────────────────────────────────────────────── */
-function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, inviteUrl, copied, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu, onResetDraft, onDeleteLeague }: {
-  league: any; members: any[]; userId: string | null;
+function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCommissioner, inviteUrl, copied, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu, onResetDraft, onDeleteLeague }: {
+  league: any; members: any[]; userId: string | null; userEmail: string;
   spotsLeft: number; isFull: boolean; isCommissioner: boolean;
   inviteUrl: string; copied: boolean; cpuTeams: string[];
   onCopy: () => void; onStartDraft: () => void; onMockDraft: () => void;
@@ -1086,7 +1087,7 @@ function DraftTab({ league, members, userId, spotsLeft, isFull, isCommissioner, 
             <div key={'empty-' + i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 20px', borderBottom: i < size - 1 ? '1px solid ' + C.surf3 : 'none' }}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', border: '2px dashed ' + C.surf3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 12 }}>{slotNum}</div>
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.muted, fontStyle: 'italic', flex: 1 }}>Waiting for invite...</span>
-              {isCommissioner && league?.status === 'forming' && (
+              {isCommissioner && league?.status === 'forming' && userEmail === 'whb21burton@gmail.com' && (
                 <button onClick={onAddCpu} style={{ flexShrink: 0, padding: '5px 12px', background: 'rgba(58,130,246,.1)', border: '1px solid rgba(58,130,246,.3)', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: '#3b82f6' }}>+ Add CPU</button>
               )}
             </div>
@@ -4303,6 +4304,7 @@ function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId
   const [draftType,  setDraftType]  = useState<string>(league?.draft_type ?? 'snake');
   const [pickTimer,  setPickTimer]  = useState<number>(league?.settings?.pick_timer ?? 60);
   const [salaryCap,  setSalaryCap]  = useState<number>(league?.salary_cap ?? 200);
+  const [draftDate,  setDraftDate]  = useState<string>(league?.settings?.draft_scheduled_at ?? '');
 
   // Build teams list for DraftOrderEditor, sorted by existing draft_order if set
   const existingDraftOrder: any[] = league?.settings?.draft_order ?? [];
@@ -4368,7 +4370,7 @@ function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId
           .update({
             draft_type: draftType,
             salary_cap: salaryCap,
-            settings: { ...(league.settings ?? {}), pick_timer: pickTimer },
+            settings: { ...(league.settings ?? {}), pick_timer: pickTimer, draft_scheduled_at: draftDate || null },
           })
           .eq('id', league.id);
       }
@@ -4754,6 +4756,25 @@ function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId
                     </div>
                   )}
                 </div>
+
+                {/* Schedule Draft */}
+                {isCommissioner && (
+                  <div>
+                    <label style={labelStyle}>📅 Schedule Draft</label>
+                    <input
+                      type="datetime-local"
+                      value={draftDate}
+                      onChange={e => setDraftDate(e.target.value)}
+                      min={new Date().toISOString().slice(0, 16)}
+                      style={{ ...inputStyle, width: '100%' }}
+                    />
+                    {draftDate && (
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, letterSpacing: .5, marginTop: 6 }}>
+                        Draft starts: {new Date(draftDate).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

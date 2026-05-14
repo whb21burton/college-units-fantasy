@@ -72,6 +72,26 @@ function buildAllTeams(lg: any, mbs: any[]): DraftTeam[] {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function CountdownTimer({ targetDate }: { targetDate: Date }) {
+  const [timeLeft, setTimeLeft] = useState('');
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const diff = targetDate.getTime() - Date.now();
+      if (diff <= 0) { setTimeLeft('Opening now...'); clearInterval(interval); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setTimeLeft(`${h}h ${m}m ${s}s`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [targetDate]);
+  return (
+    <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 36, color: C.gold, marginTop: 16, letterSpacing: 2 }}>
+      {timeLeft}
+    </div>
+  );
+}
+
 export default function DraftPage() {
   const router   = useRouter();
   const params   = useParams();
@@ -283,7 +303,7 @@ export default function DraftPage() {
     }
 
     const best = autoPick(avail, cpuRoster);
-    if (best) insertPick(best);
+    if (best) setTimeout(() => insertPick(best), 500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPickNum, draftLive, draftDone, userId, isCpuTurn, teamIdx]);
 
@@ -425,7 +445,37 @@ export default function DraftPage() {
   // ── Pre-draft lobby ───────────────────────────────────────────────────────
 
   if (!draftLive) {
-    const cpuTeamNames = (league?.settings?.cpu_teams as string[]) ?? [];
+    const scheduledAt    = league?.settings?.draft_scheduled_at ? new Date(league.settings.draft_scheduled_at) : null;
+    const oneHourBefore  = scheduledAt ? new Date(scheduledAt.getTime() - 60 * 60 * 1000) : null;
+    const draftRoomOpen  = !scheduledAt || new Date() >= oneHourBefore! || league?.status === 'drafting';
+
+    if (!draftRoomOpen && scheduledAt && oneHourBefore) {
+      return (
+        <div style={{ background: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Oswald', sans-serif", color: C.text }}>
+          <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
+          <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 48, width: 440, maxWidth: '90vw', textAlign: 'center' }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>🏟️</div>
+            <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 22, letterSpacing: 2, color: C.text, marginBottom: 8 }}>
+              Draft Room Opens Soon
+            </div>
+            <div style={{ fontSize: 13, color: C.sub, marginBottom: 20, letterSpacing: 0.5 }}>
+              Draft scheduled for {scheduledAt.toLocaleString()}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, letterSpacing: 0.5 }}>
+              Draft room opens 1 hour before: {oneHourBefore.toLocaleString()}
+            </div>
+            <CountdownTimer targetDate={oneHourBefore} />
+            <button
+              onClick={() => router.push(`/league/${leagueId}`)}
+              style={{ marginTop: 28, padding: '10px 24px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 1, color: C.muted }}
+            >← Back to League</button>
+          </div>
+        </div>
+      );
+    }
+
+    const leagueIsFull  = members.length >= (league?.league_size ?? 999);
+    const cpuTeamNames  = (league?.settings?.cpu_teams as string[]) ?? [];
     const lobbyTeams = [
       ...members.map(m => ({ name: m.team_name, type: 'human' as const, isMe: m.user_id === userId })),
       ...cpuTeamNames.map(name => ({ name, type: 'cpu' as const, isMe: false })),
@@ -463,14 +513,21 @@ export default function DraftPage() {
                 ? `💰 Salary cap · $${SALARY_BUDGET} budget · ${TOTAL_ROUNDS} picks`
                 : `🐍 Snake draft · ${TOTAL_ROUNDS} rounds · order randomized on start`}
             </div>
+            {scheduledAt && (
+              <div style={{ marginTop: 8, fontSize: 11, color: C.gold, letterSpacing: 0.5 }}>
+                📅 Draft scheduled for {scheduledAt.toLocaleString()}
+              </div>
+            )}
           </div>
 
           {isCommissioner ? (
             <button
               onClick={startDraft}
-              style={{ width: '100%', padding: '14px 20px', background: `linear-gradient(135deg, ${C.gold}, ${C.goldLight})`, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 15, letterSpacing: 2, color: C.bg }}
+              disabled={!leagueIsFull}
+              title={!leagueIsFull ? `Waiting for ${(league?.league_size ?? 0) - members.length} more members` : ''}
+              style={{ width: '100%', padding: '14px 20px', background: leagueIsFull ? `linear-gradient(135deg, ${C.gold}, ${C.goldLight})` : C.surf3, border: 'none', borderRadius: 8, cursor: leagueIsFull ? 'pointer' : 'not-allowed', fontFamily: "'Anton', sans-serif", fontSize: 15, letterSpacing: 2, color: leagueIsFull ? C.bg : C.muted }}
             >
-              🏈 START DRAFT
+              {leagueIsFull ? '🏈 START DRAFT' : `Waiting for members (${members.length}/${league?.league_size})`}
             </button>
           ) : (
             <div style={{ textAlign: 'center', fontSize: 12, color: C.muted, letterSpacing: 1, padding: '14px 0' }}>
