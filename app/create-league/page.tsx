@@ -258,12 +258,14 @@ export default function CreateLeaguePage() {
   // Step 1
   const [leagueName,      setLeagueName]      = useState('');
   const [leagueLogo,      setLeagueLogo]      = useState<string | null>(null);
+  const [leagueType,      setLeagueType]      = useState<'season' | 'weekly'>('season');
   const [entries,         setEntries]         = useState(8);
   const [buyIn,           setBuyIn]           = useState(0);
   const [customBuyIn,     setCustomBuyIn]     = useState('');
   const [inviteCode]                          = useState(genCode);
   const [payoutStructure, setPayoutStructure] = useState<PayoutStructure>('winner_take_all');
   const [customPayouts,   setCustomPayouts]   = useState<{ place: number; pct: number }[]>([{ place: 1, pct: 100 }]);
+  const [userEmail,       setUserEmail]       = useState<string | null>(null);
 
   // Step 2
   const [draftType,    setDraftType]    = useState<'snake' | 'salary'>('snake');
@@ -281,8 +283,11 @@ export default function CreateLeaguePage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) { router.push('/'); return; }
       setUserId(user.id);
+      setUserEmail(user.email ?? null);
     });
   }, [router]);
+
+  const isAdmin = userEmail === 'whb21burton@gmail.com';
 
   const effectiveBuyIn = customBuyIn ? parseFloat(customBuyIn) || 0 : buyIn;
   const effectiveCap   = customCap   ? parseInt(customCap)     || 200 : salaryCap;
@@ -341,7 +346,7 @@ export default function CreateLeaguePage() {
           draft_type:  draftType,
           salary_cap:  draftType === 'salary' ? effectiveCap : null,
           is_public:   false,
-          league_type: 'season',
+          league_type: leagueType,
           team_name:   teamName.trim(),
           invite_code: inviteCode,
           settings: {
@@ -396,14 +401,35 @@ export default function CreateLeaguePage() {
               <CommBadge />
             </div>
 
-            {/* League Type — locked */}
+            {/* League Type */}
             <div style={{ marginBottom: 20 }}>
               <Label>League Type</Label>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(245,166,35,.08)', border: `1px solid ${C.gold}44`, borderRadius: 8, padding: '10px 16px' }}>
-                <span style={{ fontSize: 16 }}>🏈</span>
-                <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 13, color: C.gold, letterSpacing: 1 }}>Season Long</span>
-                <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>🔒 LOCKED</span>
+              <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '1fr 1fr' : '1fr', gap: 8 }}>
+                <div
+                  onClick={() => setLeagueType('season')}
+                  style={{ padding: '14px 16px', border: `2px solid ${leagueType === 'season' ? C.gold : C.surf3}`, borderRadius: 10, cursor: 'pointer', background: leagueType === 'season' ? 'rgba(245,166,35,.08)' : C.surf2, transition: 'all .15s' }}
+                >
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>🏈</div>
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 13, color: leagueType === 'season' ? C.gold : C.text, letterSpacing: 1 }}>Season Long</div>
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>Draft once, compete all season</div>
+                </div>
+                {isAdmin && (
+                  <div
+                    onClick={() => setLeagueType('weekly')}
+                    style={{ padding: '14px 16px', border: `2px solid ${leagueType === 'weekly' ? C.gold : C.surf3}`, borderRadius: 10, cursor: 'pointer', background: leagueType === 'weekly' ? 'rgba(245,166,35,.08)' : C.surf2, transition: 'all .15s', position: 'relative' }}
+                  >
+                    <div style={{ fontSize: 20, marginBottom: 4 }}>⚡</div>
+                    <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 13, color: leagueType === 'weekly' ? C.gold : C.text, letterSpacing: 1 }}>Weekly Pick'em</div>
+                    <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>Pick your lineup each week</div>
+                    <div style={{ position: 'absolute', top: 6, right: 8, fontFamily: 'Oswald, sans-serif', fontSize: 8, letterSpacing: 1, color: C.gold, background: 'rgba(245,166,35,.15)', padding: '1px 5px', borderRadius: 3 }}>ADMIN</div>
+                  </div>
+                )}
               </div>
+              {!isAdmin && (
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, marginTop: 6, letterSpacing: 0.5 }}>
+                  🔒 Weekly leagues are created by the platform. Check the Contest Lobby for weekly contests.
+                </div>
+              )}
             </div>
 
             {/* League Name */}
