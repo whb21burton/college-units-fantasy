@@ -717,6 +717,7 @@ function PublicLeaguesContent() {
   const [loading,      setLoading]      = useState(true);
   const [user,         setUser]         = useState<any>(null);
   const [walletBal,    setWalletBal]    = useState<number>(0);
+  const [entryCountMap, setEntryCountMap] = useState<Record<string, number>>({});
   const [joining,      setJoining]      = useState<string | null>(null);
   const [isAdmin,      setIsAdmin]      = useState(false);
   const [deleting,     setDeleting]     = useState<string | null>(null);
@@ -751,6 +752,11 @@ function PublicLeaguesContent() {
         fetch('/api/wallet').then(r => r.json()).then(d => {
           setWalletBal(d.wallet?.available ?? d.wallet?.balance ?? 0);
         }).catch(() => {});
+        supabase.from('league_members').select('league_id').eq('user_id', u.id).then(({ data }) => {
+          const map: Record<string, number> = {};
+          for (const e of data ?? []) map[e.league_id] = (map[e.league_id] ?? 0) + 1;
+          setEntryCountMap(map);
+        });
       }
     });
   }, []);
@@ -899,12 +905,6 @@ function PublicLeaguesContent() {
             ))}
           </div>
 
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 6, padding: '0 12px' }}>Entry Amount</div>
-            {TYPE_OPTIONS.map(o => (
-              <SideRow key={o.value} active={typeFilter === o.value} onClick={() => setTypeFilter(o.value)}>{o.label}</SideRow>
-            ))}
-          </div>
 
           <div style={{ padding: '0 12px' }}>
             <button onClick={() => setAdvOpen(v => !v)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', padding: 0, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -932,8 +932,8 @@ function PublicLeaguesContent() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Column headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr 90px 90px 100px 110px 100px 92px 32px', background: C.hdrBg, borderBottom: '1px solid ' + C.surf3, padding: '0 12px', flexShrink: 0 }}>
-            {['', 'Contest', 'Style', 'Entry Fee', 'Total Prizes', 'Entries', 'Live/Start', '', ''].map((h, i) => (
+          <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr 80px 90px 90px 100px 110px 100px 92px 32px', background: C.hdrBg, borderBottom: '1px solid ' + C.surf3, padding: '0 12px', flexShrink: 0 }}>
+            {['', 'Contest', 'Your Entries', 'Style', 'Entry Fee', 'Total Prizes', 'Entries', 'Live/Start', '', ''].map((h, i) => (
               <div key={i} style={{ padding: '9px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.hdrText, textTransform: 'uppercase', textAlign: i >= 3 ? 'right' : 'left' }}>{h}</div>
             ))}
           </div>
@@ -960,7 +960,7 @@ function PublicLeaguesContent() {
                   <div
                     key={league.id}
                     onClick={() => openDetail(league)}
-                    style={{ display: 'grid', gridTemplateColumns: '24px 1fr 90px 90px 100px 110px 100px 92px 32px', background: idx % 2 === 0 ? C.rowA : C.rowB, borderBottom: '1px solid rgba(30,45,71,.5)', padding: '0 12px', alignItems: 'center', transition: 'background .1s', cursor: 'pointer' }}
+                    style={{ display: 'grid', gridTemplateColumns: '24px 1fr 80px 90px 90px 100px 110px 100px 92px 32px', background: idx % 2 === 0 ? C.rowA : C.rowB, borderBottom: '1px solid rgba(30,45,71,.5)', padding: '0 12px', alignItems: 'center', transition: 'background .1s', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = C.hover)}
                     onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 0 ? C.rowA : C.rowB)}
                   >
@@ -990,6 +990,19 @@ function PublicLeaguesContent() {
                         )}
                       </div>
                     </div>
+
+                    {(() => {
+                      const myCount = entryCountMap[league.id] ?? 0;
+                      const maxE    = league.max_entries_per_user ?? null;
+                      const display = maxE ? `${myCount} / ${maxE}` : `${myCount} / ∞`;
+                      return (
+                        <div style={{ padding: '12px 8px', textAlign: 'center' }}>
+                          <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: myCount > 0 ? C.green : C.muted }}>
+                            {display}
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     <div style={{ padding: '12px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>
                       {league.conference_filter || 'All D1'}
