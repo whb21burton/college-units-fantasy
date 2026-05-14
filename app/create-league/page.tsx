@@ -22,6 +22,60 @@ const BUYIN_PRESETS = [0, 1, 5, 10, 25, 50];
 const TIME_OPTIONS  = ['30s', '1min', '2min', '5min', 'No limit'];
 const CAP_PRESETS   = [100, 150, 200, 250];
 
+type PayoutStructure = 'winner_take_all' | 'top2' | 'top3' | 'custom';
+type PayoutSplit = { place: number; label: string; pct: number; amount: number };
+
+const PAYOUT_PRESETS: { key: PayoutStructure; label: string; desc: string; splits: (net: number) => PayoutSplit[] }[] = [
+  {
+    key: 'winner_take_all',
+    label: 'Winner Take All',
+    desc: '1st place wins everything',
+    splits: (net) => [{ place: 1, label: '1st', pct: 100, amount: net }],
+  },
+  {
+    key: 'top2',
+    label: 'Top 2',
+    desc: '70% / 30%',
+    splits: (net) => [
+      { place: 1, label: '1st', pct: 70, amount: net * 0.70 },
+      { place: 2, label: '2nd', pct: 30, amount: net * 0.30 },
+    ],
+  },
+  {
+    key: 'top3',
+    label: 'Top 3',
+    desc: '60% / 25% / 15%',
+    splits: (net) => [
+      { place: 1, label: '1st', pct: 60, amount: net * 0.60 },
+      { place: 2, label: '2nd', pct: 25, amount: net * 0.25 },
+      { place: 3, label: '3rd', pct: 15, amount: net * 0.15 },
+    ],
+  },
+];
+
+type RosterPos = 'QB' | 'RB' | 'WR' | 'TE' | 'DEF' | 'K' | 'BENCH';
+type RosterConfig = { [K in RosterPos]: { enabled: boolean; count: number } };
+
+const ROSTER_POSITIONS: { key: RosterPos; emoji: string; max: number }[] = [
+  { key: 'QB',    emoji: '🏈', max: 4 },
+  { key: 'RB',    emoji: '🏃', max: 4 },
+  { key: 'WR',    emoji: '📡', max: 4 },
+  { key: 'TE',    emoji: '🎯', max: 4 },
+  { key: 'DEF',   emoji: '🛡️', max: 4 },
+  { key: 'K',     emoji: '👟', max: 4 },
+  { key: 'BENCH', emoji: '🪑', max: 8 },
+];
+
+const DEFAULT_ROSTER: RosterConfig = {
+  QB:    { enabled: true, count: 1 },
+  RB:    { enabled: true, count: 2 },
+  WR:    { enabled: true, count: 2 },
+  TE:    { enabled: true, count: 1 },
+  DEF:   { enabled: true, count: 1 },
+  K:     { enabled: true, count: 1 },
+  BENCH: { enabled: true, count: 2 },
+};
+
 function genCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
@@ -130,7 +184,9 @@ function LogoUpload({ bucket, userId, label, preview, onUpload }: {
 
 // ── School Picker ─────────────────────────────────────────────────────────────
 
-function SchoolPicker({ selected, onChange }: { selected: Set<string>; onChange: (s: Set<string>) => void }) {
+function SchoolPicker({ selected, onChange, minSchools = 4 }: {
+  selected: Set<string>; onChange: (s: Set<string>) => void; minSchools?: number;
+}) {
   const confs = Object.entries(CONFERENCES) as [string, string[]][];
 
   function toggleConf(conf: string, schools: string[]) {
@@ -151,12 +207,12 @@ function SchoolPicker({ selected, onChange }: { selected: Set<string>; onChange:
     <div>
       <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: C.sub, letterSpacing: 1, marginBottom: 12 }}>
         {selected.size} school{selected.size !== 1 ? 's' : ''} selected
-        {selected.size > 0 && selected.size < 4 && (
-          <span style={{ color: C.red, marginLeft: 8 }}>(minimum 4 required)</span>
+        {selected.size > 0 && selected.size < minSchools && (
+          <span style={{ color: C.red, marginLeft: 8 }}>(minimum {minSchools} required)</span>
         )}
       </div>
       {confs.map(([conf, schools]) => {
-        const allIn = schools.every(s => selected.has(s));
+        const allIn  = schools.every(s => selected.has(s));
         const someIn = schools.some(s => selected.has(s));
         return (
           <div key={conf} style={{ marginBottom: 16 }}>
@@ -200,12 +256,14 @@ export default function CreateLeaguePage() {
   const [error,      setError]      = useState<string | null>(null);
 
   // Step 1
-  const [leagueName,   setLeagueName]   = useState('');
-  const [leagueLogo,   setLeagueLogo]   = useState<string | null>(null);
-  const [entries,      setEntries]      = useState(8);
-  const [buyIn,        setBuyIn]        = useState(0);
-  const [customBuyIn,  setCustomBuyIn]  = useState('');
-  const [inviteCode]                    = useState(genCode);
+  const [leagueName,      setLeagueName]      = useState('');
+  const [leagueLogo,      setLeagueLogo]      = useState<string | null>(null);
+  const [entries,         setEntries]         = useState(8);
+  const [buyIn,           setBuyIn]           = useState(0);
+  const [customBuyIn,     setCustomBuyIn]     = useState('');
+  const [inviteCode]                          = useState(genCode);
+  const [payoutStructure, setPayoutStructure] = useState<PayoutStructure>('winner_take_all');
+  const [customPayouts,   setCustomPayouts]   = useState<{ place: number; pct: number }[]>([{ place: 1, pct: 100 }]);
 
   // Step 2
   const [draftType,    setDraftType]    = useState<'snake' | 'salary'>('snake');
@@ -213,10 +271,11 @@ export default function CreateLeaguePage() {
   const [customCap,    setCustomCap]    = useState('');
   const [timePick,     setTimePick]     = useState('2min');
   const [schools,      setSchools]      = useState<Set<string>>(new Set());
+  const [rosterConfig, setRosterConfig] = useState<RosterConfig>(DEFAULT_ROSTER);
 
   // Step 3
-  const [teamName,     setTeamName]     = useState('');
-  const [teamLogo,     setTeamLogo]     = useState<string | null>(null);
+  const [teamName, setTeamName] = useState('');
+  const [teamLogo, setTeamLogo] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -225,13 +284,22 @@ export default function CreateLeaguePage() {
     });
   }, [router]);
 
-  const effectiveBuyIn  = customBuyIn ? parseFloat(customBuyIn) || 0 : buyIn;
-  const effectiveCap    = customCap   ? parseInt(customCap)     || 200 : salaryCap;
-  const allSchools      = Object.values(CONFERENCES).flat();
+  const effectiveBuyIn = customBuyIn ? parseFloat(customBuyIn) || 0 : buyIn;
+  const effectiveCap   = customCap   ? parseInt(customCap)     || 200 : salaryCap;
+  const allSchools     = Object.values(CONFERENCES).flat();
 
-  // Step validation
+  const totalPool    = effectiveBuyIn * entries;
+  const rakeCents    = totalPool * 0.10;
+  const netPool      = totalPool - rakeCents;
+  const activePreset = PAYOUT_PRESETS.find(p => p.key === payoutStructure) ?? PAYOUT_PRESETS[0];
+  const splits       = activePreset.splits(netPool);
+
+  const totalRoster = (Object.keys(rosterConfig) as RosterPos[])
+    .filter(pos => rosterConfig[pos].enabled)
+    .reduce((sum, pos) => sum + rosterConfig[pos].count, 0);
+
   const step1Valid = leagueName.trim().length >= 3 && entries >= 4;
-  const step2Valid = schools.size >= 4 || draftType === 'snake';
+  const step2Valid = schools.size === 0 || schools.size >= entries;
   const step3Valid = teamName.trim().length >= 2;
 
   function canNext() {
@@ -239,6 +307,13 @@ export default function CreateLeaguePage() {
     if (step === 2) return step2Valid;
     if (step === 3) return step3Valid;
     return true;
+  }
+
+  function toggleRoster(pos: RosterPos) {
+    setRosterConfig(prev => ({ ...prev, [pos]: { ...prev[pos], enabled: !prev[pos].enabled } }));
+  }
+  function setRosterCount(pos: RosterPos, count: number) {
+    setRosterConfig(prev => ({ ...prev, [pos]: { ...prev[pos], count } }));
   }
 
   async function handleSubmit() {
@@ -267,6 +342,9 @@ export default function CreateLeaguePage() {
             league_logo_url:  leagueLogo,
             team_logo_url:    teamLogo,
             time_per_pick:    timePick,
+            payout_structure: payoutStructure,
+            payout_splits:    splits,
+            roster_config:    rosterConfig,
           },
         }),
       });
@@ -281,6 +359,10 @@ export default function CreateLeaguePage() {
   }
 
   const card: React.CSSProperties = { background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 14, padding: '28px 32px', marginBottom: 20 };
+  const placeEmoji = (i: number) => i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
+
+  // suppress unused-var warning for customPayouts setter — state kept for future custom editor
+  void customPayouts; void setCustomPayouts;
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, padding: '32px 16px' }}>
@@ -342,7 +424,7 @@ export default function CreateLeaguePage() {
             </div>
 
             {/* Entry Fee */}
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: effectiveBuyIn > 0 ? 0 : 20 }}>
               <Label>Entry Fee</Label>
               <PresetRow
                 values={BUYIN_PRESETS}
@@ -363,8 +445,65 @@ export default function CreateLeaguePage() {
               </div>
             </div>
 
+            {/* Prize Pool Breakdown */}
+            {effectiveBuyIn > 0 && (
+              <div style={{ background: 'rgba(245,166,35,.06)', border: '1px solid rgba(245,166,35,.2)', borderRadius: 8, padding: '14px 16px', marginTop: 12 }}>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
+                  💰 Prize Pool Breakdown
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>Total entries ({entries} × ${effectiveBuyIn})</span>
+                  <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.text }}>${totalPool.toFixed(2)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>Platform fee (10%)</span>
+                  <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.red }}>−${rakeCents.toFixed(2)}</span>
+                </div>
+                <div style={{ height: 1, background: C.surf3, margin: '8px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.gold }}>Net prize pool</span>
+                  <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 15, color: C.gold }}>${netPool.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Payout Structure */}
+            {effectiveBuyIn > 0 && (
+              <div style={{ marginTop: 20, marginBottom: 20 }}>
+                <Label>Payout Structure</Label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+                  {PAYOUT_PRESETS.map(preset => (
+                    <button
+                      key={preset.key}
+                      onClick={() => setPayoutStructure(preset.key)}
+                      style={{ padding: '14px 10px', background: payoutStructure === preset.key ? 'rgba(245,166,35,.1)' : C.surf2, border: `2px solid ${payoutStructure === preset.key ? C.gold : C.surf3}`, borderRadius: 10, cursor: 'pointer', textAlign: 'center', transition: 'all .15s' }}
+                    >
+                      <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 12, letterSpacing: 1, color: payoutStructure === preset.key ? C.gold : C.text, textTransform: 'uppercase', marginBottom: 4 }}>
+                        {preset.label}
+                      </div>
+                      <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.sub, letterSpacing: 1 }}>
+                        {preset.desc}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '12px 14px' }}>
+                  {splits.map((s, i) => (
+                    <div key={s.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: i < splits.length - 1 ? 6 : 0 }}>
+                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
+                        {placeEmoji(i)} {s.label} place
+                      </span>
+                      <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>
+                        ${s.amount.toFixed(2)} ({s.pct}%)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Invite Code */}
-            <div style={{ marginBottom: 4 }}>
+            <div style={{ marginBottom: 4, marginTop: effectiveBuyIn > 0 ? 0 : 0 }}>
               <Label>Private Invite Code</Label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '11px 16px', fontFamily: 'Anton, sans-serif', fontSize: 22, letterSpacing: 4, color: C.gold }}>
@@ -445,20 +584,73 @@ export default function CreateLeaguePage() {
               </div>
             </div>
 
-            {/* School Picker (salary only) */}
-            {draftType === 'salary' && (
-              <div>
-                <Label>Team Pool — Select Schools</Label>
-                <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '16px', maxHeight: 360, overflowY: 'auto' }}>
-                  <SchoolPicker selected={schools} onChange={setSchools} />
-                </div>
-                {schools.size > 0 && schools.size < 4 && (
-                  <div style={{ marginTop: 8, fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.red, letterSpacing: 1 }}>
-                    Select at least 4 schools to continue.
-                  </div>
-                )}
+            {/* Team Pool — School Picker (both draft types) */}
+            <div style={{ marginBottom: 24 }}>
+              <Label>Team Pool — Select Schools</Label>
+              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 8 }}>
+                Leave all unchecked to use all D1 schools, or select a subset.
               </div>
-            )}
+              <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '16px', maxHeight: 360, overflowY: 'auto' }}>
+                <SchoolPicker selected={schools} onChange={setSchools} minSchools={entries} />
+              </div>
+              {schools.size > 0 && schools.size < entries && (
+                <div style={{ color: C.red, fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 1, marginTop: 8 }}>
+                  ⚠️ Need at least {entries} schools so each team can draft a unique RB unit. Add {entries - schools.size} more.
+                </div>
+              )}
+            </div>
+
+            {/* Roster Settings */}
+            <div>
+              <Label>Roster Settings</Label>
+              <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '16px' }}>
+                {ROSTER_POSITIONS.map((pos, idx) => {
+                  const cfg    = rosterConfig[pos.key];
+                  const isLast = idx === ROSTER_POSITIONS.length - 1;
+                  return (
+                    <div
+                      key={pos.key}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: isLast ? 0 : 10, marginBottom: isLast ? 0 : 10, borderBottom: isLast ? 'none' : `1px solid ${C.surf3}` }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={cfg.enabled}
+                        onChange={() => toggleRoster(pos.key)}
+                        style={{ accentColor: C.gold, width: 15, height: 15, cursor: 'pointer', flexShrink: 0 }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: 80, flexShrink: 0 }}>
+                        <span style={{ fontSize: 16 }}>{pos.emoji}</span>
+                        <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 13, letterSpacing: 1, color: cfg.enabled ? C.text : C.muted, textTransform: 'uppercase' }}>
+                          {pos.key}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                        <button
+                          onClick={() => cfg.enabled && setRosterCount(pos.key, Math.max(0, cfg.count - 1))}
+                          disabled={!cfg.enabled || cfg.count <= 0}
+                          style={{ width: 28, height: 28, borderRadius: 6, background: C.surf3, border: 'none', cursor: cfg.enabled && cfg.count > 0 ? 'pointer' : 'not-allowed', color: cfg.enabled ? C.text : C.muted, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                          −
+                        </button>
+                        <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 16, color: cfg.enabled ? C.text : C.muted, minWidth: 20, textAlign: 'center' }}>
+                          {cfg.count}
+                        </span>
+                        <button
+                          onClick={() => cfg.enabled && setRosterCount(pos.key, Math.min(pos.max, cfg.count + 1))}
+                          disabled={!cfg.enabled || cfg.count >= pos.max}
+                          style={{ width: 28, height: 28, borderRadius: 6, background: C.surf3, border: 'none', cursor: cfg.enabled && cfg.count < pos.max ? 'pointer' : 'not-allowed', color: cfg.enabled ? C.text : C.muted, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: C.sub, letterSpacing: 1, textAlign: 'right', marginTop: 12 }}>
+                  Total roster: {totalRoster} players
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -491,21 +683,55 @@ export default function CreateLeaguePage() {
             <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 18, letterSpacing: 1, color: C.text, textTransform: 'uppercase', marginBottom: 24 }}>Review & Create</div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-              {[
+              {([
                 ['League Name', leagueName],
                 ['Entry Fee', effectiveBuyIn === 0 ? 'Free' : `$${effectiveBuyIn.toFixed(2)}`],
                 ['Entries', String(entries)],
-                ['Prize Pool (est.)', effectiveBuyIn === 0 ? '—' : `$${(effectiveBuyIn * entries * 0.9).toFixed(2)}`],
+                ['Prize Pool (est.)', effectiveBuyIn === 0 ? '—' : `$${netPool.toFixed(2)}`],
                 ['Draft Format', draftType === 'snake' ? '🐍 Snake Draft' : '💰 Salary Cap'],
                 ['Time Per Pick', timePick],
                 ['Your Team', teamName],
-                ['Schools', draftType === 'salary' ? `${schools.size > 0 ? schools.size : 'All'} schools` : 'All D1'],
-              ].map(([label, value]) => (
+                ['Schools', schools.size > 0 ? `${schools.size} schools` : 'All D1'],
+              ] as [string, string][]).map(([label, value]) => (
                 <div key={label} style={{ background: C.surf2, borderRadius: 8, padding: '12px 14px' }}>
                   <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
                   <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600, color: C.text }}>{value}</div>
                 </div>
               ))}
+            </div>
+
+            {/* Payout breakdown */}
+            {effectiveBuyIn > 0 && (
+              <div style={{ background: C.surf2, borderRadius: 8, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
+                  Payout Structure — {activePreset.label}
+                </div>
+                {splits.map((s, i) => (
+                  <div key={s.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: i < splits.length - 1 ? 6 : 0 }}>
+                    <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
+                      {placeEmoji(i)} {s.label} place ({s.pct}%)
+                    </span>
+                    <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>${s.amount.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Roster config summary */}
+            <div style={{ background: C.surf2, borderRadius: 8, padding: '14px 16px', marginBottom: 20 }}>
+              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
+                Roster Config
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                {ROSTER_POSITIONS.filter(p => rosterConfig[p.key].enabled).map(p => (
+                  <span key={p.key} style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 1, color: C.text, background: C.surf3, borderRadius: 4, padding: '4px 10px' }}>
+                    {p.emoji} {p.key}: {rosterConfig[p.key].count}
+                  </span>
+                ))}
+              </div>
+              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.sub, letterSpacing: 1 }}>
+                Total: {totalRoster} players per team
+              </div>
             </div>
 
             {/* Invite Code */}
