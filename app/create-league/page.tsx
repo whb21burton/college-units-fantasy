@@ -289,7 +289,7 @@ export default function CreateLeaguePage() {
   const allSchools     = Object.values(CONFERENCES).flat();
 
   const totalPool    = effectiveBuyIn * entries;
-  const rakeCents    = totalPool * 0.10;
+  const rakeCents    = totalPool * 0.05;
   const netPool      = totalPool - rakeCents;
   const activePreset = PAYOUT_PRESETS.find(p => p.key === payoutStructure) ?? PAYOUT_PRESETS[0];
   const splits       = activePreset.splits(netPool);
@@ -299,8 +299,21 @@ export default function CreateLeaguePage() {
     .reduce((sum, pos) => sum + rosterConfig[pos].count, 0);
 
   const step1Valid = leagueName.trim().length >= 3 && entries >= 4;
-  const step2Valid = schools.size === 0 || schools.size >= entries;
   const step3Valid = teamName.trim().length >= 2;
+
+  const rbPerTeam        = rosterConfig.RB.enabled ? rosterConfig.RB.count : 0;
+  const totalRBsNeeded   = entries * rbPerTeam;
+  const totalUnitsNeeded = entries * (
+    (rosterConfig.QB.enabled  ? rosterConfig.QB.count  : 0) +
+    (rosterConfig.RB.enabled  ? rosterConfig.RB.count  : 0) +
+    (rosterConfig.WR.enabled  ? rosterConfig.WR.count  : 0) +
+    (rosterConfig.TE.enabled  ? rosterConfig.TE.count  : 0) +
+    (rosterConfig.DEF.enabled ? rosterConfig.DEF.count : 0) +
+    (rosterConfig.K.enabled   ? rosterConfig.K.count   : 0)
+  );
+  const hasEnoughForRB     = schools.size === 0 || schools.size >= totalRBsNeeded;
+  const hasEnoughForRoster = schools.size === 0 || schools.size >= totalUnitsNeeded;
+  const step2Valid         = hasEnoughForRB;
 
   function canNext() {
     if (step === 1) return step1Valid;
@@ -456,7 +469,7 @@ export default function CreateLeaguePage() {
                   <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.text }}>${totalPool.toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>Platform fee (10%)</span>
+                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>Platform fee (5%)</span>
                   <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.red }}>−${rakeCents.toFixed(2)}</span>
                 </div>
                 <div style={{ height: 1, background: C.surf3, margin: '8px 0' }} />
@@ -593,9 +606,24 @@ export default function CreateLeaguePage() {
               <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '16px', maxHeight: 360, overflowY: 'auto' }}>
                 <SchoolPicker selected={schools} onChange={setSchools} minSchools={entries} />
               </div>
-              {schools.size > 0 && schools.size < entries && (
-                <div style={{ color: C.red, fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 1, marginTop: 8 }}>
-                  ⚠️ Need at least {entries} schools so each team can draft a unique RB unit. Add {entries - schools.size} more.
+              {schools.size > 0 && (!hasEnoughForRB || !hasEnoughForRoster) && (
+                <div style={{ marginTop: 12, padding: '12px 14px', background: 'rgba(240,58,90,.08)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 8 }}>
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.red, letterSpacing: 1, marginBottom: 6 }}>
+                    ⚠️ Not enough schools selected
+                  </div>
+                  {!hasEnoughForRB && (
+                    <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: '#f87a8a', marginBottom: 4 }}>
+                      • You need at least {totalRBsNeeded} schools for each team to draft {rbPerTeam} RB unit{rbPerTeam > 1 ? 's' : ''} ({entries} teams × {rbPerTeam} RBs = {totalRBsNeeded} schools minimum). You have {schools.size}.
+                    </div>
+                  )}
+                  {!hasEnoughForRoster && (
+                    <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: '#f87a8a', marginBottom: 4 }}>
+                      • You need at least {totalUnitsNeeded} schools to fill every roster spot ({entries} teams × {totalUnitsNeeded / entries} units = {totalUnitsNeeded} total). You have {schools.size}.
+                    </div>
+                  )}
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: C.muted, marginTop: 6 }}>
+                    ℹ️ Remember: each college school provides exactly 1 unit per position (1 QB, 1 RB, 1 WR, etc.). With {schools.size} schools and {entries} teams, some teams may not be able to fill their roster.
+                  </div>
                 </div>
               )}
             </div>
