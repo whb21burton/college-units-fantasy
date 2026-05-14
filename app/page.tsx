@@ -220,24 +220,23 @@ export default function HomePage() {
             </div>
           </div>
 
-          {leagues.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 3, color: C.muted, textTransform: 'uppercase', marginBottom: 16 }}>Your Leagues</div>
-              {leagues.map((league: any) => (
-                <div
-                  key={league.id}
-                  onClick={() => router.push(`/league/${league.id}`)}
-                  style={{ padding: '16px 20px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 10, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <div>
-                    <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 16, letterSpacing: 1, color: C.text }}>{league.name}</div>
-                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, letterSpacing: 1, marginTop: 4 }}>{league.league_size} teams · {league.status}</div>
-                  </div>
-                  <div style={{ color: C.gold, fontSize: 18 }}>→</div>
+          <button
+            onClick={() => router.push('/my-leagues')}
+            style={{ width: '100%', padding: '20px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ fontSize: 32 }}>🏟️</div>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 18, letterSpacing: 1, color: C.text, textTransform: 'uppercase' }}>
+                  {(user?.user_metadata?.display_name ?? user?.email?.split('@')[0])}'s Leagues
                 </div>
-              ))}
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, letterSpacing: 1, marginTop: 3 }}>
+                  {leagues.length} active league{leagues.length !== 1 ? 's' : ''}
+                </div>
+              </div>
             </div>
-          )}
+            <div style={{ color: C.gold, fontSize: 22 }}>→</div>
+          </button>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <button onClick={() => setView('create')} style={btnStyle}>+ Create League</button>
