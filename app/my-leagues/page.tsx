@@ -109,8 +109,14 @@ export default function MyLeaguesPage() {
           ))}
         </div>
 
-        {/* Back link */}
-        <div style={{ padding: '0 20px', borderTop: `1px solid ${C.surf3}`, paddingTop: 16 }}>
+        {/* Bottom actions */}
+        <div style={{ padding: '0 20px', borderTop: `1px solid ${C.surf3}`, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            onClick={() => router.push('/create-league')}
+            style={{ width: '100%', padding: '10px', background: 'rgba(245,166,35,.12)', border: `1px solid ${C.gold}44`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 2, color: C.gold, textTransform: 'uppercase' }}
+          >
+            + Create League
+          </button>
           <button
             onClick={() => router.push('/')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', padding: 0 }}

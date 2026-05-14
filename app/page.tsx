@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
-import { CreateLeagueWizard } from '@/components/league/CreateLeagueWizard';
 import { WalletPanel } from '@/components/wallet/WalletPanel';
 
 const C = {
@@ -13,7 +12,7 @@ const C = {
   green:'#2ecc71', red:'#e74c3c',
 };
 
-type View = 'landing' | 'signin' | 'signup' | 'dashboard' | 'create' | 'join';
+type View = 'landing' | 'signin' | 'signup' | 'dashboard' | 'join';
 
 export default function HomePage() {
   const router = useRouter();
@@ -239,7 +238,7 @@ export default function HomePage() {
           </button>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <button onClick={() => setView('create')} style={btnStyle}>+ Create League</button>
+            <button onClick={() => router.push('/create-league')} style={btnStyle}>+ Create League</button>
             <button onClick={() => setView('join')} style={{ ...ghostStyle, marginTop: 0 }}>Join League</button>
           </div>
           <button
@@ -259,9 +258,6 @@ export default function HomePage() {
           </button>
         </div>
       )}
-
-      {/* CREATE */}
-      {view === 'create' && <CreateLeagueWizard />}
 
       {/* WALLET */}
       {walletOpen && <WalletPanel onClose={() => setWalletOpen(false)} />}
