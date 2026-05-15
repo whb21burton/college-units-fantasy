@@ -26,12 +26,14 @@ function weeklyProj(seasonPts: number): number {
   return seasonPts / SEASON_GAMES;
 }
 
-function poolUrl(conf?: string | null, allowedSchools?: string[] | null): string {
+function poolUrl(unitType: string, allowedSchools?: string[] | null): string {
   const params = new URLSearchParams();
-  if (conf && conf !== 'ALL') params.set('conference', conf);
-  if (allowedSchools && allowedSchools.length > 0) params.set('schools', allowedSchools.join(','));
+  if (unitType !== 'ALL') params.set('unitType', unitType);
+  if (allowedSchools && Array.isArray(allowedSchools) && allowedSchools.length > 0) {
+    params.set('schools', allowedSchools.join(','));
+  }
   const qs = params.toString();
-  return qs ? `/api/player-pool?${qs}` : '/api/player-pool';
+  return `/api/player-pool${qs ? '?' + qs : ''}`;
 }
 
 type MatchupCtx = {
@@ -1871,7 +1873,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   const [allPicks,    setAllPicks]    = useState<any[]>([]);
   const [myPicks,     setMyPicks]     = useState<any[]>([]);
   const [pool,        setPool]        = useState<DraftUnit[]>([]);
-  const [posFilter,   setPosFilter]   = useState<string>('ALL');
+  const [unitFilter,  setUnitFilter]  = useState<string>('ALL');
   const [availFilter, setAvailFilter] = useState<'Available' | 'All'>('Available');
   const [search,      setSearch]      = useState('');
   const [viewing,     setViewing]     = useState<any | null>(null);
@@ -1895,13 +1897,14 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
       .then(r => r.json()).then(d => setGameCtx(d)).catch(() => {});
   }, [league?.current_week]);
 
+  const allowedSchools: string[] | null = Array.isArray(league?.settings?.allowed_schools)
+    ? (league.settings.allowed_schools as string[])
+    : null;
+
   useEffect(() => {
     if (!league?.id || !userId) return;
     async function load() {
-      const [picksRes, poolRes] = await Promise.all([
-        supabase.from('draft_picks').select('*').eq('league_id', league.id),
-        fetch(poolUrl(league?.conference_filter, league?.settings?.allowed_schools)).then(r => r.json()),
-      ]);
+      const picksRes = await supabase.from('draft_picks').select('*').eq('league_id', league.id);
       const all = picksRes.data || [];
       setAllPicks(all);
 
@@ -1921,12 +1924,20 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         mine = all.filter((p: any) => p.user_id === userId);
       }
       setMyPicks(mine);
-
-      setPool(Array.isArray(poolRes) ? poolRes : []);
       setLoading(false);
     }
     load();
   }, [league?.id, userId]);
+
+  useEffect(() => {
+    console.log('[WaiverTab] fetching pool, unitFilter:', unitFilter, 'allowedSchools:', allowedSchools);
+    fetch(poolUrl(unitFilter, allowedSchools))
+      .then(r => r.json())
+      .then(data => {
+        console.log('[WaiverTab] pool response count:', data?.length);
+        setPool(Array.isArray(data) ? data : []);
+      });
+  }, [unitFilter, allowedSchools]);
 
   // Key drafted units by school||unitType rather than by id.
   // The draft page stores FULL_POOL entries whose ids include the player name
@@ -1947,7 +1958,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     : pool;
 
   const freeAgents = visiblePool
-    .filter(p => posFilter === 'ALL' || p.unitType === posFilter)
+    .filter(p => unitFilter === 'ALL' || p.unitType === unitFilter)
     .filter(p => {
       if (!search.trim()) return true;
       const q = search.toLowerCase();
@@ -2137,7 +2148,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         ))}
         <div style={{ width: 1, height: 20, background: C.surf3, flexShrink: 0 }} />
         {POS_FILTERS.map(f => (
-          <button key={f} onClick={() => setPosFilter(f)} style={{ padding: '5px 14px', borderRadius: 20, border: '1px solid ' + (posFilter === f ? C.gold : C.surf3), background: posFilter === f ? C.gold : C.surf2, color: posFilter === f ? C.bg : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: .5 }}>
+          <button key={f} onClick={() => setUnitFilter(f)} style={{ padding: '5px 14px', borderRadius: 20, border: '1px solid ' + (unitFilter === f ? C.gold : C.surf3), background: unitFilter === f ? C.gold : C.surf2, color: unitFilter === f ? C.bg : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: .5 }}>
             {f}
           </button>
         ))}
