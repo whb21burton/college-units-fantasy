@@ -166,15 +166,33 @@ export default function MockDraftPage() {
   const [statsLoading, setStatsLoading] = useState(false);
 
   useEffect(() => {
-    // Fetch league to get conference filter + league size, then pool
+    // Fetch league to get conference filter, allowed_schools, and league size, then pool
     async function loadPool() {
-      let confFilter: string | null = null;
-      const { data: lg } = await supabase.from('leagues').select('conference_filter, league_size').eq('id', leagueId).single();
-      if (lg?.conference_filter && lg.conference_filter !== 'ALL') confFilter = lg.conference_filter;
-      if (lg?.league_size) setLeagueSize(lg.league_size);
-      const url = confFilter ? `/api/player-pool?conference=${encodeURIComponent(confFilter)}` : '/api/player-pool';
+      const { data: lg } = await supabase
+        .from('leagues')
+        .select('conference_filter, league_size, settings')
+        .eq('id', leagueId)
+        .single();
+
+      const size = lg?.league_size ?? 8;
+      setLeagueSize(size);
+      setRosters(Array.from({ length: size }, emptyRoster));
+
+      const params = new URLSearchParams();
+      if (lg?.conference_filter && lg.conference_filter !== 'ALL') {
+        params.set('conference', lg.conference_filter);
+      }
+      const allowedSchools: string[] | null = Array.isArray(lg?.settings?.allowed_schools)
+        ? lg.settings.allowed_schools
+        : null;
+      if (allowedSchools && allowedSchools.length > 0) {
+        params.set('schools', allowedSchools.join(','));
+      }
+      const url = `/api/player-pool${params.toString() ? '?' + params.toString() : ''}`;
+      console.log('[MockDraft] pool url:', url);
       const data: DraftUnit[] = await fetch(url).then(r => r.json()).catch(() => []);
       const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => b.projectedPoints - a.projectedPoints);
+      console.log('[MockDraft] pool loaded:', sorted.length, 'units');
       setPoolData(sorted);
       setAvailable(sorted);
     }
@@ -243,15 +261,19 @@ export default function MockDraftPage() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isMyTurn, draftComplete, available.length, makePick, rosters, userTeam]);
 
+  const availableRef = useRef(available);
+  useEffect(() => { availableRef.current = available; }, [available]);
+  const rostersRef = useRef(rosters);
+  useEffect(() => { rostersRef.current = rosters; }, [rosters]);
+
   useEffect(() => {
     if (draftComplete || isMyTurn || available.length === 0) return;
-    const delay = 600 + Math.random() * 800;
     const t = setTimeout(() => {
-      const pick = aiPickUnit(available, rosters[currentTeam]);
+      const pick = aiPickUnit(availableRef.current, rostersRef.current[currentTeam] ?? emptyRoster());
       if (pick) makePick(pick);
-    }, delay);
+    }, 800 + Math.random() * 700);
     return () => clearTimeout(t);
-  }, [currentPickNum, isMyTurn, draftComplete, available, rosters, currentTeam, makePick]);
+  }, [currentPickNum, isMyTurn, draftComplete, available.length, currentTeam, makePick]);
 
   function effBadgeBg(mult: number) {
     if (mult >= 1.15) return '#16a34a';
