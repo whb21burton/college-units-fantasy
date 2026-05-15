@@ -11,28 +11,41 @@ const C = {
   green: '#15c678', red: '#f03a5a',
 }
 
-// 2025 NCAA Baseball Tournament regionals
-const DEFAULT_REGIONS: Record<string, { name: string; teams: Team[] }> = {
-  nashville:   { name: 'Nashville',    teams: [{ id: 'vand',   name: 'Vanderbilt',      seed: 1, record: '45-12', conference: 'SEC'       }, { id: 'etsu',  name: 'E. Tennessee St', seed: 2, record: '42-15', conference: 'SoCon'    }, { id: 'wst',    name: 'Wright State',     seed: 3, record: '36-19', conference: 'HL'        }, { id: 'lou',   name: 'Louisville',      seed: 4, record: '39-18', conference: 'ACC'       }] },
-  hattiesburg: { name: 'Hattiesburg',  teams: [{ id: 'smiss',  name: 'Southern Miss',   seed: 1, record: '43-14', conference: 'Sun Belt'  }, { id: 'ala',   name: 'Alabama',          seed: 2, record: '40-16', conference: 'SEC'       }, { id: 'col',    name: 'Columbia',         seed: 3, record: '34-22', conference: 'Ivy'       }, { id: 'mia',   name: 'Miami (FL)',       seed: 4, record: '38-20', conference: 'ACC'       }] },
-  tallahassee: { name: 'Tallahassee',  teams: [{ id: 'fsu',    name: 'Florida State',   seed: 1, record: '44-14', conference: 'ACC'       }, { id: 'bcu',   name: 'Bethune-Cookman',  seed: 2, record: '38-22', conference: 'SWAC'      }, { id: 'neu',    name: 'Northeastern',     seed: 3, record: '35-21', conference: 'CAA'       }, { id: 'miss',  name: 'Mississippi State',seed: 4, record: '37-20', conference: 'SEC'       }] },
-  corvallis:   { name: 'Corvallis',    teams: [{ id: 'orst',   name: 'Oregon State',    seed: 1, record: '42-16', conference: 'Pac-12'    }, { id: 'tcu',   name: 'TCU',              seed: 2, record: '40-17', conference: 'Big 12'    }, { id: 'mich',   name: 'Michigan',         seed: 3, record: '36-19', conference: 'Big Ten'   }, { id: 'usc',   name: 'USC',              seed: 4, record: '35-21', conference: 'Pac-12'    }] },
-  austin:      { name: 'Austin',       teams: [{ id: 'tex',    name: 'Texas',           seed: 1, record: '44-13', conference: 'Big 12'    }, { id: 'uconn', name: 'UConn',            seed: 2, record: '39-18', conference: 'Big East'  }, { id: 'kst',    name: 'Kansas State',     seed: 3, record: '35-22', conference: 'Big 12'    }, { id: 'utsa',  name: 'UTSA',             seed: 4, record: '33-24', conference: 'CUSA'      }] },
-  los_angeles: { name: 'Los Angeles',  teams: [{ id: 'ucla',   name: 'UCLA',            seed: 1, record: '42-15', conference: 'Pac-12'    }, { id: 'fres',  name: 'Fresno State',     seed: 2, record: '38-19', conference: 'MWC'       }, { id: 'asu',    name: 'Arizona State',    seed: 3, record: '36-20', conference: 'Pac-12'    }, { id: 'uci',   name: 'UC Irvine',        seed: 4, record: '34-23', conference: 'Big West'  }] },
-  oxford:      { name: 'Oxford',       teams: [{ id: 'olemiss',name: 'Ole Miss',         seed: 1, record: '45-12', conference: 'SEC'       }, { id: 'wku',   name: 'Western Kentucky', seed: 2, record: '38-20', conference: 'CUSA'      }, { id: 'gtech',  name: 'Georgia Tech',     seed: 3, record: '35-21', conference: 'ACC'       }, { id: 'murr',  name: 'Murray State',     seed: 4, record: '32-25', conference: 'OVC'       }] },
-  athens:      { name: 'Athens',       teams: [{ id: 'uga',    name: 'Georgia',          seed: 1, record: '44-14', conference: 'SEC'       }, { id: 'bing',  name: 'Binghamton',       seed: 2, record: '37-21', conference: 'AE'        }, { id: 'okst',   name: 'Oklahoma State',   seed: 3, record: '36-20', conference: 'Big 12'    }, { id: 'duke',  name: 'Duke',             seed: 4, record: '34-23', conference: 'ACC'       }] },
+function seedColor(seed: number): string {
+  if (seed === 1) return '#f5a623'
+  if (seed === 2) return '#3b82f6'
+  if (seed === 3) return '#8b5cf6'
+  return '#6b7280'
 }
 
-// Pairings: [leftRegion, rightRegion] — index 0-3 maps to 4 super regionals
-const SR_PAIRINGS: Array<[string, string]> = [
-  ['nashville', 'austin'],
-  ['hattiesburg', 'los_angeles'],
-  ['tallahassee', 'oxford'],
-  ['corvallis', 'athens'],
-]
+/* ── Static team data ──────────────────────────────────── */
+const REGIONS: Record<string, { display: string; teams: Team[] }> = {
+  nashville:   { display: 'Nashville',   teams: [{ id: 'vand',    name: 'Vanderbilt',       seed: 1, record: '45-12' }, { id: 'etsu',   name: 'E. Tennessee St',  seed: 2, record: '42-15' }, { id: 'wst',    name: 'Wright State',     seed: 3, record: '36-19' }, { id: 'lou',    name: 'Louisville',       seed: 4, record: '39-18' }] },
+  hattiesburg: { display: 'Hattiesburg', teams: [{ id: 'smiss',   name: 'Southern Miss',    seed: 1, record: '43-14' }, { id: 'ala',    name: 'Alabama',           seed: 2, record: '40-16' }, { id: 'col',    name: 'Columbia',         seed: 3, record: '34-22' }, { id: 'mia',    name: 'Miami (FL)',        seed: 4, record: '38-20' }] },
+  tallahassee: { display: 'Tallahassee', teams: [{ id: 'fsu',     name: 'Florida State',    seed: 1, record: '44-14' }, { id: 'bcu',    name: 'Bethune-Cookman',   seed: 2, record: '38-22' }, { id: 'neu',    name: 'Northeastern',     seed: 3, record: '35-21' }, { id: 'miss',   name: 'Mississippi St',   seed: 4, record: '37-20' }] },
+  corvallis:   { display: 'Corvallis',   teams: [{ id: 'orst',    name: 'Oregon State',     seed: 1, record: '42-16' }, { id: 'tcu',    name: 'TCU',               seed: 2, record: '40-17' }, { id: 'mich',   name: 'Michigan',         seed: 3, record: '36-19' }, { id: 'usc',    name: 'USC',              seed: 4, record: '35-21' }] },
+  austin:      { display: 'Austin',      teams: [{ id: 'tex',     name: 'Texas',            seed: 1, record: '44-13' }, { id: 'uconn',  name: 'UConn',             seed: 2, record: '39-18' }, { id: 'kst',    name: 'Kansas State',     seed: 3, record: '35-22' }, { id: 'utsa',   name: 'UTSA',             seed: 4, record: '33-24' }] },
+  los_angeles: { display: 'Los Angeles', teams: [{ id: 'ucla',    name: 'UCLA',             seed: 1, record: '42-15' }, { id: 'fres',   name: 'Fresno State',      seed: 2, record: '38-19' }, { id: 'asu',    name: 'Arizona State',    seed: 3, record: '36-20' }, { id: 'uci',    name: 'UC Irvine',        seed: 4, record: '34-23' }] },
+  oxford:      { display: 'Oxford',      teams: [{ id: 'olemiss', name: 'Ole Miss',          seed: 1, record: '45-12' }, { id: 'wku',    name: 'Western Kentucky',  seed: 2, record: '38-20' }, { id: 'gtech',  name: 'Georgia Tech',     seed: 3, record: '35-21' }, { id: 'murr',   name: 'Murray State',     seed: 4, record: '32-25' }] },
+  athens:      { display: 'Athens',      teams: [{ id: 'uga',     name: 'Georgia',           seed: 1, record: '44-14' }, { id: 'bing',   name: 'Binghamton',        seed: 2, record: '37-21' }, { id: 'okst',   name: 'Oklahoma State',   seed: 3, record: '36-20' }, { id: 'duke',   name: 'Duke',             seed: 4, record: '34-23' }] },
+}
 
-const LEFT_REGIONS  = ['nashville', 'hattiesburg', 'tallahassee', 'corvallis']
-const RIGHT_REGIONS = ['austin', 'los_angeles', 'oxford', 'athens']
+// SR pairings: two left-side regionals → one SR in col 2
+// Two right-side regionals → one SR in col 4
+const LEFT_SR: Array<{ idx: number; label: string; top: string; bot: string }> = [
+  { idx: 0, label: 'Super Regional 1', top: 'nashville',   bot: 'hattiesburg' },
+  { idx: 1, label: 'Super Regional 2', top: 'tallahassee', bot: 'corvallis'   },
+]
+const RIGHT_SR: Array<{ idx: number; label: string; top: string; bot: string }> = [
+  { idx: 2, label: 'Super Regional 3', top: 'austin',      bot: 'los_angeles' },
+  { idx: 3, label: 'Super Regional 4', top: 'oxford',      bot: 'athens'      },
+]
+// CWS semi pairings: SR idx → semi slot
+// Semi 0: SR0 winner vs SR2 winner   Semi 1: SR1 winner vs SR3 winner
+const CWS_SEMIS: Array<{ semiIdx: number; leftSR: number; rightSR: number }> = [
+  { semiIdx: 0, leftSR: 0, rightSR: 2 },
+  { semiIdx: 1, leftSR: 1, rightSR: 3 },
+]
 
 type BracketPicks = {
   regionals:      Record<string, Team>
@@ -42,11 +55,11 @@ type BracketPicks = {
   seriesResult:   '2-0' | '2-1' | null
 }
 
-function emptyPicks(): BracketPicks {
+function empty(): BracketPicks {
   return { regionals: {}, superRegionals: {}, semifinals: {}, champion: null, seriesResult: null }
 }
 
-function countPicks(p: BracketPicks) {
+function countPicks(p: BracketPicks): number {
   return Object.keys(p.regionals).length
     + Object.keys(p.superRegionals).length
     + Object.keys(p.semifinals).length
@@ -54,178 +67,181 @@ function countPicks(p: BracketPicks) {
     + (p.seriesResult ? 1 : 0)
 }
 
-const TOTAL_PICKS = 16 // 8 regionals + 4 SR + 2 semis + 1 champ + 1 series
+const TOTAL = 16 // 8 reg + 4 SR + 2 semi + 1 champ + 1 series
 
 type Tab = 'bracket' | 'leaderboard'
+type MSection = 'left' | 'super-left' | 'cws' | 'super-right' | 'right'
 
-/* ── Sub-components ───────────────────────────────────── */
+/* ── Sub-components ────────────────────────────────────── */
 
-function TeamCard({ team, isPicked, onClick, isLocked }: {
-  team: Team; isPicked: boolean; onClick: () => void; isLocked: boolean
+function TeamCard({ team, isPicked, onPick, isLocked }: {
+  team: Team; isPicked: boolean; onPick: () => void; isLocked: boolean
 }) {
+  const sc = seedColor(team.seed)
   return (
     <div
-      onClick={isLocked ? undefined : onClick}
+      onClick={isLocked ? undefined : onPick}
       style={{
-        border: `2px solid ${isPicked ? C.gold : C.surf3}`,
-        background: isPicked ? 'rgba(245,166,35,.12)' : C.surf2,
-        borderRadius: 8, padding: '8px 6px', cursor: isLocked ? 'default' : 'pointer',
-        textAlign: 'center', transition: 'all .15s',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+        padding: '9px 8px',
+        background: isPicked ? sc + '18' : C.surf2,
+        border: `1px solid ${isPicked ? sc : C.surf3}`,
+        borderRadius: 6, cursor: isLocked ? 'default' : 'pointer',
+        transition: 'all .15s', textAlign: 'center',
       }}
-      onMouseEnter={e => { if (!isLocked && !isPicked) (e.currentTarget as HTMLElement).style.borderColor = C.gold + '66' }}
-      onMouseLeave={e => { if (!isPicked) (e.currentTarget as HTMLElement).style.borderColor = C.surf3 }}
     >
-      <div style={{
-        width: 34, height: 34, borderRadius: '50%',
-        background: isPicked ? 'rgba(245,166,35,.2)' : C.surf3,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: isPicked ? C.gold : C.sub }}>
-          {team.seed}
-        </span>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: sc, marginBottom: 1, lineHeight: 1 }}>
+        {team.seed}
       </div>
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: isPicked ? C.gold : C.text, lineHeight: 1.2, maxWidth: 76, wordBreak: 'break-word' }}>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: isPicked ? sc : C.text, lineHeight: 1.2, letterSpacing: 0.3 }}>
         {team.name}
       </div>
       {team.record && (
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{team.record}</div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, marginTop: 2 }}>{team.record}</div>
+      )}
+      {isPicked && (
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 7, color: sc, marginTop: 3, letterSpacing: 1 }}>ADVANCES ›</div>
       )}
     </div>
   )
 }
 
-function RegionalPodGrid({ regionKey, regions, picks, onPick, isLocked }: {
-  regionKey: string
-  regions: Record<string, { name: string; teams: Team[] }>
-  picks: BracketPicks
-  onPick: (key: string, team: Team) => void
-  isLocked: boolean
+function RegionalPod({ regionKey, picks, onPick, isLocked, arrow }: {
+  regionKey: string; picks: BracketPicks; onPick: (k: string, t: Team) => void; isLocked: boolean; arrow?: 'right' | 'left'
 }) {
-  const regionData = regions[regionKey]
-  if (!regionData) return null
+  const r = REGIONS[regionKey]
+  if (!r) return null
   const pickedId = picks.regionals[regionKey]?.id
   return (
-    <div style={{
-      background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10,
-      padding: '10px 10px 12px', flex: 1,
-    }}>
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '10px 10px 12px' }}>
       <div style={{
-        fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold,
-        letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8,
+        fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold,
+        textTransform: 'uppercase', marginBottom: 8,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
-        {regionData.name} Regional
+        <span>{r.display}</span>
+        {arrow === 'right' && <span style={{ color: C.surf3, fontSize: 12 }}>›</span>}
+        {arrow === 'left'  && <span style={{ color: C.surf3, fontSize: 12 }}>‹</span>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-        {regionData.teams.map(team => (
-          <TeamCard
-            key={team.id}
-            team={team}
-            isPicked={pickedId === team.id}
-            onClick={() => onPick(regionKey, team)}
-            isLocked={isLocked}
-          />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+        {r.teams.map(t => (
+          <TeamCard key={t.id} team={t} isPicked={pickedId === t.id} onPick={() => onPick(regionKey, t)} isLocked={isLocked} />
         ))}
       </div>
     </div>
   )
 }
 
-function SRBox({ srIndex, side, regions, picks, onSRPick, isLocked }: {
-  srIndex: number; side: 'left' | 'right'
-  regions: Record<string, { name: string; teams: Team[] }>
-  picks: BracketPicks
-  onSRPick: (srIndex: number, team: Team) => void
-  isLocked: boolean
+function SRSlot({ team, label, isPicked, onPick, isLocked }: {
+  team: Team | undefined; label: string; isPicked: boolean; onPick: () => void; isLocked: boolean
 }) {
-  const [leftKey, rightKey] = SR_PAIRINGS[srIndex]
-  const regionKey = side === 'left' ? leftKey : rightKey
-  const regionData = regions[regionKey]
-  const regionalWinner = picks.regionals[regionKey]
-  const srWinner = picks.superRegionals[srIndex]
-  const isThisSidePicked = !!(srWinner && regionalWinner && srWinner.id === regionalWinner.id)
-  const canClick = !!regionalWinner && !isLocked
-
   return (
     <div
-      onClick={canClick ? () => onSRPick(srIndex, regionalWinner!) : undefined}
+      onClick={team && !isLocked ? onPick : undefined}
       style={{
-        padding: '10px 12px', background: isThisSidePicked ? 'rgba(245,166,35,.08)' : C.surf,
-        border: `1px solid ${isThisSidePicked ? C.gold : C.surf3}`,
-        borderRadius: 8, minHeight: 52, flex: 1,
-        cursor: canClick ? 'pointer' : 'default',
-        opacity: regionalWinner ? 1 : 0.5,
+        padding: '9px 12px',
+        background: isPicked ? 'rgba(245,166,35,.1)' : C.surf,
+        border: `1px solid ${isPicked ? C.gold : C.surf3}`,
+        borderRadius: 6, cursor: team && !isLocked ? 'pointer' : 'default',
+        minHeight: 44, display: 'flex', alignItems: 'center', gap: 8,
         transition: 'all .15s',
-        display: 'flex', alignItems: 'center', gap: 8,
       }}
     >
-      {regionalWinner ? (
+      {team ? (
         <>
           <div style={{
-            width: 24, height: 24, borderRadius: '50%',
-            background: isThisSidePicked ? 'rgba(245,166,35,.2)' : C.surf3,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 10, color: isThisSidePicked ? C.gold : C.sub }}>
-              {regionalWinner.seed}
-            </span>
+            width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+            background: seedColor(team.seed) + '22',
+            border: `1px solid ${seedColor(team.seed)}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'Anton,sans-serif', fontSize: 10, color: seedColor(team.seed),
+          }}>{team.seed}</div>
+          <div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isPicked ? C.gold : C.text }}>{team.name}</div>
+            {isPicked && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 7, color: C.gold, letterSpacing: 1 }}>ADVANCES</div>}
           </div>
-          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isThisSidePicked ? C.gold : C.text, flex: 1 }}>
-            {regionalWinner.name}
-          </span>
-          {isThisSidePicked && <span style={{ color: C.gold, fontSize: 13 }}>✓</span>}
+          {isPicked && <span style={{ marginLeft: 'auto', color: C.gold, fontSize: 13 }}>✓</span>}
         </>
       ) : (
-        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
-          {regionData?.name ?? regionKey} Winner
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>
+          {label} Winner
         </span>
       )}
     </div>
   )
 }
 
-function CWSMatchupBox({ label, team1, team2, pickedTeam, onPick, isLocked }: {
-  label: string
-  team1: Team | null
-  team2: Team | null
-  pickedTeam: Team | null
-  onPick: (team: Team) => void
-  isLocked: boolean
+function SRBox({ sr, picks, onPick, isLocked }: {
+  sr: (typeof LEFT_SR)[0]; picks: BracketPicks; onPick: (idx: number, t: Team) => void; isLocked: boolean
+}) {
+  const topWinner = picks.regionals[sr.top]
+  const botWinner = picks.regionals[sr.bot]
+  const srWinner  = picks.superRegionals[sr.idx]
+  const topDisplay = REGIONS[sr.top]?.display ?? sr.top
+  const botDisplay = REGIONS[sr.bot]?.display ?? sr.bot
+
+  return (
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{
+        padding: '6px 10px', background: C.surf2,
+        borderBottom: `1px solid ${C.surf3}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.gold, letterSpacing: 2, textTransform: 'uppercase' }}>
+          {sr.label}
+        </span>
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 7, color: C.muted }}>Best of 3</span>
+      </div>
+      <div style={{ padding: '8px' }}>
+        <SRSlot
+          team={topWinner}
+          label={topDisplay}
+          isPicked={!!(srWinner && topWinner && srWinner.id === topWinner.id)}
+          onPick={() => topWinner && onPick(sr.idx, topWinner)}
+          isLocked={isLocked}
+        />
+        <div style={{ textAlign: 'center', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, padding: '4px 0' }}>VS</div>
+        <SRSlot
+          team={botWinner}
+          label={botDisplay}
+          isPicked={!!(srWinner && botWinner && srWinner.id === botWinner.id)}
+          onPick={() => botWinner && onPick(sr.idx, botWinner)}
+          isLocked={isLocked}
+        />
+      </div>
+    </div>
+  )
+}
+
+function CWSMatchupBox({ label, t1, t2, picked, onPick, isLocked }: {
+  label: string; t1: Team | null; t2: Team | null; picked: Team | null; onPick: (t: Team) => void; isLocked: boolean
 }) {
   return (
-    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, overflow: 'hidden' }}>
-      <div style={{
-        fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted,
-        letterSpacing: 2, textTransform: 'uppercase',
-        padding: '6px 10px', borderBottom: `1px solid ${C.surf3}`, background: C.surf2,
-      }}>
-        {label}
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ padding: '6px 10px', background: C.surf2, borderBottom: `1px solid ${C.surf3}` }}>
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' }}>{label}</span>
       </div>
-      {[team1, team2].map((team, i) => {
-        if (!team) {
-          return (
-            <div key={i} style={{ padding: '8px 10px', borderBottom: i === 0 ? `1px solid ${C.surf3}` : 'none' }}>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>TBD</span>
-            </div>
-          )
-        }
-        const isPicked = pickedTeam?.id === team.id
+      {([t1, t2] as (Team | null)[]).map((team, i) => {
+        const sel = picked?.id === team?.id
         return (
-          <div
-            key={i}
-            onClick={isLocked || !team ? undefined : () => onPick(team)}
+          <div key={i}
+            onClick={team && !isLocked ? () => onPick(team) : undefined}
             style={{
-              padding: '8px 10px',
+              padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 8,
               borderBottom: i === 0 ? `1px solid ${C.surf3}` : 'none',
-              background: isPicked ? 'rgba(245,166,35,.1)' : 'transparent',
+              background: sel ? 'rgba(245,166,35,.08)' : 'transparent',
               cursor: team && !isLocked ? 'pointer' : 'default',
-              display: 'flex', alignItems: 'center', gap: 6,
               transition: 'background .12s',
             }}
           >
-            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 10, color: C.muted, width: 14 }}>{team.seed}</span>
-            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isPicked ? C.gold : C.text, flex: 1 }}>{team.name}</span>
-            {isPicked && <span style={{ color: C.gold, fontSize: 12 }}>✓</span>}
+            {team ? (
+              <>
+                <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.muted, width: 14 }}>{team.seed}</span>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: sel ? C.gold : C.text, flex: 1 }}>{team.name}</span>
+                {sel && <span style={{ color: C.gold, fontSize: 12 }}>✓</span>}
+              </>
+            ) : (
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>TBD</span>
+            )}
           </div>
         )
       })}
@@ -233,119 +249,133 @@ function CWSMatchupBox({ label, team1, team2, pickedTeam, onPick, isLocked }: {
   )
 }
 
-function ChampionshipBox({ team1, team2, champion, seriesResult, onPick, onSeries, isLocked }: {
-  team1: Team | null; team2: Team | null
-  champion: Team | null; seriesResult: '2-0' | '2-1' | null
-  onPick: (team: Team) => void; onSeries: (s: '2-0' | '2-1') => void
-  isLocked: boolean
+function ChampSlot({ team, isPicked, onPick, isLocked }: {
+  team: Team | null; isPicked: boolean; onPick: () => void; isLocked: boolean
 }) {
   return (
-    <div style={{
-      background: C.surf, border: `2px solid ${C.gold}`, borderRadius: 12, overflow: 'hidden',
-    }}>
-      <div style={{
-        fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.gold,
-        letterSpacing: 3, textTransform: 'uppercase',
-        padding: '8px 12px', background: 'rgba(245,166,35,.08)', textAlign: 'center',
-        borderBottom: `1px solid rgba(245,166,35,.3)`,
-      }}>
-        🏆 National Championship
-      </div>
-      {[team1, team2].map((team, i) => {
-        if (!team) {
-          return (
-            <div key={i} style={{ padding: '10px 12px', borderBottom: i === 0 ? `1px solid ${C.surf3}` : 'none' }}>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>TBD</span>
-            </div>
-          )
-        }
-        const isPicked = champion?.id === team.id
-        return (
-          <div
-            key={i}
-            onClick={isLocked ? undefined : () => onPick(team)}
-            style={{
-              padding: '10px 12px',
-              borderBottom: i === 0 ? `1px solid ${C.surf3}` : 'none',
-              background: isPicked ? 'rgba(245,166,35,.12)' : 'transparent',
-              cursor: !isLocked ? 'pointer' : 'default',
-              display: 'flex', alignItems: 'center', gap: 8,
-              transition: 'background .12s',
-            }}
-          >
-            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.muted, width: 16 }}>{team.seed}</span>
-            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: isPicked ? C.gold : C.text, flex: 1 }}>{team.name}</span>
-            {isPicked && <span style={{ color: C.gold }}>★</span>}
+    <div
+      onClick={team && !isLocked ? onPick : undefined}
+      style={{
+        padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10,
+        background: isPicked ? 'rgba(245,166,35,.12)' : C.surf,
+        border: `1px solid ${isPicked ? C.gold : C.surf3}`,
+        borderRadius: 6, cursor: team && !isLocked ? 'pointer' : 'default',
+        transition: 'all .15s', minHeight: 48,
+      }}
+    >
+      {team ? (
+        <>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+            background: seedColor(team.seed) + '22', border: `1.5px solid ${seedColor(team.seed)}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'Anton,sans-serif', fontSize: 12, color: seedColor(team.seed),
+          }}>{team.seed}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: isPicked ? C.gold : C.text }}>{team.name}</div>
+            {isPicked && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.gold, letterSpacing: 1 }}>NATIONAL CHAMPION</div>}
           </div>
-        )
-      })}
-      {/* Series result picker */}
-      {champion && (
-        <div style={{ padding: '10px 12px', borderTop: `1px solid ${C.surf3}`, background: C.surf2 }}>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, marginBottom: 6 }}>SERIES RESULT</div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {(['2-0', '2-1'] as const).map(s => (
-              <button
-                key={s}
-                onClick={isLocked ? undefined : () => onSeries(s)}
-                style={{
-                  flex: 1, padding: '6px 0',
-                  background: seriesResult === s ? C.gold : C.surf3,
-                  border: 'none', borderRadius: 6, cursor: isLocked ? 'default' : 'pointer',
-                  fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1,
-                  color: seriesResult === s ? C.bg : C.sub,
-                  transition: 'all .12s',
-                }}
-              >{s}</button>
-            ))}
-          </div>
-        </div>
+          {isPicked && <span style={{ color: C.gold, fontSize: 18 }}>★</span>}
+        </>
+      ) : (
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>TBD</span>
       )}
     </div>
   )
 }
 
-/* ── Main page ────────────────────────────────────────── */
-export default function BracketContestPage() {
-  const params  = useParams()
-  const router  = useRouter()
+/* ── Column wrapper helpers ─────────────────────────────── */
+
+function ColHeader({ line1, line2, align = 'left' }: { line1: string; line2: string; align?: 'left' | 'center' | 'right' }) {
+  return (
+    <div style={{ marginBottom: 10, textAlign: align }}>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 2, textTransform: 'uppercase' }}>{line1}</div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, marginTop: 2 }}>{line2}</div>
+    </div>
+  )
+}
+
+function ConnectorPair({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      borderRight: `2px solid ${C.surf3}`,
+      paddingRight: 0,
+      display: 'flex', flexDirection: 'column', gap: 10,
+      flex: 1,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function ConnectorPairRight({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      borderLeft: `2px solid ${C.surf3}`,
+      paddingLeft: 0,
+      display: 'flex', flexDirection: 'column', gap: 10,
+      flex: 1,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+/* ── Progress bar ───────────────────────────────────────── */
+function ProgressBar({ n, total }: { n: number; total: number }) {
+  const done = n >= total
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, letterSpacing: 1 }}>
+          {n} / {total} picks made
+        </span>
+        {done && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.green }}>✓ Ready to submit</span>}
+      </div>
+      <div style={{ height: 4, background: C.surf3, borderRadius: 2 }}>
+        <div style={{
+          height: '100%',
+          width: `${(n / total) * 100}%`,
+          background: `linear-gradient(90deg, ${C.gold}, ${C.green})`,
+          borderRadius: 2, transition: 'width .3s',
+        }} />
+      </div>
+    </div>
+  )
+}
+
+/* ── Main Page ──────────────────────────────────────────── */
+export default function BracketPage() {
+  const params    = useParams()
+  const router    = useRouter()
   const contestId = params.id as string
   const supabase  = createClientComponentClient()
 
-  const [userId,  setUserId]  = useState<string | null>(null)
-  const [contest, setContest] = useState<any>(null)
-  const [regions, setRegions] = useState<Record<string, { name: string; teams: Team[] }>>(DEFAULT_REGIONS)
-  const [entry,   setEntry]   = useState<any>(null)
-  const [picks,   setPicks]   = useState<BracketPicks>(emptyPicks())
-  const [tab,     setTab]     = useState<Tab>('bracket')
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [submitMsg,  setSubmitMsg]  = useState<{ ok: boolean; text: string } | null>(null)
+  const [userId,    setUserId]    = useState<string | null>(null)
+  const [contest,   setContest]   = useState<any>(null)
+  const [entry,     setEntry]     = useState<any>(null)
+  const [picks,     setPicks]     = useState<BracketPicks>(empty())
+  const [tab,       setTab]       = useState<Tab>('bracket')
+  const [mSection,  setMSection]  = useState<MSection>('left')
+  const [loading,   setLoading]   = useState(true)
+  const [submitting,setSubmitting]= useState(false)
+  const [msg,       setMsg]       = useState<{ ok: boolean; text: string } | null>(null)
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     setUserId(user?.id ?? null)
 
-    const { data: contestData } = await supabase
-      .from('bracket_contests').select('*').eq('id', contestId).single()
-    if (contestData) {
-      setContest(contestData)
-      // Use bracket_data.regions if present, else fall back to defaults
-      if (contestData.bracket_data?.regions) setRegions(contestData.bracket_data.regions)
-    }
+    const { data: c } = await supabase.from('bracket_contests').select('*').eq('id', contestId).single()
+    if (c) setContest(c)
 
     if (user?.id) {
-      const { data: entryData } = await supabase
-        .from('user_bracket_entries').select('*')
+      const { data: e } = await supabase.from('user_bracket_entries').select('*')
         .eq('contest_id', contestId).eq('user_id', user.id).single()
-      if (entryData) {
-        setEntry(entryData)
-        if (entryData.bracket_data?.picks) {
-          setPicks(entryData.bracket_data.picks)
-        }
+      if (e) {
+        setEntry(e)
+        if (e.bracket_data?.picks) setPicks(e.bracket_data.picks)
       }
     }
-
     setLoading(false)
   }, [supabase, contestId])
 
@@ -357,25 +387,31 @@ export default function BracketContestPage() {
   )
 
   /* ── Pick handlers ── */
-  function handleRegionalPick(regionKey: string, team: Team) {
+  function pickRegional(key: string, team: Team) {
     if (isLocked) return
     setPicks(prev => {
-      const next = { ...prev, regionals: { ...prev.regionals, [regionKey]: team } }
-      // Invalidate downstream picks that depended on this regional
-      const srIndex = SR_PAIRINGS.findIndex(([l, r]) => l === regionKey || r === regionKey)
-      if (srIndex >= 0) {
-        const srWinner = prev.superRegionals[srIndex]
-        if (srWinner && srWinner.id !== team.id) {
-          // Old SR pick was from a different team — invalidate SR and beyond
-          const { [srIndex]: _, ...restSR } = next.superRegionals
+      const next = { ...prev, regionals: { ...prev.regionals, [key]: team } }
+      // Cascade: find which SR this regional feeds and clear it if the winner changed
+      const allSR = [...LEFT_SR, ...RIGHT_SR]
+      const srDef = allSR.find(s => s.top === key || s.bot === key)
+      if (srDef) {
+        const srW = prev.superRegionals[srDef.idx]
+        // If previous SR winner came from this regional but is a different team, clear downstream
+        const prevReg = prev.regionals[key]
+        if (prevReg && srW && srW.id === prevReg.id && team.id !== prevReg.id) {
+          const { [srDef.idx]: _sr, ...restSR } = next.superRegionals
           next.superRegionals = restSR
-          // Figure out which CWS semi this SR feeds and clear it too
-          const cwsSemiIdx = srIndex < 2 ? 0 : 1
-          if (next.semifinals[cwsSemiIdx]) {
-            const { [cwsSemiIdx]: __, ...restSemi } = next.semifinals
-            next.semifinals = restSemi
-            next.champion = null
-            next.seriesResult = null
+          // Find CWS semi that used this SR
+          const semiDef = CWS_SEMIS.find(s => s.leftSR === srDef.idx || s.rightSR === srDef.idx)
+          if (semiDef) {
+            const semiW = prev.semifinals[semiDef.semiIdx]
+            const srW2 = prev.superRegionals[srDef.idx]
+            if (semiW && srW2 && semiW.id === srW2.id) {
+              const { [semiDef.semiIdx]: _s, ...restSemi } = next.semifinals
+              next.semifinals = restSemi
+              next.champion = null
+              next.seriesResult = null
+            }
           }
         }
       }
@@ -383,20 +419,16 @@ export default function BracketContestPage() {
     })
   }
 
-  function handleSRPick(srIndex: number, team: Team) {
+  function pickSR(idx: number, team: Team) {
     if (isLocked) return
     setPicks(prev => {
-      const next = { ...prev, superRegionals: { ...prev.superRegionals, [srIndex]: team } }
-      // Invalidate CWS semi that depends on this SR
-      const cwsSemiIdx = srIndex < 2 ? 0 : 1
-      const semiWinner = prev.semifinals[cwsSemiIdx]
-      if (semiWinner) {
-        // check if semi winner still valid (must be SR0 or SR1 winner for semi 0, etc)
-        const siblingIdx = cwsSemiIdx === 0 ? (srIndex === 0 ? 1 : 0) : (srIndex === 2 ? 3 : 2)
-        const sr0w = srIndex < 2 ? team : prev.superRegionals[srIndex < 2 ? 0 : 2]
-        const sr1w = siblingIdx < 2 ? prev.superRegionals[siblingIdx] : prev.superRegionals[siblingIdx]
-        if (!sr0w || !sr1w || (semiWinner.id !== sr0w.id && semiWinner.id !== sr1w.id)) {
-          const { [cwsSemiIdx]: _, ...restSemi } = next.semifinals
+      const next = { ...prev, superRegionals: { ...prev.superRegionals, [idx]: team } }
+      const semiDef = CWS_SEMIS.find(s => s.leftSR === idx || s.rightSR === idx)
+      if (semiDef) {
+        const semiW = prev.semifinals[semiDef.semiIdx]
+        const prevSR = prev.superRegionals[idx]
+        if (semiW && prevSR && semiW.id === prevSR.id && team.id !== prevSR.id) {
+          const { [semiDef.semiIdx]: _, ...restSemi } = next.semifinals
           next.semifinals = restSemi
           next.champion = null
           next.seriesResult = null
@@ -406,37 +438,29 @@ export default function BracketContestPage() {
     })
   }
 
-  function handleSemiFinalPick(semiIdx: number, team: Team) {
+  function pickSemi(semiIdx: number, team: Team) {
     if (isLocked) return
     setPicks(prev => {
       const next = { ...prev, semifinals: { ...prev.semifinals, [semiIdx]: team } }
-      if (prev.champion && prev.champion.id !== team.id) {
-        // if we changed a semi pick, champ may be invalid
-        const otherSemi = prev.semifinals[semiIdx === 0 ? 1 : 0]
-        if (prev.champion.id !== (otherSemi?.id ?? '')) {
-          next.champion = null
-          next.seriesResult = null
-        }
+      const prevSemi = prev.semifinals[semiIdx]
+      if (prev.champion && prevSemi && prev.champion.id === prevSemi.id && team.id !== prevSemi.id) {
+        next.champion = null
+        next.seriesResult = null
       }
       return next
     })
   }
 
-  function handleChampionPick(team: Team) {
+  function pickChampion(team: Team) {
     if (isLocked) return
-    setPicks(prev => ({ ...prev, champion: team, seriesResult: prev.seriesResult }))
-  }
-
-  function handleSeriesPick(s: '2-0' | '2-1') {
-    if (isLocked) return
-    setPicks(prev => ({ ...prev, seriesResult: s }))
+    setPicks(prev => ({ ...prev, champion: team }))
   }
 
   /* ── Submit ── */
   async function handleSubmit() {
-    if (isLocked || submitting) return
+    if (countPicks(picks) < TOTAL || isLocked || submitting) return
     setSubmitting(true)
-    setSubmitMsg(null)
+    setMsg(null)
     try {
       const res = await fetch(`/api/brackets/${contestId}/submit`, {
         method: 'POST',
@@ -444,45 +468,156 @@ export default function BracketContestPage() {
         body: JSON.stringify({ picks }),
       })
       const json = await res.json()
-      if (!res.ok) {
-        setSubmitMsg({ ok: false, text: json.error ?? 'Failed to submit' })
-      } else {
-        setSubmitMsg({ ok: true, text: 'Bracket submitted! 🎉' })
-        await loadData()
-      }
-    } finally {
-      setSubmitting(false)
-    }
+      if (!res.ok) setMsg({ ok: false, text: json.error ?? 'Failed to submit' })
+      else { setMsg({ ok: true, text: 'Bracket submitted! 🎉' }); await loadData() }
+    } finally { setSubmitting(false) }
   }
 
   /* ── Derived CWS teams ── */
-  // SR0 winner vs SR1 winner → CWS Semi 0
-  // SR2 winner vs SR3 winner → CWS Semi 1
-  const cwsSemi0Team1 = picks.superRegionals[0] ?? null
-  const cwsSemi0Team2 = picks.superRegionals[1] ?? null
-  const cwsSemi1Team1 = picks.superRegionals[2] ?? null
-  const cwsSemi1Team2 = picks.superRegionals[3] ?? null
-  const champTeam1   = picks.semifinals[0] ?? null
-  const champTeam2   = picks.semifinals[1] ?? null
-
-  const totalPicks = countPicks(picks)
-  const allDone    = totalPicks >= TOTAL_PICKS
+  const cwsT = (srIdx: number) => picks.superRegionals[srIdx] ?? null
+  const semi0t1 = cwsT(CWS_SEMIS[0].leftSR)
+  const semi0t2 = cwsT(CWS_SEMIS[0].rightSR)
+  const semi1t1 = cwsT(CWS_SEMIS[1].leftSR)
+  const semi1t2 = cwsT(CWS_SEMIS[1].rightSR)
+  const champT1 = picks.semifinals[0] ?? null
+  const champT2 = picks.semifinals[1] ?? null
+  const total   = countPicks(picks)
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 15, letterSpacing: 2 }}>LOADING BRACKET...</span>
+      <span style={{ color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 14, letterSpacing: 2 }}>LOADING BRACKET…</span>
     </div>
   )
-
   if (!contest) return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <span style={{ color: C.red, fontFamily: 'Oswald,sans-serif' }}>Contest not found.</span>
     </div>
   )
 
-  /* ── JSX ── */
+  /* ── Bracket columns (shared by desktop & mobile) ── */
+  const leftRegionalsCol = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <ColHeader line1="Regionals" line2="Double Elimination" />
+      <ConnectorPair>
+        <RegionalPod regionKey="nashville"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" />
+        <RegionalPod regionKey="hattiesburg" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" />
+      </ConnectorPair>
+      <ConnectorPair>
+        <RegionalPod regionKey="tallahassee" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" />
+        <RegionalPod regionKey="corvallis"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" />
+      </ConnectorPair>
+    </div>
+  )
+
+  const leftSRCol = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <ColHeader line1="Super Regionals" line2="Best of 3" />
+      {LEFT_SR.map(sr => <SRBox key={sr.idx} sr={sr} picks={picks} onPick={pickSR} isLocked={isLocked} />)}
+    </div>
+  )
+
+  const cwsCol = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <ColHeader line1="College World Series" line2="Omaha, Nebraska" align="center" />
+
+      <CWSMatchupBox
+        label="CWS Semifinal 1"
+        t1={semi0t1} t2={semi0t2}
+        picked={picks.semifinals[0] ?? null}
+        onPick={t => pickSemi(0, t)}
+        isLocked={isLocked}
+      />
+
+      {/* Championship */}
+      <div style={{ background: C.surf, border: `2px solid ${C.gold}`, borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{
+          padding: '8px 12px', background: 'rgba(245,166,35,.08)',
+          borderBottom: '1px solid rgba(245,166,35,.3)',
+          textAlign: 'center',
+          fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 3, color: C.gold,
+        }}>
+          🏆 NATIONAL CHAMPIONSHIP
+        </div>
+        <div style={{ padding: '10px' }}>
+          <ChampSlot team={champT1} isPicked={picks.champion?.id === champT1?.id} onPick={() => champT1 && pickChampion(champT1)} isLocked={isLocked} />
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.muted, textAlign: 'center', padding: '6px 0' }}>VS</div>
+          <ChampSlot team={champT2} isPicked={picks.champion?.id === champT2?.id} onPick={() => champT2 && pickChampion(champT2)} isLocked={isLocked} />
+
+          {picks.champion && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.surf3}` }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 8, textAlign: 'center' }}>
+                SERIES RESULT
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['2-0', '2-1'] as const).map(s => (
+                  <button key={s}
+                    onClick={isLocked ? undefined : () => setPicks(p => ({ ...p, seriesResult: s }))}
+                    style={{
+                      flex: 1, padding: '7px 0',
+                      border: `1px solid ${picks.seriesResult === s ? C.gold : C.surf3}`,
+                      background: picks.seriesResult === s ? 'rgba(245,166,35,.15)' : C.surf2,
+                      borderRadius: 6, cursor: isLocked ? 'default' : 'pointer',
+                      fontFamily: 'Anton,sans-serif', fontSize: 13,
+                      color: picks.seriesResult === s ? C.gold : C.muted,
+                      transition: 'all .15s',
+                    }}>{s}</button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <CWSMatchupBox
+        label="CWS Semifinal 2"
+        t1={semi1t1} t2={semi1t2}
+        picked={picks.semifinals[1] ?? null}
+        onPick={t => pickSemi(1, t)}
+        isLocked={isLocked}
+      />
+
+      {/* How to Play */}
+      <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '12px 14px' }}>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 8 }}>
+          HOW TO PLAY
+        </div>
+        <ol style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, lineHeight: 2.1, paddingLeft: 14, margin: 0 }}>
+          <li>Pick 1 team to win each Regional (8 total)</li>
+          <li>Pick 1 team to win each Super Regional (4 total)</li>
+          <li>Pick 1 team to win each CWS Semifinal (2 total)</li>
+          <li>Pick the National Champion + series result</li>
+        </ol>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 8, lineHeight: 1.6 }}>
+          Scoring: Regional = 10 pts · Super Regional = 20 pts · CWS Semi = 20 pts · Champion = 40 pts · Exact series +5 pts
+        </div>
+      </div>
+    </div>
+  )
+
+  const rightSRCol = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <ColHeader line1="Super Regionals" line2="Best of 3" align="right" />
+      {RIGHT_SR.map(sr => <SRBox key={sr.idx} sr={sr} picks={picks} onPick={pickSR} isLocked={isLocked} />)}
+    </div>
+  )
+
+  const rightRegionalsCol = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <ColHeader line1="Regionals" line2="Double Elimination" align="right" />
+      <ConnectorPairRight>
+        <RegionalPod regionKey="austin"      picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" />
+        <RegionalPod regionKey="los_angeles" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" />
+      </ConnectorPairRight>
+      <ConnectorPairRight>
+        <RegionalPod regionKey="oxford"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" />
+        <RegionalPod regionKey="athens"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" />
+      </ConnectorPairRight>
+    </div>
+  )
+
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text }}>
+
       {/* ── Top bar ── */}
       <div style={{
         background: C.surf, borderBottom: `1px solid ${C.surf3}`,
@@ -494,52 +629,46 @@ export default function BracketContestPage() {
           fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1,
         }}>← BACK</button>
 
-        <div style={{ flex: 1, minWidth: 180 }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 1 }}>{contest.name}</div>
-          <div style={{ display: 'flex', gap: 14, marginTop: 2, flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
-              Entry: <strong style={{ color: C.gold }}>{contest.entry_fee_cents === 0 ? 'Free' : `$${(contest.entry_fee_cents / 100).toFixed(2)}`}</strong>
-            </span>
-            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
-              Status: <strong style={{ color: contest.status === 'open' ? C.green : C.muted, textTransform: 'uppercase' }}>{contest.status}</strong>
-            </span>
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, letterSpacing: 1 }}>{contest.name}</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, marginTop: 2 }}>
+            Entry: <strong style={{ color: C.gold }}>{contest.entry_fee_cents === 0 ? 'Free' : `$${(contest.entry_fee_cents / 100).toFixed(2)}`}</strong>
+            &ensp;·&ensp;Status: <strong style={{ color: contest.status === 'open' ? C.green : C.muted, textTransform: 'uppercase' }}>{contest.status}</strong>
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, minWidth: 200 }}>
+          <ProgressBar n={total} total={TOTAL} />
           {entry?.is_submitted
-            ? <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.green }}>✓ SUBMITTED</span>
-            : <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: allDone ? C.green : C.sub }}>
-                {totalPicks} / {TOTAL_PICKS} picks
-              </span>
+            ? <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.green }}>✓ BRACKET SUBMITTED</span>
+            : msg && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: msg.ok ? C.green : C.red }}>{msg.text}</span>
           }
-          {submitMsg && (
-            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: submitMsg.ok ? C.green : C.red }}>{submitMsg.text}</span>
-          )}
           {!isLocked && !entry?.is_submitted && (
             <button
               onClick={handleSubmit}
-              disabled={!allDone || submitting}
+              disabled={total < TOTAL || submitting}
               style={{
-                padding: '8px 18px', borderRadius: 6, border: 'none', cursor: allDone ? 'pointer' : 'not-allowed',
-                background: allDone ? C.gold : C.surf3,
-                color: allDone ? C.bg : C.muted,
+                padding: '8px 18px', borderRadius: 6, border: 'none',
+                cursor: total >= TOTAL ? 'pointer' : 'not-allowed',
+                background: total >= TOTAL ? C.gold : C.surf3,
+                color: total >= TOTAL ? C.bg : C.muted,
                 fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase',
+                transition: 'all .2s',
               }}
-            >{submitting ? 'SUBMITTING...' : 'SUBMIT BRACKET'}</button>
+            >{submitting ? 'Submitting…' : total >= TOTAL ? 'Submit Bracket' : `${TOTAL - total} picks remaining`}</button>
           )}
         </div>
       </div>
 
-      {/* ── Tab bar ── */}
+      {/* ── Tabs ── */}
       <div style={{ background: C.surf, borderBottom: `1px solid ${C.surf3}`, padding: '6px 20px', display: 'flex', gap: 6 }}>
         {(['bracket', 'leaderboard'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
-            padding: '8px 20px',
+            padding: '7px 18px',
             background: tab === t ? C.gold : 'transparent',
             color: tab === t ? C.bg : C.sub,
             border: 'none', borderRadius: 5,
-            fontFamily: 'Oswald,sans-serif', fontWeight: 700, fontSize: 12, letterSpacing: 1.5,
+            fontFamily: 'Oswald,sans-serif', fontWeight: 700, fontSize: 11, letterSpacing: 1.5,
             cursor: 'pointer', textTransform: 'uppercase', transition: 'all .15s',
           }}>{t}</button>
         ))}
@@ -552,123 +681,67 @@ export default function BracketContestPage() {
         </div>
       )}
 
-      {/* ── Bracket ── */}
+      {/* ── Bracket — Desktop ── */}
       {tab === 'bracket' && (
-        <div style={{ overflowX: 'auto', padding: '16px 12px' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 168px 288px 168px 1fr',
-            gap: 10,
-            minWidth: 1100,
-            alignItems: 'stretch',
-          }}>
-
-            {/* ── Col 1: Left regionals ── */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {LEFT_REGIONS.map(rk => (
-                <RegionalPodGrid key={rk} regionKey={rk} regions={regions} picks={picks} onPick={handleRegionalPick} isLocked={isLocked} />
-              ))}
+        <>
+          {/* Desktop (≥ 900px): 5-column grid, horizontally scrollable */}
+          <div className="bracket-desktop" style={{ overflowX: 'auto', padding: '16px 16px 32px' }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 200px 260px 200px 1fr',
+              gap: 12,
+              minWidth: 1050,
+              alignItems: 'start',
+            }}>
+              {leftRegionalsCol}
+              {leftSRCol}
+              {cwsCol}
+              {rightSRCol}
+              {rightRegionalsCol}
             </div>
-
-            {/* ── Col 2: Left super regionals ── */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center', paddingTop: 2, marginBottom: 2 }}>
-                Super Regionals
-              </div>
-              {SR_PAIRINGS.map(([leftKey], srIdx) => (
-                <SRBox
-                  key={srIdx}
-                  srIndex={srIdx}
-                  side="left"
-                  regions={regions}
-                  picks={picks}
-                  onSRPick={handleSRPick}
-                  isLocked={isLocked}
-                />
-              ))}
-            </div>
-
-            {/* ── Col 3: CWS Center ── */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center', paddingTop: 2, marginBottom: 2 }}>
-                CWS · Omaha
-              </div>
-              <CWSMatchupBox
-                label="CWS Semifinal 1"
-                team1={cwsSemi0Team1}
-                team2={cwsSemi0Team2}
-                pickedTeam={picks.semifinals[0] ?? null}
-                onPick={t => handleSemiFinalPick(0, t)}
-                isLocked={isLocked}
-              />
-
-              <ChampionshipBox
-                team1={champTeam1}
-                team2={champTeam2}
-                champion={picks.champion}
-                seriesResult={picks.seriesResult}
-                onPick={handleChampionPick}
-                onSeries={handleSeriesPick}
-                isLocked={isLocked}
-              />
-
-              <CWSMatchupBox
-                label="CWS Semifinal 2"
-                team1={cwsSemi1Team1}
-                team2={cwsSemi1Team2}
-                pickedTeam={picks.semifinals[1] ?? null}
-                onPick={t => handleSemiFinalPick(1, t)}
-                isLocked={isLocked}
-              />
-
-              {/* How to Play */}
-              <div style={{
-                background: C.surf2, border: `1px solid ${C.surf3}`,
-                borderRadius: 8, padding: 14, marginTop: 4,
-              }}>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 8 }}>
-                  HOW TO PLAY
-                </div>
-                <ol style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, lineHeight: 2.0, paddingLeft: 16, margin: 0 }}>
-                  <li>Pick 1 team to win each of the 8 Regionals</li>
-                  <li>Pick 1 team to win each Super Regional (4 total)</li>
-                  <li>Pick 1 team to win each CWS Semifinal (2 total)</li>
-                  <li>Pick the National Champion and series result (2-0 or 2-1)</li>
-                </ol>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
-                  Scoring: Regional win = 10 pts · Super Regional = 20 pts · CWS semi = 20 pts · Champion = 40 pts · Exact series +5 pts
-                </div>
-              </div>
-            </div>
-
-            {/* ── Col 4: Right super regionals ── */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center', paddingTop: 2, marginBottom: 2 }}>
-                Super Regionals
-              </div>
-              {SR_PAIRINGS.map(([, rightKey], srIdx) => (
-                <SRBox
-                  key={srIdx}
-                  srIndex={srIdx}
-                  side="right"
-                  regions={regions}
-                  picks={picks}
-                  onSRPick={handleSRPick}
-                  isLocked={isLocked}
-                />
-              ))}
-            </div>
-
-            {/* ── Col 5: Right regionals ── */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {RIGHT_REGIONS.map(rk => (
-                <RegionalPodGrid key={rk} regionKey={rk} regions={regions} picks={picks} onPick={handleRegionalPick} isLocked={isLocked} />
-              ))}
-            </div>
-
           </div>
-        </div>
+
+          {/* Mobile (< 900px): tabbed sections */}
+          <div className="bracket-mobile" style={{ display: 'none' }}>
+            {/* Mobile section tabs */}
+            <div style={{
+              display: 'flex', overflowX: 'auto', gap: 0,
+              background: C.surf2, borderBottom: `1px solid ${C.surf3}`,
+            }}>
+              {([
+                ['left',        'Left Regionals'],
+                ['super-left',  'Super Reg L'],
+                ['cws',         'CWS Center'],
+                ['super-right', 'Super Reg R'],
+                ['right',       'Right Regionals'],
+              ] as [MSection, string][]).map(([k, label]) => (
+                <button key={k} onClick={() => setMSection(k)} style={{
+                  padding: '10px 14px', flexShrink: 0,
+                  background: mSection === k ? C.gold : 'transparent',
+                  color: mSection === k ? C.bg : C.sub,
+                  border: 'none', borderBottom: mSection === k ? `2px solid ${C.gold}` : '2px solid transparent',
+                  fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1,
+                  cursor: 'pointer', textTransform: 'uppercase',
+                }}>{label}</button>
+              ))}
+            </div>
+            <div style={{ padding: 16 }}>
+              {mSection === 'left'        && leftRegionalsCol}
+              {mSection === 'super-left'  && leftSRCol}
+              {mSection === 'cws'         && cwsCol}
+              {mSection === 'super-right' && rightSRCol}
+              {mSection === 'right'       && rightRegionalsCol}
+            </div>
+          </div>
+        </>
       )}
+
+      <style>{`
+        @media (max-width: 900px) {
+          .bracket-desktop { display: none !important; }
+          .bracket-mobile  { display: block !important; }
+        }
+      `}</style>
     </div>
   )
 }
