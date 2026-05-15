@@ -274,6 +274,22 @@ export default function HomePage() {
           >
             🏟️ Browse Public Leagues
           </button>
+          <button
+            onClick={() => router.push('/brackets')}
+            style={{
+              width: '100%', padding: '14px',
+              background: 'rgba(21,198,120,.12)',
+              border: `1px solid ${C.green}`,
+              borderRadius: 8, cursor: 'pointer',
+              fontFamily: "'Anton', sans-serif", fontSize: 14,
+              letterSpacing: 2, textTransform: 'uppercase',
+              color: C.green,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              marginTop: 10,
+            }}
+          >
+            🏆 Bracket Contests
+          </button>
         </div>
       )}
 
