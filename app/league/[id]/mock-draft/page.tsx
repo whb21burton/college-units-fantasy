@@ -17,10 +17,7 @@ const POS_COLORS: Record<UnitType, string> = {
 };
 
 const TOTAL_ROUNDS = ROSTER_SLOTS.starters.length + ROSTER_SLOTS.bench.length;
-const USER_TEAM = 0;
 const PICK_TIME = 60;
-const MIN_CPU = 1;
-const MAX_CPU = 11; // max 12 total teams
 
 const CPU_NAMES = [
   'Crimson AI', 'Bulldog Bot', 'Longhorn CPU', 'Buckeye Bot',
@@ -55,9 +52,21 @@ function aiPickUnit(available: DraftUnit[], roster: RosterCount): DraftUnit | nu
 
 // ── Setup Screen ──────────────────────────────────────────────────────────────
 
-function SetupScreen({ onStart, onBack }: { onStart: (numCpu: number) => void; onBack: () => void }) {
-  const [numCpu, setNumCpu] = useState(7);
-  const teamNames = ['Your Team', ...CPU_NAMES.slice(0, numCpu)];
+function SetupScreen({ leagueSize, onStart, onBack }: { leagueSize: number; onStart: (position: number) => void; onBack: () => void }) {
+  const [draftPosition, setDraftPosition] = useState(1);
+  const userTeamIdx = draftPosition - 1;
+  const teamNames = Array.from({ length: leagueSize }, (_, i) => {
+    if (i === userTeamIdx) return 'Your Team';
+    const cpuIdx = i < userTeamIdx ? i : i - 1;
+    return CPU_NAMES[cpuIdx] ?? `CPU ${i + 1}`;
+  });
+
+  function ordinal(n: number) {
+    if (n === 1) return '1st';
+    if (n === 2) return '2nd';
+    if (n === 3) return '3rd';
+    return `${n}th`;
+  }
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Oswald', sans-serif", color: C.text }}>
@@ -67,20 +76,29 @@ function SetupScreen({ onStart, onBack }: { onStart: (numCpu: number) => void; o
         <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1, marginBottom: 32 }}>Configure your draft before starting</div>
 
         <div style={{ marginBottom: 28 }}>
-          <div style={{ fontSize: 11, color: C.sub, letterSpacing: 2, marginBottom: 12, textTransform: 'uppercase' }}>CPU Opponents</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button
-              onClick={() => setNumCpu(n => Math.max(MIN_CPU, n - 1))}
-              style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.surf3}`, background: C.surf2, color: C.text, fontSize: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >−</button>
-            <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 32, color: C.gold, minWidth: 40, textAlign: 'center' }}>{numCpu}</div>
-            <button
-              onClick={() => setNumCpu(n => Math.min(MAX_CPU, n + 1))}
-              style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.surf3}`, background: C.surf2, color: C.text, fontSize: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >+</button>
-            <div style={{ fontSize: 11, color: C.muted }}>
-              {numCpu + 1} total teams · {(numCpu + 1) * TOTAL_ROUNDS} picks
-            </div>
+          <div style={{ fontSize: 11, color: C.sub, letterSpacing: 2, marginBottom: 12, textTransform: 'uppercase' }}>Your Draft Position</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+            {Array.from({ length: leagueSize }, (_, i) => i + 1).map(pos => (
+              <button
+                key={pos}
+                onClick={() => setDraftPosition(pos)}
+                style={{
+                  padding: '10px 8px',
+                  border: `2px solid ${draftPosition === pos ? C.gold : C.surf3}`,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  background: draftPosition === pos ? 'rgba(212,168,40,.1)' : C.surf2,
+                  color: draftPosition === pos ? C.gold : C.sub,
+                  fontFamily: "'Anton', sans-serif",
+                  fontSize: 13,
+                  letterSpacing: 1,
+                  transition: 'all .15s',
+                }}
+              >{ordinal(pos)}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: C.muted, marginTop: 8 }}>
+            CPUs will fill the other {leagueSize - 1} slots automatically
           </div>
         </div>
 
@@ -88,10 +106,10 @@ function SetupScreen({ onStart, onBack }: { onStart: (numCpu: number) => void; o
           <div style={{ fontSize: 11, color: C.sub, letterSpacing: 2, marginBottom: 10, textTransform: 'uppercase' }}>Draft Order</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
             {teamNames.map((name, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, background: i === 0 ? `${C.gold}18` : C.surf2, border: `1px solid ${i === 0 ? C.gold + '44' : C.surf3}` }}>
-                <div style={{ width: 20, height: 20, borderRadius: 4, background: i === 0 ? C.gold : C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: i === 0 ? C.bg : C.muted, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
-                <div style={{ fontSize: 12, color: i === 0 ? C.gold : C.sub }}>{name}</div>
-                {i === 0 && <div style={{ fontSize: 9, color: C.gold, marginLeft: 'auto', letterSpacing: 1 }}>YOU</div>}
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, background: i === userTeamIdx ? `${C.gold}18` : C.surf2, border: `1px solid ${i === userTeamIdx ? C.gold + '44' : C.surf3}` }}>
+                <div style={{ width: 20, height: 20, borderRadius: 4, background: i === userTeamIdx ? C.gold : C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: i === userTeamIdx ? C.bg : C.muted, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                <div style={{ fontSize: 12, color: i === userTeamIdx ? C.gold : C.sub }}>{name}</div>
+                {i === userTeamIdx && <div style={{ fontSize: 9, color: C.gold, marginLeft: 'auto', letterSpacing: 1 }}>YOU</div>}
               </div>
             ))}
           </div>
@@ -103,7 +121,7 @@ function SetupScreen({ onStart, onBack }: { onStart: (numCpu: number) => void; o
             style={{ flex: 1, padding: '12px 20px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.muted, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 1 }}
           >← BACK</button>
           <button
-            onClick={() => onStart(numCpu)}
+            onClick={() => onStart(draftPosition)}
             style={{ flex: 2, padding: '12px 20px', background: `linear-gradient(135deg, ${C.gold}, ${C.goldLight})`, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 14, letterSpacing: 2, color: C.bg }}
           >START DRAFT</button>
         </div>
@@ -119,11 +137,17 @@ export default function MockDraftPage() {
   const params = useParams();
   const leagueId = params?.id as string;
 
-  const [setupDone, setSetupDone] = useState(false);
-  const [numCpu, setNumCpu] = useState(7);
+  const [setupDone,        setSetupDone]        = useState(false);
+  const [leagueSize,       setLeagueSize]       = useState(8);
+  const [mockDraftPosition, setMockDraftPosition] = useState(1);
 
-  const numTeams = numCpu + 1;
-  const teamNames = ['Your Team', ...CPU_NAMES.slice(0, numCpu)];
+  const userTeam  = mockDraftPosition - 1;
+  const numTeams  = leagueSize;
+  const teamNames = Array.from({ length: leagueSize }, (_, i) => {
+    if (i === userTeam) return 'Your Team';
+    const cpuIdx = i < userTeam ? i : i - 1;
+    return CPU_NAMES[cpuIdx] ?? `CPU ${i + 1}`;
+  });
 
   const [picks, setPicks] = useState<Pick[]>([]);
   const [available, setAvailable] = useState<DraftUnit[]>([]);
@@ -132,7 +156,7 @@ export default function MockDraftPage() {
   const [filter, setFilter] = useState<UnitType | 'ALL'>('ALL');
   const [draftComplete, setDraftComplete] = useState(false);
   const [rosters, setRosters] = useState<RosterCount[]>(
-    Array.from({ length: 12 }, emptyRoster)
+    Array.from({ length: leagueSize }, emptyRoster)
   );
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [effMap,       setEffMap]       = useState<Record<string, TeamEfficiency>>({});
@@ -142,11 +166,12 @@ export default function MockDraftPage() {
   const [statsLoading, setStatsLoading] = useState(false);
 
   useEffect(() => {
-    // Fetch league to get conference filter, then pool
+    // Fetch league to get conference filter + league size, then pool
     async function loadPool() {
       let confFilter: string | null = null;
-      const { data: lg } = await supabase.from('leagues').select('conference_filter').eq('id', leagueId).single();
+      const { data: lg } = await supabase.from('leagues').select('conference_filter, league_size').eq('id', leagueId).single();
       if (lg?.conference_filter && lg.conference_filter !== 'ALL') confFilter = lg.conference_filter;
+      if (lg?.league_size) setLeagueSize(lg.league_size);
       const url = confFilter ? `/api/player-pool?conference=${encodeURIComponent(confFilter)}` : '/api/player-pool';
       const data: DraftUnit[] = await fetch(url).then(r => r.json()).catch(() => []);
       const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => b.projectedPoints - a.projectedPoints);
@@ -178,14 +203,13 @@ export default function MockDraftPage() {
   }, [viewingUnit?.school, viewingUnit?.unitType]);
 
   const currentTeam = getTeamForPick(currentPickNum, numTeams);
-  const isMyTurn = currentTeam === USER_TEAM;
+  const isMyTurn = currentTeam === userTeam;
 
   const makePick = useCallback((unit: DraftUnit) => {
     if (draftComplete) return;
-    const nt = numCpu + 1;
-    const tp = nt * TOTAL_ROUNDS;
-    const round = Math.floor(currentPickNum / nt);
-    const team = getTeamForPick(currentPickNum, nt);
+    const tp = numTeams * TOTAL_ROUNDS;
+    const round = Math.floor(currentPickNum / numTeams);
+    const team = getTeamForPick(currentPickNum, numTeams);
     const newPick: Pick = { unit, teamIdx: team, round, pickNum: currentPickNum };
     setPicks(prev => [...prev, newPick]);
     setAvailable(prev => prev.filter(u => u.id !== unit.id));
@@ -201,7 +225,7 @@ export default function MockDraftPage() {
       setCurrentPickNum(next);
       setTimer(PICK_TIME);
     }
-  }, [currentPickNum, draftComplete, numCpu]);
+  }, [currentPickNum, draftComplete, numTeams]);
 
   useEffect(() => {
     if (draftComplete || !isMyTurn || available.length === 0) return;
@@ -209,7 +233,7 @@ export default function MockDraftPage() {
     timerRef.current = setInterval(() => {
       setTimer(prev => {
         if (prev <= 1) {
-          const best = available.find(u => (rosters[USER_TEAM][u.unitType] || 0) < POSITION_CAPS[u.unitType]);
+          const best = available.find(u => (rosters[userTeam][u.unitType] || 0) < POSITION_CAPS[u.unitType]);
           if (best) makePick(best);
           return PICK_TIME;
         }
@@ -217,7 +241,7 @@ export default function MockDraftPage() {
       });
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isMyTurn, draftComplete, available.length, makePick, rosters]);
+  }, [isMyTurn, draftComplete, available.length, makePick, rosters, userTeam]);
 
   useEffect(() => {
     if (draftComplete || isMyTurn || available.length === 0) return;
@@ -237,7 +261,7 @@ export default function MockDraftPage() {
   }
 
   const filteredAvailable = available.filter(u => filter === 'ALL' || u.unitType === filter);
-  const myPicks = picks.filter(p => p.teamIdx === USER_TEAM);
+  const myPicks = picks.filter(p => p.teamIdx === userTeam);
   const round = Math.floor(currentPickNum / numTeams);
   const pickInRound = (currentPickNum % numTeams) + 1;
   const timerPct = (timer / PICK_TIME) * 100;
@@ -247,7 +271,7 @@ export default function MockDraftPage() {
     setCurrentPickNum(0);
     setTimer(PICK_TIME);
     setDraftComplete(false);
-    setRosters(Array.from({ length: 12 }, emptyRoster));
+    setRosters(Array.from({ length: leagueSize }, emptyRoster));
     setAvailable([...poolData].sort((a, b) => b.projectedPoints - a.projectedPoints));
     setSetupDone(false);
   };
@@ -255,7 +279,8 @@ export default function MockDraftPage() {
   if (!setupDone) {
     return (
       <SetupScreen
-        onStart={(n) => { setNumCpu(n); setSetupDone(true); }}
+        leagueSize={leagueSize}
+        onStart={(position) => { setMockDraftPosition(position); setSetupDone(true); }}
         onBack={() => router.push(`/league/${leagueId}`)}
       />
     );
@@ -320,7 +345,7 @@ export default function MockDraftPage() {
               <tr style={{ background: C.surf2, position: 'sticky', top: 0, zIndex: 10 }}>
                 <th style={{ padding: '8px 12px', color: C.muted, letterSpacing: 1, fontWeight: 400, textAlign: 'left', borderRight: `1px solid ${C.surf3}`, minWidth: 50 }}>RD</th>
                 {teamNames.map((name, i) => (
-                  <th key={i} style={{ padding: '8px 10px', color: i === USER_TEAM ? C.gold : C.sub, letterSpacing: .5, fontWeight: i === USER_TEAM ? 700 : 400, textAlign: 'center', minWidth: 110, borderRight: `1px solid ${C.surf3}` }}>{name}</th>
+                  <th key={i} style={{ padding: '8px 10px', color: i === userTeam ? C.gold : C.sub, letterSpacing: .5, fontWeight: i === userTeam ? 700 : 400, textAlign: 'center', minWidth: 110, borderRight: `1px solid ${C.surf3}` }}>{name}</th>
                 ))}
               </tr>
             </thead>
@@ -357,7 +382,7 @@ export default function MockDraftPage() {
       {viewingUnit && (() => {
         const S = { passYd: 0.05, passTd: 4, int: -2, rushYd: 0.05, rushTd: 6, recYd: 0.05, recTd: 6 };
         const ut = viewingUnit.unitType;
-        const canPickPanel = isMyTurn && !draftComplete && (rosters[USER_TEAM][ut] || 0) < POSITION_CAPS[ut];
+        const canPickPanel = isMyTurn && !draftComplete && (rosters[userTeam][ut] || 0) < POSITION_CAPS[ut];
         const weeks: any[] = unitStats?.weeks ?? [];
         const completedWeeks = weeks.filter(w => w.completed);
         const seasonTotal = completedWeeks.reduce((s: number, w: any) => s + (w.fantasyPoints ?? 0), 0);
@@ -519,7 +544,7 @@ export default function MockDraftPage() {
             <div style={{ padding: '10px 16px', background: `${C.muted}22`, borderBottom: `1px solid ${C.surf3}`, fontSize: 11, color: C.muted, letterSpacing: .5 }}>Waiting for {teamNames[currentTeam]}...</div>
           )}
           {filteredAvailable.slice(0, 80).map((unit, i) => {
-            const overCap = (rosters[USER_TEAM][unit.unitType] || 0) >= POSITION_CAPS[unit.unitType];
+            const overCap = (rosters[userTeam][unit.unitType] || 0) >= POSITION_CAPS[unit.unitType];
             const canPick = isMyTurn && !overCap && !draftComplete;
             return (
               <div key={unit.id} className="pick-row" onClick={() => setViewingUnit(unit)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${C.surf3}22`, opacity: overCap ? 0.35 : 1, background: viewingUnit?.id === unit.id ? C.surf2 : 'transparent', transition: 'background .1s', cursor: 'pointer' }}>
@@ -564,7 +589,7 @@ export default function MockDraftPage() {
           <div style={{ fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 8 }}>MY ROSTER ({myPicks.length}/{TOTAL_ROUNDS})</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {(Object.keys(POSITION_CAPS) as UnitType[]).map(pos => (
-              <div key={pos} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, background: C.surf, color: rosters[USER_TEAM][pos] > 0 ? POS_COLORS[pos] : C.muted, border: `1px solid ${rosters[USER_TEAM][pos] > 0 ? POS_COLORS[pos] + '44' : C.surf3}` }}>{pos} {rosters[USER_TEAM][pos]}/{POSITION_CAPS[pos]}</div>
+              <div key={pos} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, background: C.surf, color: rosters[userTeam][pos] > 0 ? POS_COLORS[pos] : C.muted, border: `1px solid ${rosters[userTeam][pos] > 0 ? POS_COLORS[pos] + '44' : C.surf3}` }}>{pos} {rosters[userTeam][pos]}/{POSITION_CAPS[pos]}</div>
             ))}
           </div>
         </div>
