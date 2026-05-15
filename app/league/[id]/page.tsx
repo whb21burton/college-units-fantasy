@@ -264,6 +264,8 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const [chatMessages,  setChatMessages]  = useState<any[]>([]);
   const [chatInput,     setChatInput]     = useState('');
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [kickTarget,    setKickTarget]    = useState<{ userId: string; teamName: string } | null>(null);
+  const [kickRefund,    setKickRefund]    = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -431,6 +433,22 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     }
   }
 
+  async function handleKickMember(memberId: string, refund: boolean) {
+    if (!league) return;
+    const res = await fetch(`/api/leagues/${league.id}/kick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId, refundEntry: refund }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setMembers((prev: any[]) => prev.filter((m: any) => m.user_id !== memberId));
+      alert(refund ? 'Member kicked and refunded.' : 'Member kicked.');
+    } else {
+      alert('Error: ' + data.error);
+    }
+  }
+
   if (loading) return (
     <div style={{ height: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 3, fontSize: 13 }}>Loading league...</div>
@@ -450,6 +468,40 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           onClose={() => setShowSettings(false)}
           onUpdate={() => loadData()}
         />
+      )}
+
+      {/* ── Kick Member Modal ──────────────────────────────────────── */}
+      {kickTarget && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 14, padding: 28, maxWidth: 400, width: '100%' }}>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, textAlign: 'center', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
+              Kick {kickTarget.teamName}?
+            </div>
+            {(league?.buy_in ?? 0) > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, marginBottom: 10 }}>
+                  Refund their entry fee (${(league?.buy_in ?? 0).toFixed(2)})?
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setKickRefund(true)} style={{ flex: 1, padding: 10, border: `2px solid ${kickRefund ? C.green : C.surf3}`, borderRadius: 8, cursor: 'pointer', background: kickRefund ? 'rgba(21,198,120,.1)' : C.surf2, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: kickRefund ? C.green : C.sub }}>
+                    ✓ Yes, refund
+                  </button>
+                  <button onClick={() => setKickRefund(false)} style={{ flex: 1, padding: 10, border: `2px solid ${!kickRefund ? C.red : C.surf3}`, borderRadius: 8, cursor: 'pointer', background: !kickRefund ? 'rgba(240,58,90,.1)' : C.surf2, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: !kickRefund ? C.red : C.sub }}>
+                    ✗ No refund
+                  </button>
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <button onClick={() => { setKickTarget(null); setKickRefund(true); }} style={{ flex: 1, padding: 12, background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
+                Cancel
+              </button>
+              <button onClick={() => { handleKickMember(kickTarget.userId, kickRefund); setKickTarget(null); }} style={{ flex: 1, padding: 12, background: 'rgba(240,58,90,.2)', border: '1px solid rgba(240,58,90,.5)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: C.red }}>
+                Kick
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════
@@ -624,6 +676,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               onRemoveCpu={removeCpu}
               onResetDraft={resetDraft}
               onDeleteLeague={deleteLeague}
+              onRequestKick={(member) => { setKickRefund(true); setKickTarget(member); }}
             />
           )}
           {activeTab === 'matchup' && (
@@ -995,13 +1048,13 @@ function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
 }
 
 /* ── Draft Tab ──────────────────────────────────────────────── */
-function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCommissioner, inviteUrl, copied, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu, onResetDraft, onDeleteLeague }: {
+function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCommissioner, inviteUrl, copied, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu, onResetDraft, onDeleteLeague, onRequestKick }: {
   league: any; members: any[]; userId: string | null; userEmail: string;
   spotsLeft: number; isFull: boolean; isCommissioner: boolean;
   inviteUrl: string; copied: boolean; cpuTeams: string[];
   onCopy: () => void; onStartDraft: () => void; onMockDraft: () => void;
   onAddCpu: () => void; onRemoveCpu: (i: number) => void; onResetDraft: () => void;
-  onDeleteLeague: () => void;
+  onDeleteLeague: () => void; onRequestKick: (member: { userId: string; teamName: string }) => void;
 }) {
   const size = league?.league_size || 0;
 
@@ -1069,6 +1122,12 @@ function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCom
                   {isMe   && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.green, background: 'rgba(46,204,113,.1)',  padding: '2px 7px', borderRadius: 3, letterSpacing: 1, flexShrink: 0 }}>YOU</span>}
                 </div>
               </div>
+              {isCommissioner && !isMe && league?.status === 'forming' && (
+                <button
+                  onClick={() => onRequestKick({ userId: member.user_id, teamName: member.team_name })}
+                  style={{ flexShrink: 0, padding: '4px 10px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.35)', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.red }}
+                >Kick</button>
+              )}
               <div style={{ fontFamily: 'monospace', fontSize: 10, color: C.muted, flexShrink: 0 }}>Pick #{slotNum}</div>
             </div>
           );
@@ -4287,11 +4346,13 @@ function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId
   userId: string | null; onClose: () => void; onUpdate: () => void;
 }) {
   const router = useRouter();
-  const [section,       setSection]       = useState<SettingsSection>(isCommissioner ? 'league' : 'team');
-  const [saving,        setSaving]        = useState(false);
-  const [saved,         setSaved]         = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState('');
-  const [deleting,      setDeleting]      = useState(false);
+  const [section,           setSection]           = useState<SettingsSection>(isCommissioner ? 'league' : 'team');
+  const [saving,            setSaving]            = useState(false);
+  const [saved,             setSaved]             = useState(false);
+  const [deleteConfirm,     setDeleteConfirm]     = useState('');
+  const [deleting,          setDeleting]          = useState(false);
+  const [showDissolveModal, setShowDissolveModal] = useState(false);
+  const [dissolving,        setDissolving]        = useState(false);
 
   // ── League Settings ──────────────────────────────────────────
   const [leagueName,    setLeagueName]    = useState<string>(league?.name || '');
@@ -4350,6 +4411,23 @@ function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId
     const reader = new FileReader();
     reader.onload = ev => setTeamLogoUrl(ev.target?.result as string);
     reader.readAsDataURL(file);
+  }
+
+  async function handleDissolveLeague() {
+    setDissolving(true);
+    try {
+      const res = await fetch(`/api/leagues/${league.id}/dissolve`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setShowDissolveModal(false);
+        onUpdate();
+        onClose();
+      } else {
+        alert(data.error ?? 'Failed to dissolve league.');
+      }
+    } finally {
+      setDissolving(false);
+    }
   }
 
   async function deleteLeague() {
@@ -4667,6 +4745,39 @@ function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId
             {/* ── Danger Zone ── */}
             {section === 'danger' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+                {/* Dissolve (paid leagues only) */}
+                {(league?.buy_in ?? 0) > 0 && (
+                  <div style={{ background: 'rgba(231,76,60,0.06)', border: '1px solid rgba(231,76,60,0.25)', borderRadius: 10, padding: '16px 20px' }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.red, letterSpacing: 1, marginBottom: 6 }}>DISSOLVE LEAGUE</div>
+                    <div style={{ fontFamily: 'Inter,sans-serif', fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>
+                      Cancel the league and refund all members <strong style={{ color: C.text }}>95%</strong> of their ${(league.buy_in).toFixed(2)} entry fee (${(league.buy_in * 0.95).toFixed(2)} per person). The 5% platform rake is non-refundable.
+                    </div>
+                    <button
+                      onClick={() => setShowDissolveModal(true)}
+                      style={{ padding: '10px 20px', background: 'rgba(231,76,60,0.12)', border: '1px solid rgba(231,76,60,0.4)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: C.red }}
+                    >Dissolve &amp; Refund</button>
+                  </div>
+                )}
+
+                {/* Dissolve confirmation modal */}
+                {showDissolveModal && (
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 14, padding: 28, maxWidth: 400, width: '100%' }}>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, textAlign: 'center', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>Dissolve {league?.name}?</div>
+                      <div style={{ fontFamily: 'Inter,sans-serif', fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 20, textAlign: 'center' }}>
+                        All {members.length} members will receive <strong style={{ color: C.text }}>${(league.buy_in * 0.95).toFixed(2)}</strong> back. The league will be cancelled.
+                      </div>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button onClick={() => setShowDissolveModal(false)} style={{ flex: 1, padding: 12, background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>Cancel</button>
+                        <button onClick={handleDissolveLeague} disabled={dissolving} style={{ flex: 1, padding: 12, background: 'rgba(231,76,60,.2)', border: '1px solid rgba(231,76,60,.5)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: C.red }}>
+                          {dissolving ? 'Dissolving…' : 'Confirm Dissolve'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.3)', borderRadius: 10, padding: '16px 20px' }}>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.red, letterSpacing: 1, marginBottom: 8 }}>DELETE THIS LEAGUE</div>
                   <div style={{ fontFamily: 'Inter,sans-serif', fontSize: 13, color: C.sub, lineHeight: 1.6 }}>
