@@ -26,9 +26,12 @@ function weeklyProj(seasonPts: number): number {
   return seasonPts / SEASON_GAMES;
 }
 
-function poolUrl(conf?: string | null): string {
-  if (!conf || conf === 'ALL') return '/api/player-pool';
-  return `/api/player-pool?conference=${encodeURIComponent(conf)}`;
+function poolUrl(conf?: string | null, allowedSchools?: string[] | null): string {
+  const params = new URLSearchParams();
+  if (conf && conf !== 'ALL') params.set('conference', conf);
+  if (allowedSchools && allowedSchools.length > 0) params.set('schools', allowedSchools.join(','));
+  const qs = params.toString();
+  return qs ? `/api/player-pool?${qs}` : '/api/player-pool';
 }
 
 type MatchupCtx = {
@@ -1897,7 +1900,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     async function load() {
       const [picksRes, poolRes] = await Promise.all([
         supabase.from('draft_picks').select('*').eq('league_id', league.id),
-        fetch(poolUrl(league?.conference_filter)).then(r => r.json()),
+        fetch(poolUrl(league?.conference_filter, league?.settings?.allowed_schools)).then(r => r.json()),
       ]);
       const all = picksRes.data || [];
       setAllPicks(all);

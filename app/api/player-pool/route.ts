@@ -41,8 +41,10 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const confParam = searchParams.get('conference') ?? null; // "SEC" or "SEC,ACC,Big Ten" or null = all
-    const confList  = confParam ? confParam.split(',').map(c => c.trim()).filter(Boolean) : null;
+    const confParam    = searchParams.get('conference') ?? null; // "SEC" or "SEC,ACC,Big Ten" or null = all
+    const confList     = confParam ? confParam.split(',').map(c => c.trim()).filter(Boolean) : null;
+    const schoolsParam = searchParams.get('schools') ?? null;
+    const allowedSchools = schoolsParam ? schoolsParam.split(',').map(s => s.trim()).filter(Boolean) : null;
 
     const admin = createAdminClient();
 
@@ -53,14 +55,17 @@ export async function GET(req: Request) {
     }
 
     // Build FULL_POOL lookup: school+unitType → projectedPoints (first entry per key wins)
+    const filteredPool = allowedSchools
+      ? FULL_POOL.filter(p => allowedSchools.includes(p.school))
+      : FULL_POOL;
     const fullPoolMap: Record<string, number> = {};
-    for (const unit of FULL_POOL) {
+    for (const unit of filteredPool) {
       const key = `${unit.school}||${unit.unitType}`;
       if (!(key in fullPoolMap)) fullPoolMap[key] = unit.projectedPoints;
     }
 
     // Fetch all unit-level rows for the season — high limit, no week filter needed
-    const { data, error } = await admin
+    let query = admin
       .from('cached_stats')
       .select('school, stat_type, value')
       .eq('season', SEASON)
@@ -68,6 +73,12 @@ export async function GET(req: Request) {
       .is('player_name', null)
       .gt('value', 0)       // exclude bye weeks (0-score rows) from weeksPlayed count
       .limit(100000);
+
+    if (allowedSchools && allowedSchools.length > 0) {
+      query = query.in('school', allowedSchools);
+    }
+
+    const { data, error } = await query;
 
     // ── RB pricing data: rb1_opportunity per school across all weeks ──────────
     const { data: rbOppRows } = await admin
@@ -169,6 +180,7 @@ export async function GET(req: Request) {
     for (const [conf, schools] of Object.entries(CONFERENCES) as [Conference, string[]][]) {
       if (confList && !confList.includes(conf)) continue; // skip conferences not in filter list
       for (const school of schools) {
+        if (allowedSchools && !allowedSchools.includes(school)) continue; // skip schools not in league
         for (const unitType of UNIT_TYPES) {
           const key = `${school}||${unitType}`;
           if (key in liveSums) {
