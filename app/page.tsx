@@ -35,15 +35,11 @@ export default function HomePage() {
   const [introChecked, setIntroChecked] = useState(false);
 
   useEffect(() => {
-    try {
-      const seen = localStorage.getItem('cuf_intro_seen');
-      if (!seen) setShowIntro(true);
-    } catch (e) {}
+    setShowIntro(true);
     setIntroChecked(true);
   }, []);
 
   function handleIntroComplete() {
-    try { localStorage.setItem('cuf_intro_seen', '1'); } catch (e) {}
     setShowIntro(false);
   }
 
