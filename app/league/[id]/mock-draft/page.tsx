@@ -220,15 +220,25 @@ export default function MockDraftPage() {
       .catch(() => setStatsLoading(false));
   }, [viewingUnit?.school, viewingUnit?.unitType]);
 
-  const currentTeam = getTeamForPick(currentPickNum, numTeams);
-  const isMyTurn = currentTeam === userTeam;
+  // Stable refs so callbacks don't go stale
+  const availableRef = useRef(available);
+  useEffect(() => { availableRef.current = available; }, [available]);
+  const pickNumRef = useRef(currentPickNum);
+  useEffect(() => { pickNumRef.current = currentPickNum; }, [currentPickNum]);
+  const leagueSizeRef = useRef(leagueSize);
+  useEffect(() => { leagueSizeRef.current = leagueSize; }, [leagueSize]);
+  const draftCompleteRef = useRef(draftComplete);
+  useEffect(() => { draftCompleteRef.current = draftComplete; }, [draftComplete]);
 
+  // makePick reads everything from refs — empty deps, never recreated
   const makePick = useCallback((unit: DraftUnit) => {
-    if (draftComplete) return;
-    const tp = numTeams * TOTAL_ROUNDS;
-    const round = Math.floor(currentPickNum / numTeams);
-    const team = getTeamForPick(currentPickNum, numTeams);
-    const newPick: Pick = { unit, teamIdx: team, round, pickNum: currentPickNum };
+    if (draftCompleteRef.current) return;
+    const pickNum = pickNumRef.current;
+    const nt = leagueSizeRef.current;
+    const tp = nt * TOTAL_ROUNDS;
+    const round = Math.floor(pickNum / nt);
+    const team = getTeamForPick(pickNum, nt);
+    const newPick: Pick = { unit, teamIdx: team, round, pickNum };
     setPicks(prev => [...prev, newPick]);
     setAvailable(prev => prev.filter(u => u.id !== unit.id));
     setRosters(prev => {
@@ -236,22 +246,28 @@ export default function MockDraftPage() {
       next[team][unit.unitType] = (next[team][unit.unitType] || 0) + 1;
       return next;
     });
-    const next = currentPickNum + 1;
+    const next = pickNum + 1;
     if (next >= tp) {
       setDraftComplete(true);
     } else {
       setCurrentPickNum(next);
       setTimer(PICK_TIME);
     }
-  }, [currentPickNum, draftComplete, numTeams]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const currentTeam = getTeamForPick(currentPickNum, numTeams);
+  const isMyTurn = currentTeam === userTeam;
+
+  // Human countdown timer — auto-picks on timeout
   useEffect(() => {
     if (draftComplete || !isMyTurn || available.length === 0) return;
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setTimer(prev => {
         if (prev <= 1) {
-          const best = available.find(u => (rosters[userTeam][u.unitType] || 0) < POSITION_CAPS[u.unitType]);
+          const best = availableRef.current.find(
+            u => ((rostersRef.current[userTeam] ?? emptyRoster())[u.unitType] || 0) < POSITION_CAPS[u.unitType]
+          );
           if (best) makePick(best);
           return PICK_TIME;
         }
@@ -259,21 +275,32 @@ export default function MockDraftPage() {
       });
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isMyTurn, draftComplete, available.length, makePick, rosters, userTeam]);
+  }, [isMyTurn, draftComplete, available.length, makePick, userTeam]);
 
-  const availableRef = useRef(available);
-  useEffect(() => { availableRef.current = available; }, [available]);
   const rostersRef = useRef(rosters);
   useEffect(() => { rostersRef.current = rosters; }, [rosters]);
 
+  // CPU auto-pick — fires whenever currentPickNum changes and it's not the user's turn
   useEffect(() => {
-    if (draftComplete || isMyTurn || available.length === 0) return;
+    if (!setupDone) return;
+    if (draftComplete) return;
+
+    const nt = leagueSize;
+    const curTeam = currentPickNum % nt;
+    const isUserTurn = curTeam === (mockDraftPosition - 1);
+
+    if (isUserTurn) return;
+
+    const delay = 600 + Math.random() * 600;
     const t = setTimeout(() => {
-      const pick = aiPickUnit(availableRef.current, rostersRef.current[currentTeam] ?? emptyRoster());
-      if (pick) makePick(pick);
-    }, 800 + Math.random() * 700);
+      const avail = availableRef.current;
+      if (!avail || avail.length === 0) return;
+      const best = avail[0]; // sorted by projectedPoints desc
+      if (best) makePick(best);
+    }, delay);
+
     return () => clearTimeout(t);
-  }, [currentPickNum, isMyTurn, draftComplete, available.length, currentTeam, makePick]);
+  }, [currentPickNum, setupDone, draftComplete]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function effBadgeBg(mult: number) {
     if (mult >= 1.15) return '#16a34a';
@@ -554,7 +581,11 @@ export default function MockDraftPage() {
       {/* Player Pool */}
       <div style={{ width: 320, background: C.surf, borderLeft: `1px solid ${C.surf3}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
         <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.surf3}` }}>
-          <div style={{ fontSize: 12, color: C.text, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>AVAILABLE PLAYERS</div>
+          <div style={{ fontSize: 12, color: C.text, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>AVAILABLE PLAYERS</div>
+          {/* Temp debug - remove after fixing */}
+          <div style={{ color: 'yellow', fontSize: 10, marginBottom: 6 }}>
+            Available: {available.length} | PoolData: {poolData.length} | SetupDone: {String(setupDone)}
+          </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {(['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'] as const).map(pos => (
               <button key={pos} onClick={() => setFilter(pos)} style={{ padding: '4px 10px', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: 10, letterSpacing: 1, fontFamily: "'Oswald', sans-serif", background: filter === pos ? (pos === 'ALL' ? C.gold : POS_COLORS[pos as UnitType]) : C.surf2, color: filter === pos ? C.bg : C.sub }}>{pos}</button>
