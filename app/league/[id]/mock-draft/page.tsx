@@ -170,39 +170,39 @@ export default function MockDraftPage() {
     if (!id) return; // guard against undefined — params not yet resolved
 
     async function loadPool(leagueId: string) {
-      console.log('[loadPool] leagueId:', leagueId);
-
-      const { data: lg, error } = await supabase
+      const { data: league, error } = await supabase
         .from('leagues')
-        .select('conference_filter, league_size, settings')
+        .select('league_size, conference_filter, settings')
         .eq('id', leagueId)
         .single();
 
-      console.log('[loadPool] error:', error);
-
-      const size = lg?.league_size ?? 8;
-      setLeagueSize(size);
-      setRosters(Array.from({ length: size }, emptyRoster));
-
-      const qp = new URLSearchParams();
-      if (lg?.conference_filter && lg.conference_filter !== 'ALL') {
-        qp.set('conference', lg.conference_filter);
+      if (error || !league) {
+        console.log('[loadPool] league fetch error:', error);
+        return;
       }
-      const allowedSchools: string[] | null = Array.isArray(lg?.settings?.allowed_schools)
-        ? lg.settings.allowed_schools
-        : null;
+
+      const size = league.league_size ?? 8;
+      setLeagueSize(size);
+      setRosters(Array.from({ length: size }, () => emptyRoster()));
+
+      const allowedSchools = (league.settings as any)?.allowed_schools as string[] | null;
+      const qp = new URLSearchParams();
       if (allowedSchools && allowedSchools.length > 0) {
         qp.set('schools', allowedSchools.join(','));
       }
       const poolUrl = `/api/player-pool${qp.toString() ? '?' + qp.toString() : ''}`;
+
+      console.log('[loadPool] leagueId:', leagueId);
       console.log('[loadPool] pool url:', poolUrl);
 
-      const data: DraftUnit[] = await fetch(poolUrl).then(r => r.json()).catch(() => []);
-      console.log('[loadPool] fetch result:', data?.length, 'units');
+      const res = await fetch(poolUrl);
+      const data = await res.json();
 
-      const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => b.projectedPoints - a.projectedPoints);
-      setPoolData(sorted);
-      setAvailable(sorted);
+      console.log('[loadPool] fetch result:', data?.length, 'units');
+      console.log('[loadPool] error:', !res.ok ? res.status : null);
+
+      setPoolData(data ?? []);
+      setAvailable(data ?? []);
     }
 
     loadPool(id);
