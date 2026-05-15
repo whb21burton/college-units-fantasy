@@ -250,10 +250,11 @@ function SchoolPicker({ selected, onChange, minSchools = 4 }: {
 
 export default function CreateLeaguePage() {
   const router = useRouter();
-  const [userId,     setUserId]     = useState('');
-  const [step,       setStep]       = useState(1);
-  const [submitting, setSubmitting] = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
+  const [userId,                 setUserId]                 = useState('');
+  const [step,                   setStep]                   = useState(1);
+  const [submitting,             setSubmitting]             = useState(false);
+  const [error,                  setError]                  = useState<string | null>(null);
+  const [showSchoolWarningModal, setShowSchoolWarningModal] = useState(false);
 
   // Step 1
   const [leagueName,      setLeagueName]      = useState('');
@@ -312,7 +313,7 @@ export default function CreateLeaguePage() {
     .map(pos => rosterConfig[pos].count));
   const minSchoolsNeeded = Math.ceil(entries * maxUnitCount * 1.5);
   const hasEnoughSchools = schools.size === 0 || schools.size >= minSchoolsNeeded;
-  const step2Valid       = hasEnoughSchools;
+  const step2Valid       = true;
 
   function canNext() {
     if (step === 1) return step1Valid;
@@ -802,6 +803,38 @@ export default function CreateLeaguePage() {
           </div>
         )}
 
+        {/* ── School Warning Modal ─────────────────────────────────────────── */}
+        {showSchoolWarningModal && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 14, padding: '28px 28px', maxWidth: 420, width: '100%' }}>
+              <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>⚠️</div>
+              <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 18, color: C.text, textAlign: 'center', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
+                Are you sure you want to proceed?
+              </div>
+              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub, marginBottom: 8, lineHeight: 1.6 }}>
+                You have selected <strong style={{ color: C.gold }}>{schools.size} schools</strong> but the recommended minimum is <strong style={{ color: C.red }}>{minSchoolsNeeded}</strong> ({entries} teams × {maxUnitCount} max units × 1.5).
+              </div>
+              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: C.muted, marginBottom: 20, lineHeight: 1.6 }}>
+                ℹ️ Each college school provides exactly 1 unit per position. With only {schools.size} schools there is a possibility that each team in the league won't be able to fill their roster.
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => setShowSchoolWarningModal(false)}
+                  style={{ flex: 1, padding: '12px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 12, letterSpacing: 1, color: C.sub }}
+                >
+                  ← Go Back
+                </button>
+                <button
+                  onClick={() => { setShowSchoolWarningModal(false); setStep(3); }}
+                  style={{ flex: 1, padding: '12px', background: 'rgba(240,58,90,.15)', border: '1px solid rgba(240,58,90,.4)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 12, letterSpacing: 1, color: C.red }}
+                >
+                  Proceed Anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Nav Buttons ──────────────────────────────────────────────────── */}
         <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between' }}>
           <button
@@ -813,7 +846,13 @@ export default function CreateLeaguePage() {
 
           {step < 4 ? (
             <button
-              onClick={() => setStep(s => s + 1)}
+              onClick={() => {
+                if (step === 2 && schools.size > 0 && !hasEnoughSchools) {
+                  setShowSchoolWarningModal(true);
+                } else {
+                  setStep(s => s + 1);
+                }
+              }}
               disabled={!canNext()}
               style={{ padding: '13px 36px', background: canNext() ? C.gold : C.surf3, border: 'none', borderRadius: 10, cursor: canNext() ? 'pointer' : 'not-allowed', fontFamily: 'Anton, sans-serif', fontSize: 14, letterSpacing: 2, color: canNext() ? C.bg : C.muted, textTransform: 'uppercase', transition: 'all .15s' }}
             >
