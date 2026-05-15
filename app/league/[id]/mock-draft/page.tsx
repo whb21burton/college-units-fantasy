@@ -166,37 +166,47 @@ export default function MockDraftPage() {
   const [statsLoading, setStatsLoading] = useState(false);
 
   useEffect(() => {
-    // Fetch league to get conference filter, allowed_schools, and league size, then pool
-    async function loadPool() {
-      const { data: lg } = await supabase
+    const id = params?.id as string | undefined;
+    if (!id) return; // guard against undefined — params not yet resolved
+
+    async function loadPool(leagueId: string) {
+      console.log('[loadPool] leagueId:', leagueId);
+
+      const { data: lg, error } = await supabase
         .from('leagues')
         .select('conference_filter, league_size, settings')
         .eq('id', leagueId)
         .single();
 
+      console.log('[loadPool] error:', error);
+
       const size = lg?.league_size ?? 8;
       setLeagueSize(size);
       setRosters(Array.from({ length: size }, emptyRoster));
 
-      const params = new URLSearchParams();
+      const qp = new URLSearchParams();
       if (lg?.conference_filter && lg.conference_filter !== 'ALL') {
-        params.set('conference', lg.conference_filter);
+        qp.set('conference', lg.conference_filter);
       }
       const allowedSchools: string[] | null = Array.isArray(lg?.settings?.allowed_schools)
         ? lg.settings.allowed_schools
         : null;
       if (allowedSchools && allowedSchools.length > 0) {
-        params.set('schools', allowedSchools.join(','));
+        qp.set('schools', allowedSchools.join(','));
       }
-      const url = `/api/player-pool${params.toString() ? '?' + params.toString() : ''}`;
-      console.log('[MockDraft] pool url:', url);
-      const data: DraftUnit[] = await fetch(url).then(r => r.json()).catch(() => []);
+      const poolUrl = `/api/player-pool${qp.toString() ? '?' + qp.toString() : ''}`;
+      console.log('[loadPool] pool url:', poolUrl);
+
+      const data: DraftUnit[] = await fetch(poolUrl).then(r => r.json()).catch(() => []);
+      console.log('[loadPool] fetch result:', data?.length, 'units');
+
       const sorted = [...(Array.isArray(data) ? data : [])].sort((a, b) => b.projectedPoints - a.projectedPoints);
-      console.log('[MockDraft] pool loaded:', sorted.length, 'units');
       setPoolData(sorted);
       setAvailable(sorted);
     }
-    loadPool();
+
+    loadPool(id);
+
     // Fetch current efficiency data for badges
     const season = new Date().getFullYear();
     fetch(`/api/efficiency?week=1&season=${season}`)
@@ -208,7 +218,7 @@ export default function MockDraftPage() {
         setEffMap(map);
       })
       .catch(() => {});
-  }, []);
+  }, [params?.id]);
 
   useEffect(() => {
     if (!viewingUnit) { setUnitStats(null); return; }
