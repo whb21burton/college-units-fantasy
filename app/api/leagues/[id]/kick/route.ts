@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic';
  * POST /api/leagues/[id]/kick
  * Body: { memberId: string, refundEntry: boolean }
  *
- * Commissioner-only. Removes one member from the league.
- * If refundEntry === true, returns full buy-in to their wallet (no rake deduction on kicks).
+ * Commissioner-only. Removes a member from the league.
+ * Only refunds if they have a completed contest_entry transaction.
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const admin = createAdminClient();
 
-    // 1. Verify commissioner
+    // Verify commissioner
     const { data: league } = await admin
       .from('leagues')
       .select('id, name, buy_in, commissioner_id')
@@ -36,63 +36,90 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (league.commissioner_id !== user.id) {
       return NextResponse.json({ error: 'Commissioner only' }, { status: 403 });
     }
-
-    // 2. Cannot kick yourself
     if (memberId === user.id) {
       return NextResponse.json({ error: 'Cannot kick yourself' }, { status: 400 });
     }
 
     const buyInCents = Math.round((league.buy_in ?? 0) * 100);
+    let refunded = false;
+    let refundReason = 'no_payment_found';
 
-    // 3. Remove from league
+    // Optionally refund — only if they have a completed contest_entry transaction
+    if (refundEntry && buyInCents > 0) {
+      const { data: entryTx } = await admin
+        .from('transactions')
+        .select('id')
+        .eq('user_id', memberId)
+        .eq('league_id', leagueId)
+        .eq('type', 'contest_entry')
+        .eq('status', 'completed')
+        .limit(1)
+        .single();
+
+      if (entryTx) {
+        const { data: wallet } = await admin
+          .from('wallets')
+          .select('id')
+          .eq('user_id', memberId)
+          .single();
+
+        if (wallet) {
+          const { data: accounts } = await admin
+            .from('ledger_accounts')
+            .select('id, type')
+            .eq('wallet_id', wallet.id);
+
+          const availableAcct = accounts?.find(a => a.type === 'user_available');
+          const pendingAcct   = accounts?.find(a => a.type === 'user_pending');
+
+          if (availableAcct) {
+            const { data: refundTx } = await admin
+              .from('transactions')
+              .insert({
+                user_id:         memberId,
+                type:            'refund',
+                status:          'completed',
+                amount_cents:    buyInCents,
+                league_id:       leagueId,
+                idempotency_key: `kick_${leagueId}_${memberId}`,
+                description:     `Kicked from league: ${league.name}`,
+                completed_at:    new Date().toISOString(),
+              })
+              .select('id')
+              .single();
+
+            if (refundTx) {
+              const entries: any[] = [
+                { transaction_id: refundTx.id, ledger_account_id: availableAcct.id, amount_cents: +buyInCents },
+              ];
+              if (pendingAcct) {
+                entries.push({ transaction_id: refundTx.id, ledger_account_id: pendingAcct.id, amount_cents: -buyInCents });
+              }
+              await admin.from('ledger_entries').insert(entries);
+
+              await admin.from('transactions')
+                .update({ status: 'reversed' })
+                .eq('id', entryTx.id);
+
+              refunded = true;
+              refundReason = 'refunded';
+            }
+          }
+        }
+      } else {
+        refundReason = 'no_payment_found';
+      }
+    } else if (!refundEntry) {
+      refundReason = 'refund_declined';
+    }
+
+    // Remove from league
     await admin.from('league_members')
       .delete()
       .eq('league_id', leagueId)
       .eq('user_id', memberId);
 
-    // 4. Optional full refund (no rake — commissioner chose to return full entry)
-    if (refundEntry && buyInCents > 0) {
-      const { data: wallet } = await admin
-        .from('wallets')
-        .select('id')
-        .eq('user_id', memberId)
-        .single();
-
-      if (wallet) {
-        const { data: accounts } = await admin
-          .from('ledger_accounts')
-          .select('id, type')
-          .eq('wallet_id', wallet.id);
-
-        const availableId = accounts?.find(a => a.type === 'user_available')?.id;
-        const pendingId   = accounts?.find(a => a.type === 'user_pending')?.id;
-
-        if (availableId && pendingId) {
-          const { data: tx } = await admin
-            .from('transactions')
-            .insert({
-              user_id:         memberId,
-              type:            'refund',
-              status:          'completed',
-              amount_cents:    buyInCents,
-              league_id:       leagueId,
-              idempotency_key: `kick_${leagueId}_${memberId}`,
-              description:     `Kicked from league: ${league.name}`,
-            })
-            .select('id')
-            .single();
-
-          if (tx) {
-            await admin.from('ledger_entries').insert([
-              { transaction_id: tx.id, ledger_account_id: availableId, amount_cents: +buyInCents },
-              { transaction_id: tx.id, ledger_account_id: pendingId,   amount_cents: -buyInCents },
-            ]);
-          }
-        }
-      }
-    }
-
-    // 5. Recalculate prize pool
+    // Recalculate prize pool
     const { count: newCount } = await admin
       .from('league_members')
       .select('*', { count: 'exact', head: true })
@@ -102,7 +129,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .update({ prize_pool_cents: (newCount ?? 0) * buyInCents })
       .eq('id', leagueId);
 
-    return NextResponse.json({ kicked: true, refunded: !!refundEntry });
+    return NextResponse.json({ kicked: true, refunded, reason: refundReason });
   } catch (err: any) {
     console.error('[kick]', err);
     return NextResponse.json({ error: err?.message ?? 'Failed to kick member' }, { status: 500 });

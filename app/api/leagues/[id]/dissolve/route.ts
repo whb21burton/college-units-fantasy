@@ -5,63 +5,49 @@ import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * POST /api/leagues/[id]/dissolve
- *
- * Commissioner-only. Refunds all paid members 95% of their entry fee
- * (the 5% platform rake is non-refundable) then marks the league cancelled.
- *
- * Ledger: for each member
- *   credit  user_available  +refundCents
- *   debit   user_pending    -buyInCents
- */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const leagueId = params.id;
     const admin = createAdminClient();
 
-    // 1. Verify caller is commissioner
     const { data: league } = await admin
       .from('leagues')
-      .select('id, name, buy_in, commissioner_id, status')
-      .eq('id', leagueId)
+      .select('id, name, buy_in, league_type, commissioner_id, status')
+      .eq('id', params.id)
       .single();
 
     if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 });
-    if (league.commissioner_id !== user.id) {
-      return NextResponse.json({ error: 'Commissioner only' }, { status: 403 });
+    if (league.commissioner_id !== user.id) return NextResponse.json({ error: 'Not commissioner' }, { status: 403 });
+    if (league.league_type === 'weekly') {
+      return NextResponse.json({ error: 'Weekly leagues cannot be dissolved with refunds' }, { status: 400 });
     }
 
-    // 2. Verify paid league
-    const buyInCents = Math.round((league.buy_in ?? 0) * 100);
-    if (buyInCents === 0) {
-      return NextResponse.json({ error: 'Only paid leagues can be dissolved for refunds' }, { status: 400 });
-    }
-
-    // 3. Get all members
-    const { data: members } = await admin
-      .from('league_members')
-      .select('user_id')
-      .eq('league_id', leagueId);
-
-    if (!members || members.length === 0) {
-      await admin.from('leagues').update({ status: 'cancelled' }).eq('id', leagueId);
+    if (league.buy_in === 0) {
+      await admin.from('leagues').update({ status: 'cancelled' }).eq('id', params.id);
       return NextResponse.json({ refunded: 0, amountPerMember: 0 });
     }
 
-    const refundCents = Math.floor(buyInCents * 0.95);
-    let refunded = 0;
+    const buyCents = Math.round(league.buy_in * 100);
 
-    // 4. Refund each member via ledger
-    for (const member of members) {
+    // Only refund members who actually paid
+    const { data: paidTransactions } = await admin
+      .from('transactions')
+      .select('id, user_id, amount_cents')
+      .eq('league_id', params.id)
+      .eq('type', 'contest_entry')
+      .eq('status', 'completed');
+
+    const paidMembers = paidTransactions ?? [];
+    let refundCount = 0;
+
+    for (const tx of paidMembers) {
       const { data: wallet } = await admin
         .from('wallets')
         .select('id')
-        .eq('user_id', member.user_id)
+        .eq('user_id', tx.user_id)
         .single();
       if (!wallet) continue;
 
@@ -70,37 +56,44 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         .select('id, type')
         .eq('wallet_id', wallet.id);
 
-      const availableId = accounts?.find(a => a.type === 'user_available')?.id;
-      const pendingId   = accounts?.find(a => a.type === 'user_pending')?.id;
-      if (!availableId || !pendingId) continue;
+      const availableAcct = accounts?.find(a => a.type === 'user_available');
+      const pendingAcct   = accounts?.find(a => a.type === 'user_pending');
+      if (!availableAcct) continue;
 
-      const { data: tx } = await admin
+      const { data: refundTx } = await admin
         .from('transactions')
         .insert({
-          user_id:         member.user_id,
+          user_id:         tx.user_id,
           type:            'refund',
           status:          'completed',
-          amount_cents:    refundCents,
-          league_id:       leagueId,
-          idempotency_key: `dissolve_${leagueId}_${member.user_id}`,
-          description:     `League dissolved refund: ${league.name}`,
+          amount_cents:    buyCents,
+          league_id:       params.id,
+          idempotency_key: `dissolve_refund_${params.id}_${tx.user_id}`,
+          description:     `Refund: ${league.name} dissolved`,
+          completed_at:    new Date().toISOString(),
         })
         .select('id')
         .single();
-      if (!tx) continue;
+      if (!refundTx) continue;
 
-      await admin.from('ledger_entries').insert([
-        { transaction_id: tx.id, ledger_account_id: availableId, amount_cents: +refundCents },
-        { transaction_id: tx.id, ledger_account_id: pendingId,   amount_cents: -buyInCents  },
-      ]);
+      const entries: any[] = [
+        { transaction_id: refundTx.id, ledger_account_id: availableAcct.id, amount_cents: +buyCents },
+      ];
+      if (pendingAcct) {
+        entries.push({ transaction_id: refundTx.id, ledger_account_id: pendingAcct.id, amount_cents: -buyCents });
+      }
+      await admin.from('ledger_entries').insert(entries);
 
-      refunded++;
+      await admin.from('transactions')
+        .update({ status: 'reversed' })
+        .eq('id', tx.id);
+
+      refundCount++;
     }
 
-    // 5. Cancel the league
-    await admin.from('leagues').update({ status: 'cancelled' }).eq('id', leagueId);
+    await admin.from('leagues').update({ status: 'cancelled' }).eq('id', params.id);
 
-    return NextResponse.json({ refunded, amountPerMember: refundCents });
+    return NextResponse.json({ refunded: refundCount, amountPerMember: buyCents });
   } catch (err: any) {
     console.error('[dissolve]', err);
     return NextResponse.json({ error: err?.message ?? 'Failed to dissolve league' }, { status: 500 });

@@ -266,6 +266,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [kickTarget,    setKickTarget]    = useState<{ userId: string; teamName: string } | null>(null);
   const [kickRefund,    setKickRefund]    = useState(true);
+  const [hasPaid,       setHasPaid]       = useState<boolean | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -348,6 +349,25 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       setActiveTab('matchup');
     }
   }, [league?.league_type, league?.status]);
+
+  // Check if user has paid their entry fee
+  useEffect(() => {
+    if (!league || !userId) return;
+    if (league.buy_in === 0 || league.league_type === 'weekly') {
+      setHasPaid(true);
+      return;
+    }
+    supabase
+      .from('transactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('league_id', league.id)
+      .eq('type', 'contest_entry')
+      .eq('status', 'completed')
+      .limit(1)
+      .then(({ data }) => setHasPaid((data?.length ?? 0) > 0));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [league?.id, userId]);
 
   const isCommissioner = userId === league?.commissioner_id;
   const myMember       = members.find((m: any) => m.user_id === userId);
@@ -449,11 +469,72 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     }
   }
 
+  async function handlePayEntry() {
+    if (!league) return;
+    const res = await fetch(`/api/leagues/${league.id}/pay-entry`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      setHasPaid(true);
+      if (data.newBalance != null) setWalletBalance(data.newBalance);
+    } else {
+      alert('Payment failed: ' + data.error);
+    }
+  }
+
   if (loading) return (
     <div style={{ height: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 3, fontSize: 13 }}>Loading league...</div>
     </div>
   );
+
+  if (hasPaid === false) {
+    const entryFeeCents = Math.round((league?.buy_in ?? 0) * 100);
+    const canAfford = (walletBalance ?? 0) >= entryFeeCents;
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ maxWidth: 440, width: '100%', textAlign: 'center' }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>🏟️</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+            Entry Fee Required
+          </div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.sub, marginBottom: 24, lineHeight: 1.6 }}>
+            This is a paid league. Pay your entry fee to access the league dashboard.
+          </div>
+          <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: '20px', marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted }}>Entry fee</span>
+              <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text }}>${league?.buy_in?.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted }}>Your balance</span>
+              <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>${((walletBalance ?? 0) / 100).toFixed(2)}</span>
+            </div>
+            <div style={{ height: 1, background: C.surf3, margin: '12px 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted }}>After payment</span>
+              <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.sub }}>${(((walletBalance ?? 0) / 100) - (league?.buy_in ?? 0)).toFixed(2)}</span>
+            </div>
+          </div>
+          {!canAfford ? (
+            <div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.red, marginBottom: 12 }}>
+                Insufficient balance. Add funds to your wallet first.
+              </div>
+              <button
+                onClick={() => router.push('/wallet')}
+                style={{ width: '100%', padding: 14, background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg }}
+              >Add Funds →</button>
+            </div>
+          ) : (
+            <button
+              onClick={handlePayEntry}
+              style={{ width: '100%', padding: 14, background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg }}
+            >Pay ${league?.buy_in?.toFixed(2)} Entry Fee</button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="layout-root" style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
