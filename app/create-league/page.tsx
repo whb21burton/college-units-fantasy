@@ -254,7 +254,9 @@ export default function CreateLeaguePage() {
   const [step,                   setStep]                   = useState(1);
   const [submitting,             setSubmitting]             = useState(false);
   const [error,                  setError]                  = useState<string | null>(null);
-  const [showSchoolWarningModal, setShowSchoolWarningModal] = useState(false);
+  const [showSchoolWarningModal,     setShowSchoolWarningModal]     = useState(false);
+  const [showCommissionerAgreement,  setShowCommissionerAgreement]  = useState(false);
+  const [agreementAccepted,          setAgreementAccepted]          = useState(false);
 
   // Step 1
   const [leagueName,      setLeagueName]      = useState('');
@@ -358,6 +360,10 @@ export default function CreateLeaguePage() {
             payout_structure: payoutStructure,
             payout_splits:    splits,
             roster_config:    rosterConfig,
+            ...(agreementAccepted ? {
+              commissioner_agreement_accepted:    true,
+              commissioner_agreement_accepted_at: new Date().toISOString(),
+            } : {}),
           },
         }),
       });
@@ -803,6 +809,79 @@ export default function CreateLeaguePage() {
           </div>
         )}
 
+        {/* ── Commissioner Agreement Modal ─────────────────────────────────── */}
+        {showCommissionerAgreement && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 14, padding: '32px 28px', maxWidth: 500, width: '100%', maxHeight: '85vh', overflowY: 'auto' }}>
+
+              {/* Header */}
+              <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>📋</div>
+                <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 20, letterSpacing: 1.5, color: C.text, textTransform: 'uppercase' }}>Commissioner Agreement</div>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: C.muted, marginTop: 4, letterSpacing: 1 }}>Required for paid leagues</div>
+              </div>
+
+              {/* Section 1 */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>1. Commissioner Responsibility</div>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub, lineHeight: 1.7 }}>
+                  As commissioner, you are responsible for managing league integrity, setting clear rules for participants, and handling member expectations. You agree to run this league fairly and in good faith.
+                </div>
+              </div>
+
+              {/* Section 2 */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>2. Platform Role</div>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub, lineHeight: 1.7 }}>
+                  College Units Fantasy facilitates payments, tracks standings, and processes payouts based on final standings. The platform does not arbitrate subjective league disputes between commissioners and members.
+                </div>
+              </div>
+
+              {/* Section 3 */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>3. Refund &amp; Dissolution Policy</div>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub, lineHeight: 1.7 }}>
+                  If a league is dissolved before completion, remaining funds in the prize pool may be redistributed proportionally to participants according to platform rules. Entry fees already processed are subject to platform review before any refund is issued.
+                </div>
+              </div>
+
+              {/* Section 4 — Rake */}
+              <div style={{ marginBottom: 24, padding: '12px 14px', background: 'rgba(245,166,35,.06)', border: '1px solid rgba(245,166,35,.2)', borderRadius: 8 }}>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>4. Platform Fee Disclosure</div>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub, lineHeight: 1.7 }}>
+                  A <strong style={{ color: C.gold }}>5% platform fee</strong> is deducted from the total prize pool before distribution to winners. This fee is <strong style={{ color: C.text }}>non-refundable</strong> once league entry payments have been processed. By proceeding, you acknowledge and agree to this fee structure.
+                </div>
+              </div>
+
+              {/* Checkbox */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', marginBottom: 20 }}>
+                <input
+                  type="checkbox"
+                  checked={agreementAccepted}
+                  onChange={e => setAgreementAccepted(e.target.checked)}
+                  style={{ accentColor: C.gold, width: 18, height: 18, marginTop: 2, flexShrink: 0 }}
+                />
+                <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.text, lineHeight: 1.6 }}>
+                  I have read and agree to the Commissioner Agreement. I understand my responsibilities as league commissioner and accept the platform fee structure.
+                </span>
+              </label>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => { setShowCommissionerAgreement(false); setAgreementAccepted(false); }}
+                  style={{ flex: 1, padding: '12px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 12, letterSpacing: 1, color: C.sub }}
+                >Cancel</button>
+                <button
+                  onClick={() => { if (!agreementAccepted) return; setShowCommissionerAgreement(false); setStep(2); }}
+                  disabled={!agreementAccepted}
+                  style={{ flex: 2, padding: '12px', background: agreementAccepted ? C.gold : C.surf3, border: 'none', borderRadius: 8, cursor: agreementAccepted ? 'pointer' : 'not-allowed', fontFamily: 'Anton, sans-serif', fontSize: 13, letterSpacing: 2, textTransform: 'uppercase', color: agreementAccepted ? C.bg : C.muted, transition: 'all .15s' }}
+                >I Agree — Continue</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── School Warning Modal ─────────────────────────────────────────── */}
         {showSchoolWarningModal && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -847,7 +926,9 @@ export default function CreateLeaguePage() {
           {step < 4 ? (
             <button
               onClick={() => {
-                if (step === 2 && schools.size > 0 && !hasEnoughSchools) {
+                if (step === 1 && buyIn > 0 && !agreementAccepted) {
+                  setShowCommissionerAgreement(true);
+                } else if (step === 2 && schools.size > 0 && !hasEnoughSchools) {
                   setShowSchoolWarningModal(true);
                 } else {
                   setStep(s => s + 1);
