@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase-browser';
 import { WalletPanel } from '@/components/wallet/WalletPanel';
+
+const IntroAnimation = dynamic(() => import('@/components/IntroAnimation'), { ssr: false });
 
 const C = {
   bg:'#05080f', surf:'#0c1220', surf2:'#131d30', surf3:'#1e2d47',
@@ -28,6 +31,21 @@ export default function HomePage() {
   const [leagues, setLeagues] = useState<any[]>([]);
   const [walletOpen, setWalletOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [showIntro, setShowIntro] = useState(false);
+  const [introChecked, setIntroChecked] = useState(false);
+
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem('cuf_intro_seen');
+      if (!seen) setShowIntro(true);
+    } catch (e) {}
+    setIntroChecked(true);
+  }, []);
+
+  function handleIntroComplete() {
+    try { localStorage.setItem('cuf_intro_seen', '1'); } catch (e) {}
+    setShowIntro(false);
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -121,7 +139,11 @@ export default function HomePage() {
     marginTop: 10,
   };
 
+  if (!introChecked) return null;
+
   return (
+    <>
+    {showIntro && <IntroAnimation onComplete={handleIntroComplete} />}
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text }}>
       <style>{`
         * { box-sizing: border-box; }
@@ -262,5 +284,6 @@ export default function HomePage() {
       {/* WALLET */}
       {walletOpen && <WalletPanel onClose={() => setWalletOpen(false)} />}
     </div>
+    </>
   );
 }
