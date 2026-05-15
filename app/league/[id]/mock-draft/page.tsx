@@ -32,10 +32,10 @@ function emptyRoster(): RosterCount {
   return { QB: 0, RB: 0, WR: 0, TE: 0, DEF: 0, K: 0 };
 }
 
-function getTeamForPick(pickNum: number, numTeams: number): number {
+function snakeTeam(pickNum: number, numTeams: number): number {
   const round = Math.floor(pickNum / numTeams);
-  const pos = pickNum % numTeams;
-  return round % 2 === 0 ? pos : numTeams - 1 - pos;
+  const posInRound = pickNum % numTeams;
+  return round % 2 === 0 ? posInRound : (numTeams - 1 - posInRound);
 }
 
 function aiPickUnit(available: DraftUnit[], roster: RosterCount): DraftUnit | null {
@@ -247,7 +247,7 @@ export default function MockDraftPage() {
     const nt = leagueSizeRef.current;
     const tp = nt * TOTAL_ROUNDS;
     const round = Math.floor(pickNum / nt);
-    const team = getTeamForPick(pickNum, nt);
+    const team = snakeTeam(pickNum, nt);
     const newPick: Pick = { unit, teamIdx: team, round, pickNum };
     setPicks(prev => [...prev, newPick]);
     setAvailable(prev => prev.filter(u => u.id !== unit.id));
@@ -265,7 +265,7 @@ export default function MockDraftPage() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const currentTeam = getTeamForPick(currentPickNum, numTeams);
+  const currentTeam = snakeTeam(currentPickNum, numTeams);
   const isMyTurn = currentTeam === userTeam;
 
   // Human countdown timer — auto-picks on timeout
@@ -296,7 +296,7 @@ export default function MockDraftPage() {
     if (draftComplete) return;
 
     const nt = leagueSize;
-    const curTeam = currentPickNum % nt;
+    const curTeam = snakeTeam(currentPickNum, nt);
     const isUserTurn = curTeam === (mockDraftPosition - 1);
 
     if (isUserTurn) return;
