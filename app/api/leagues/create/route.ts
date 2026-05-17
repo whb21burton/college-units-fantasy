@@ -86,6 +86,31 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Auto-link bracket leagues to the latest open bracket contest
+    if (body.league_type === 'bracket') {
+      const { data: bracketContest } = await admin
+        .from('bracket_contests')
+        .select('id, name, sport')
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (bracketContest) {
+        await admin
+          .from('leagues')
+          .update({
+            settings: {
+              ...settings,
+              bracket_contest_id: bracketContest.id,
+              bracket_sport: bracketContest.sport,
+              bracket_name: bracketContest.name,
+            }
+          })
+          .eq('id', data.id)
+      }
+    }
+
     created.push(data);
   }
 

@@ -269,6 +269,7 @@ export default function CreateLeaguePage() {
   const [payoutStructure, setPayoutStructure] = useState<PayoutStructure>('winner_take_all');
   const [customPayouts,   setCustomPayouts]   = useState<{ place: number; pct: number }[]>([{ place: 1, pct: 100 }]);
   const [userEmail,       setUserEmail]       = useState<string | null>(null);
+  const [availableBrackets, setAvailableBrackets] = useState<any[]>([]);
 
   // Step 2
   const [draftType,    setDraftType]    = useState<'snake' | 'salary'>('snake');
@@ -289,6 +290,17 @@ export default function CreateLeaguePage() {
       setUserEmail(user.email ?? null);
     });
   }, [router]);
+
+  useEffect(() => {
+    if (leagueType !== 'bracket') return;
+    supabase
+      .from('bracket_contests')
+      .select('id, name, sport, entry_fee_cents, status')
+      .eq('status', 'open')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setAvailableBrackets(data ?? []));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leagueType]);
 
   const isAdmin = userEmail === 'whb21burton@gmail.com';
 
@@ -444,6 +456,29 @@ export default function CreateLeaguePage() {
               {leagueType === 'bracket' && (
                 <div style={{ padding: '8px 12px', background: 'rgba(21,198,120,.06)', border: '1px solid rgba(21,198,120,.2)', borderRadius: 6, marginTop: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
                   🏆 Bracket contests are open to unlimited participants. No team limit required.
+                </div>
+              )}
+              {leagueType === 'bracket' && availableBrackets.length > 0 && (
+                <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(21,198,120,.06)', border: '1px solid rgba(21,198,120,.2)', borderRadius: 8 }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.green, textTransform: 'uppercase', marginBottom: 6 }}>
+                    Active Bracket Contest
+                  </div>
+                  {availableBrackets.slice(0, 1).map(b => (
+                    <div key={b.id} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
+                      🏆 {b.name}
+                      <span style={{ color: C.muted, marginLeft: 8, fontSize: 10 }}>
+                        {b.sport} · {b.entry_fee_cents === 0 ? 'Free' : `$${(b.entry_fee_cents / 100).toFixed(2)} entry`}
+                      </span>
+                    </div>
+                  ))}
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 4 }}>
+                    Your league will be automatically linked to this contest.
+                  </div>
+                </div>
+              )}
+              {leagueType === 'bracket' && availableBrackets.length === 0 && (
+                <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(240,58,90,.06)', border: '1px solid rgba(240,58,90,.2)', borderRadius: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red }}>
+                  ⚠️ No active bracket contests available right now. Check back soon.
                 </div>
               )}
             </div>
@@ -748,6 +783,7 @@ export default function CreateLeaguePage() {
                 ['Entry Fee', effectiveBuyIn === 0 ? 'Free' : `$${effectiveBuyIn.toFixed(2)}`],
                 ['Entries', 'Unlimited'],
                 ['Your Name', teamName],
+                ...(availableBrackets[0] ? [['Bracket Contest', `🏆 ${availableBrackets[0].name}`] as [string, string]] : []),
               ] : [
                 ['League Name', leagueName],
                 ['Entry Fee', effectiveBuyIn === 0 ? 'Free' : `$${effectiveBuyIn.toFixed(2)}`],
