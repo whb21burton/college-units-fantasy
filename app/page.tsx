@@ -35,12 +35,20 @@ export default function HomePage() {
   const [introChecked, setIntroChecked] = useState(false);
 
   useEffect(() => {
-    setShowIntro(true);
-    setIntroChecked(true);
-  }, []);
+    try {
+      const seen = sessionStorage.getItem('cuf_intro_seen')
+      if (!seen) {
+        setShowIntro(true)
+      }
+    } catch (e) {}
+    setIntroChecked(true)
+  }, [])
 
   function handleIntroComplete() {
-    setShowIntro(false);
+    try {
+      sessionStorage.setItem('cuf_intro_seen', '1')
+    } catch (e) {}
+    setShowIntro(false)
   }
 
   useEffect(() => {
