@@ -298,6 +298,24 @@ export default function HomePage() {
           >
             🏆 Bracket Contests
           </button>
+          {user?.email === 'whb21burton@gmail.com' && (
+            <button
+              onClick={() => router.push('/admin/platform')}
+              style={{
+                width: '100%', padding: '14px',
+                background: 'rgba(240,58,90,.12)',
+                border: '1px solid rgba(240,58,90,.3)',
+                borderRadius: 8, cursor: 'pointer',
+                fontFamily: "'Anton', sans-serif", fontSize: 14,
+                letterSpacing: 2, textTransform: 'uppercase',
+                color: '#f03a5a',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                marginTop: 10,
+              }}
+            >
+              ⚡ Platform Manager
+            </button>
+          )}
         </div>
       )}
 
