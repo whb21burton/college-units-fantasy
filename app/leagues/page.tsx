@@ -727,6 +727,12 @@ function PublicLeaguesContent() {
   // Enter modal
   const [enterLeague,  setEnterLeague]  = useState<League | null>(null);
 
+  // Section / bracket state
+  const [activeSection,   setActiveSection]   = useState<'leagues' | 'brackets'>('leagues');
+  const [bracketSport,    setBracketSport]    = useState<'football' | 'basketball' | 'baseball'>('baseball');
+  const [leagueFilter,    setLeagueFilter]    = useState<'all' | 'season' | 'weekly'>('all');
+  const [bracketContests, setBracketContests] = useState<any[]>([]);
+
   // Filters
   const [search,         setSearch]         = useState('');
   const [feeMin,         setFeeMin]         = useState('');
@@ -783,7 +789,22 @@ function PublicLeaguesContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheBust]);
 
+  useEffect(() => {
+    if (activeSection !== 'brackets') return;
+    supabase
+      .from('bracket_contests')
+      .select('*')
+      .eq('sport', bracketSport)
+      .eq('status', 'open')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setBracketContests(data ?? []));
+  }, [activeSection, bracketSport]);
+
   const displayed = leagues.filter(l => {
+    // Section filter: leagues section never shows bracket leagues
+    if (leagueFilter === 'all' && l.league_type === 'bracket') return false;
+    if (leagueFilter === 'season' && l.league_type !== 'season') return false;
+    if (leagueFilter === 'weekly' && l.league_type !== 'weekly') return false;
     if (search && !l.name.toLowerCase().includes(search.toLowerCase())) return false;
     const minFee = feeMin ? parseFloat(feeMin) : null;
     const maxFee = feeMax ? parseFloat(feeMax) : null;
@@ -879,57 +900,165 @@ function PublicLeaguesContent() {
 
         {/* ── LEFT SIDEBAR ──────────────────────────────────────────── */}
         <div style={{ width: 200, flexShrink: 0, background: C.surf, borderRight: '1px solid ' + C.surf3, overflowY: 'auto', padding: '16px 0' }}>
-          <div style={{ padding: '0 12px', marginBottom: 20 }}>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search Leagues..."
-              style={{ width: '100%', boxSizing: 'border-box', background: C.surf3, border: '1px solid #263a55', borderRadius: 6, padding: '8px 10px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.text, outline: 'none' }}
-            />
+
+          {/* Leagues / Brackets nav */}
+          <div style={{ padding: '0 12px', marginBottom: 8 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 6, paddingLeft: 2 }}>Leagues</div>
+            {([
+              { key: 'all',    label: 'All Leagues',     icon: '🌐' },
+              { key: 'season', label: 'Season Long',     icon: '🏈' },
+              { key: 'weekly', label: "Weekly Pick'em",  icon: '⚡' },
+            ] as const).map(item => {
+              const active = activeSection === 'leagues' && leagueFilter === item.key;
+              return (
+                <button key={item.key}
+                  onClick={() => { setActiveSection('leagues'); setLeagueFilter(item.key); }}
+                  style={{ width: '100%', padding: '8px 10px', marginBottom: 2, background: active ? 'rgba(212,168,40,.07)' : 'transparent', border: 'none', borderLeft: `3px solid ${active ? C.gold : 'transparent'}`, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, transition: 'all .12s' }}
+                >
+                  <span style={{ fontSize: 13 }}>{item.icon}</span>
+                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: active ? C.text : C.sub }}>{item.label}</span>
+                </button>
+              );
+            })}
           </div>
 
-          <div style={{ padding: '0 12px', marginBottom: 20 }}>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>Entry Fee</div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input value={feeMin} onChange={e => setFeeMin(e.target.value)} placeholder="Min" type="number" min="0" style={rangeInputStyle} />
-              <span style={{ color: C.muted, fontSize: 11 }}>—</span>
-              <input value={feeMax} onChange={e => setFeeMax(e.target.value)} placeholder="Max" type="number" min="0" style={rangeInputStyle} />
-            </div>
+          <div style={{ height: 1, background: C.surf3, margin: '8px 12px' }} />
+
+          <div style={{ padding: '0 12px', marginBottom: 16 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 6, paddingLeft: 2 }}>Brackets</div>
+            {([
+              { key: 'football',   label: 'Football',   icon: '🏈', desc: 'CFP Bracket' },
+              { key: 'basketball', label: 'Basketball', icon: '🏀', desc: 'March Madness' },
+              { key: 'baseball',   label: 'Baseball',   icon: '⚾', desc: 'College World Series' },
+            ] as const).map(item => {
+              const active = activeSection === 'brackets' && bracketSport === item.key;
+              return (
+                <button key={item.key}
+                  onClick={() => { setActiveSection('brackets'); setBracketSport(item.key); }}
+                  style={{ width: '100%', padding: '8px 10px', marginBottom: 2, background: active ? 'rgba(212,168,40,.07)' : 'transparent', border: 'none', borderLeft: `3px solid ${active ? C.gold : 'transparent'}`, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, transition: 'all .12s' }}
+                >
+                  <span style={{ fontSize: 13 }}>{item.icon}</span>
+                  <div>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: active ? C.text : C.sub }}>{item.label}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{item.desc}</div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 6, padding: '0 12px' }}>Conference Style</div>
-            <SideRow active={styleFilter === '__all__'} onClick={() => setStyleFilter('__all__')}>All</SideRow>
-            {STYLE_OPTIONS.map(o => (
-              <SideRow key={o.value} active={styleFilter === o.value} onClick={() => setStyleFilter(o.value)}>{o.label}</SideRow>
-            ))}
-          </div>
+          <div style={{ height: 1, background: C.surf3, margin: '0 12px 16px' }} />
 
-
-          <div style={{ padding: '0 12px' }}>
-            <button onClick={() => setAdvOpen(v => !v)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', padding: 0, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ transform: advOpen ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform .15s' }}>▶</span>
-              Advanced
-            </button>
-            {advOpen && (
-              <div style={{ paddingTop: 4 }}>
-                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, marginBottom: 6 }}>Field Size</div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 12 }}>
-                  <input value={fieldMin} onChange={e => setFieldMin(e.target.value)} placeholder="Min" type="number" min="2" style={rangeInputStyle} />
-                  <span style={{ color: C.muted, fontSize: 11 }}>—</span>
-                  <input value={fieldMax} onChange={e => setFieldMax(e.target.value)} placeholder="Max" type="number" min="2" style={rangeInputStyle} />
-                </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={onlyGuaranteed} onChange={e => setOnlyGuaranteed(e.target.checked)} style={{ accentColor: C.gold }} />
-                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub }}>Guaranteed Only</span>
-                </label>
+          {/* League filters — only relevant when viewing leagues */}
+          {activeSection === 'leagues' && (
+            <>
+              <div style={{ padding: '0 12px', marginBottom: 20 }}>
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search Leagues..."
+                  style={{ width: '100%', boxSizing: 'border-box', background: C.surf3, border: '1px solid #263a55', borderRadius: 6, padding: '8px 10px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.text, outline: 'none' }}
+                />
               </div>
-            )}
-          </div>
+
+              <div style={{ padding: '0 12px', marginBottom: 20 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>Entry Fee</div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input value={feeMin} onChange={e => setFeeMin(e.target.value)} placeholder="Min" type="number" min="0" style={rangeInputStyle} />
+                  <span style={{ color: C.muted, fontSize: 11 }}>—</span>
+                  <input value={feeMax} onChange={e => setFeeMax(e.target.value)} placeholder="Max" type="number" min="0" style={rangeInputStyle} />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 6, padding: '0 12px' }}>Conference Style</div>
+                <SideRow active={styleFilter === '__all__'} onClick={() => setStyleFilter('__all__')}>All</SideRow>
+                {STYLE_OPTIONS.map(o => (
+                  <SideRow key={o.value} active={styleFilter === o.value} onClick={() => setStyleFilter(o.value)}>{o.label}</SideRow>
+                ))}
+              </div>
+
+              <div style={{ padding: '0 12px' }}>
+                <button onClick={() => setAdvOpen(v => !v)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', padding: 0, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ transform: advOpen ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform .15s' }}>▶</span>
+                  Advanced
+                </button>
+                {advOpen && (
+                  <div style={{ paddingTop: 4 }}>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, marginBottom: 6 }}>Field Size</div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 12 }}>
+                      <input value={fieldMin} onChange={e => setFieldMin(e.target.value)} placeholder="Min" type="number" min="2" style={rangeInputStyle} />
+                      <span style={{ color: C.muted, fontSize: 11 }}>—</span>
+                      <input value={fieldMax} onChange={e => setFieldMax(e.target.value)} placeholder="Max" type="number" min="2" style={rangeInputStyle} />
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={onlyGuaranteed} onChange={e => setOnlyGuaranteed(e.target.checked)} style={{ accentColor: C.gold }} />
+                      <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub }}>Guaranteed Only</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── MAIN CENTER PANEL ─────────────────────────────────────── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* ── BRACKETS VIEW ── */}
+          {activeSection === 'brackets' && (
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 4 }}>
+                  {bracketSport === 'football' ? '🏈' : bracketSport === 'basketball' ? '🏀' : '⚾'} {bracketSport.charAt(0).toUpperCase() + bracketSport.slice(1)} Brackets
+                </div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>
+                  Pick your bracket · Compete for prizes · 1 point per correct pick
+                </div>
+              </div>
+
+              {bracketContests.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 40px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12 }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>
+                    {bracketSport === 'football' ? '🏈' : bracketSport === 'basketball' ? '🏀' : '⚾'}
+                  </div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+                    No {bracketSport} brackets yet
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted }}>
+                    Check back when the season begins
+                  </div>
+                </div>
+              ) : (
+                bracketContests.map(contest => (
+                  <div key={contest.id}
+                    onClick={() => router.push(`/brackets/${contest.id}`)}
+                    style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: '20px 24px', marginBottom: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 20, transition: 'border-color .15s' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = C.gold + '66'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = C.surf3}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, marginBottom: 6 }}>
+                        {contest.name}
+                      </div>
+                      <div style={{ display: 'flex', gap: 16, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, flexWrap: 'wrap' }}>
+                        <span>🏆 Prize: <strong style={{ color: C.gold }}>${((contest.prize_pool_cents ?? 0) / 100).toFixed(0)}</strong></span>
+                        <span>👥 Entries: <strong style={{ color: C.text }}>{contest.entry_count ?? 0}{contest.max_entries ? `/${contest.max_entries}` : ''}</strong></span>
+                        <span>💰 Entry: <strong style={{ color: C.text }}>{contest.entry_fee_cents === 0 ? 'Free' : `$${(contest.entry_fee_cents / 100).toFixed(2)}`}</strong></span>
+                        <span>⭐ Scoring: <strong style={{ color: C.text }}>1 pt per correct pick</strong></span>
+                      </div>
+                    </div>
+                    <div style={{ padding: '8px 18px', background: C.gold, borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, color: C.bg, flexShrink: 0 }}>
+                      Enter →
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* ── LEAGUES VIEW ── */}
+          {activeSection === 'leagues' && (<>
 
           {/* Column headers */}
           <div style={{ display: 'grid', gridTemplateColumns: '24px 1fr 80px 90px 90px 100px 110px 100px 92px 32px', background: C.hdrBg, borderBottom: '1px solid ' + C.surf3, padding: '0 12px', flexShrink: 0 }}>
@@ -1055,6 +1184,7 @@ function PublicLeaguesContent() {
               })
             )}
           </div>
+          </>)}
         </div>
       </div>
 
