@@ -42,7 +42,7 @@ export default function MyLeaguesPage() {
   const [user,          setUser]          = useState<any>(null);
   const [entries,       setEntries]       = useState<LeagueEntry[]>([]);
   const [loading,       setLoading]       = useState(true);
-  const [tab,           setTab]           = useState<'season' | 'weekly'>('season');
+  const [tab,           setTab]           = useState<'season' | 'weekly' | 'bracket'>('season');
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user: u } }) => {
@@ -60,9 +60,10 @@ export default function MyLeaguesPage() {
   const displayName = user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? '…';
   const initials    = displayName.slice(0, 2).toUpperCase();
 
-  const seasonLeagues = entries.filter(e => e.leagues?.league_type === 'season');
-  const weeklyLeagues = entries.filter(e => e.leagues?.league_type === 'weekly');
-  const shown         = tab === 'season' ? seasonLeagues : weeklyLeagues;
+  const seasonLeagues  = entries.filter(e => e.leagues?.league_type === 'season');
+  const weeklyLeagues  = entries.filter(e => e.leagues?.league_type === 'weekly');
+  const bracketLeagues = entries.filter(e => e.leagues?.league_type === 'bracket');
+  const shown          = tab === 'season' ? seasonLeagues : tab === 'weekly' ? weeklyLeagues : bracketLeagues;
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', fontFamily: 'sans-serif' }}>
@@ -85,8 +86,9 @@ export default function MyLeaguesPage() {
         {/* Nav */}
         <div style={{ padding: '16px 0', flex: 1 }}>
           {([
-            { key: 'season', label: '🏈 Season Leagues', count: seasonLeagues.length },
-            { key: 'weekly', label: '⚡ Weekly Leagues', count: weeklyLeagues.length },
+            { key: 'season',  label: '🏈 Season Leagues', count: seasonLeagues.length },
+            { key: 'weekly',  label: '⚡ Weekly Leagues',  count: weeklyLeagues.length },
+            { key: 'bracket', label: '🏆 Bracket',         count: bracketLeagues.length },
           ] as const).map(({ key, label, count }) => (
             <button
               key={key}
@@ -129,22 +131,22 @@ export default function MyLeaguesPage() {
       {/* MAIN CONTENT */}
       <div style={{ flex: 1, padding: '32px 40px', overflowY: 'auto' }}>
         <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 24, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 24 }}>
-          {tab === 'season' ? '🏈 Season Leagues' : '⚡ Weekly Leagues'}
+          {tab === 'season' ? '🏈 Season Leagues' : tab === 'weekly' ? '⚡ Weekly Leagues' : '🏆 Bracket Leagues'}
         </div>
 
         {loading ? (
           <div style={{ color: C.muted, fontFamily: 'Oswald, sans-serif', fontSize: 13, letterSpacing: 1 }}>Loading…</div>
         ) : shown.length === 0 ? (
           <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: '48px 32px', textAlign: 'center' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🏟️</div>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>{tab === 'bracket' ? '🏆' : '🏟️'}</div>
             <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 16, color: C.sub, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-              No {tab === 'season' ? 'season' : 'weekly'} leagues yet
+              No {tab === 'season' ? 'season' : tab === 'weekly' ? 'weekly' : 'bracket'} leagues yet
             </div>
             <button
-              onClick={() => router.push('/leagues')}
+              onClick={() => router.push(tab === 'bracket' ? '/brackets' : '/leagues')}
               style={{ marginTop: 16, padding: '10px 24px', background: 'rgba(245,166,35,.12)', border: `1px solid ${C.gold}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 2, color: C.gold, textTransform: 'uppercase' }}
             >
-              Browse Public Contests →
+              {tab === 'bracket' ? 'Browse Bracket Contests →' : 'Browse Public Contests →'}
             </button>
           </div>
         ) : (
@@ -152,6 +154,34 @@ export default function MyLeaguesPage() {
             {shown.map(entry => {
               const lg = entry.leagues;
               if (!lg) return null;
+
+              if (lg.league_type === 'bracket') {
+                const contestId = lg.settings?.bracket_contest_id;
+                return (
+                  <div key={`${entry.league_id}-${entry.team_name}`} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '18px 20px', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 1 }}>
+                          {lg.name}
+                        </div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginTop: 4 }}>
+                          🏆 Bracket · {lg.buy_in === 0 ? 'Free' : `$${lg.buy_in} entry`}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (contestId) router.push(`/brackets/${contestId}`);
+                          else alert('Bracket not yet assigned to this league');
+                        }}
+                        style={{ padding: '8px 16px', background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.bg }}
+                      >
+                        View Bracket →
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
               const statusColor = STATUS_COLORS[lg.status] ?? C.muted;
               return (
                 <div

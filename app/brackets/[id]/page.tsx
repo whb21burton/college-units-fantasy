@@ -360,6 +360,7 @@ export default function BracketPage() {
   const [loading,   setLoading]   = useState(true)
   const [submitting,setSubmitting]= useState(false)
   const [msg,       setMsg]       = useState<{ ok: boolean; text: string } | null>(null)
+  const [hasPaid,   setHasPaid]   = useState<boolean>(true)
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -380,6 +381,20 @@ export default function BracketPage() {
   }, [supabase, contestId])
 
   useEffect(() => { loadData() }, [loadData])
+
+  useEffect(() => {
+    if (!contest || contest.entry_fee_cents === 0) { setHasPaid(true); return }
+    if (!userId) return
+    supabase
+      .from('transactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('league_id', contest.id)
+      .eq('type', 'contest_entry')
+      .eq('status', 'completed')
+      .single()
+      .then(({ data }) => setHasPaid(!!data))
+  }, [contest?.id, userId])
 
   const isLocked = !!(
     contest?.status === 'locked' || contest?.status === 'active' ||
@@ -644,18 +659,30 @@ export default function BracketPage() {
             : msg && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: msg.ok ? C.green : C.red }}>{msg.text}</span>
           }
           {!isLocked && !entry?.is_submitted && (
-            <button
-              onClick={handleSubmit}
-              disabled={total < TOTAL || submitting}
-              style={{
-                padding: '8px 18px', borderRadius: 6, border: 'none',
-                cursor: total >= TOTAL ? 'pointer' : 'not-allowed',
-                background: total >= TOTAL ? C.gold : C.surf3,
-                color: total >= TOTAL ? C.bg : C.muted,
-                fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase',
-                transition: 'all .2s',
-              }}
-            >{submitting ? 'Submitting…' : total >= TOTAL ? 'Submit Bracket' : `${TOTAL - total} picks remaining`}</button>
+            !hasPaid && contest?.entry_fee_cents > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red }}>
+                  Pay ${(contest.entry_fee_cents / 100).toFixed(2)} entry fee to submit
+                </div>
+                <button
+                  onClick={() => router.push('/wallet')}
+                  style={{ padding: '8px 18px', borderRadius: 6, border: 'none', cursor: 'pointer', background: C.gold, color: C.bg, fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase' }}
+                >Pay Entry Fee →</button>
+              </div>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={total < TOTAL || submitting}
+                style={{
+                  padding: '8px 18px', borderRadius: 6, border: 'none',
+                  cursor: total >= TOTAL ? 'pointer' : 'not-allowed',
+                  background: total >= TOTAL ? C.gold : C.surf3,
+                  color: total >= TOTAL ? C.bg : C.muted,
+                  fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase',
+                  transition: 'all .2s',
+                }}
+              >{submitting ? 'Submitting…' : total >= TOTAL ? 'Submit Bracket' : `${TOTAL - total} picks remaining`}</button>
+            )
           )}
         </div>
       </div>

@@ -261,7 +261,7 @@ export default function CreateLeaguePage() {
   // Step 1
   const [leagueName,      setLeagueName]      = useState('');
   const [leagueLogo,      setLeagueLogo]      = useState<string | null>(null);
-  const [leagueType,      setLeagueType]      = useState<'season' | 'weekly'>('season');
+  const [leagueType,      setLeagueType]      = useState<'season' | 'weekly' | 'bracket'>('season');
   const [entries,         setEntries]         = useState(8);
   const [buyIn,           setBuyIn]           = useState(0);
   const [customBuyIn,     setCustomBuyIn]     = useState('');
@@ -306,7 +306,7 @@ export default function CreateLeaguePage() {
     .filter(pos => rosterConfig[pos].enabled)
     .reduce((sum, pos) => sum + rosterConfig[pos].count, 0);
 
-  const step1Valid = leagueName.trim().length >= 3 && entries >= 4;
+  const step1Valid = leagueName.trim().length >= 3 && (leagueType === 'bracket' || entries >= 4);
   const step3Valid = teamName.trim().length >= 2;
 
   const startingPositions = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'] as const;
@@ -345,10 +345,11 @@ export default function CreateLeaguePage() {
         body:    JSON.stringify({
           name:        leagueName.trim(),
           buy_in:      effectiveBuyIn,
-          league_size: entries,
+          league_size: leagueType === 'bracket' ? 999999 : entries,
           draft_type:  draftType,
           salary_cap:  draftType === 'salary' ? effectiveCap : null,
           is_public:   false,
+          is_capped:   leagueType !== 'bracket',
           league_type: leagueType,
           team_name:   teamName.trim(),
           invite_code: inviteCode,
@@ -411,7 +412,7 @@ export default function CreateLeaguePage() {
             {/* League Type */}
             <div style={{ marginBottom: 20 }}>
               <Label>League Type</Label>
-              <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '1fr 1fr' : '1fr', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
                 <div
                   onClick={() => setLeagueType('season')}
                   style={{ padding: '14px 16px', border: `2px solid ${leagueType === 'season' ? C.gold : C.surf3}`, borderRadius: 10, cursor: 'pointer', background: leagueType === 'season' ? 'rgba(245,166,35,.08)' : C.surf2, transition: 'all .15s' }}
@@ -431,10 +432,18 @@ export default function CreateLeaguePage() {
                     <div style={{ position: 'absolute', top: 6, right: 8, fontFamily: 'Oswald, sans-serif', fontSize: 8, letterSpacing: 1, color: C.gold, background: 'rgba(245,166,35,.15)', padding: '1px 5px', borderRadius: 3 }}>ADMIN</div>
                   </div>
                 )}
+                <div
+                  onClick={() => setLeagueType('bracket')}
+                  style={{ padding: '14px 16px', border: `2px solid ${leagueType === 'bracket' ? C.green : C.surf3}`, borderRadius: 10, cursor: 'pointer', background: leagueType === 'bracket' ? 'rgba(21,198,120,.08)' : C.surf2, transition: 'all .15s' }}
+                >
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>🏆</div>
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 13, color: leagueType === 'bracket' ? C.green : C.text, letterSpacing: 1 }}>Bracket</div>
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>Pick your bracket, win prizes</div>
+                </div>
               </div>
-              {!isAdmin && (
-                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, marginTop: 6, letterSpacing: 0.5 }}>
-                  🔒 Weekly leagues are created by the platform. Check the Contest Lobby for weekly contests.
+              {leagueType === 'bracket' && (
+                <div style={{ padding: '8px 12px', background: 'rgba(21,198,120,.06)', border: '1px solid rgba(21,198,120,.2)', borderRadius: 6, marginTop: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
+                  🏆 Bracket contests are open to unlimited participants. No team limit required.
                 </div>
               )}
             </div>
@@ -453,15 +462,17 @@ export default function CreateLeaguePage() {
               )}
             </div>
 
-            {/* Entries */}
-            <div style={{ marginBottom: 20 }}>
-              <Label>Number of Entries (min 4)</Label>
-              <input
-                type="number" min={4} value={entries}
-                onChange={e => setEntries(Math.max(4, parseInt(e.target.value) || 4))}
-                style={{ width: '100%', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk', sans-serif", fontSize: 14, padding: '11px 14px', outline: 'none', boxSizing: 'border-box' }}
-              />
-            </div>
+            {/* Entries — hidden for bracket leagues */}
+            {leagueType !== 'bracket' && (
+              <div style={{ marginBottom: 20 }}>
+                <Label>Number of Entries (min 4)</Label>
+                <input
+                  type="number" min={4} value={entries}
+                  onChange={e => setEntries(Math.max(4, parseInt(e.target.value) || 4))}
+                  style={{ width: '100%', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk', sans-serif", fontSize: 14, padding: '11px 14px', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+            )}
 
             {/* Entry Fee */}
             <div style={{ marginBottom: effectiveBuyIn > 0 ? 0 : 20 }}>
@@ -492,7 +503,7 @@ export default function CreateLeaguePage() {
                   💰 Prize Pool Breakdown
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>Total entries ({entries} × ${effectiveBuyIn})</span>
+                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>{leagueType === 'bracket' ? 'Per entry' : `Total entries (${entries} × $${effectiveBuyIn})`}</span>
                   <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.text }}>${totalPool.toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -731,7 +742,13 @@ export default function CreateLeaguePage() {
             <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 18, letterSpacing: 1, color: C.text, textTransform: 'uppercase', marginBottom: 24 }}>Review & Create</div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-              {([
+              {(leagueType === 'bracket' ? [
+                ['League Name', leagueName],
+                ['Type', '🏆 Bracket'],
+                ['Entry Fee', effectiveBuyIn === 0 ? 'Free' : `$${effectiveBuyIn.toFixed(2)}`],
+                ['Entries', 'Unlimited'],
+                ['Your Name', teamName],
+              ] : [
                 ['League Name', leagueName],
                 ['Entry Fee', effectiveBuyIn === 0 ? 'Free' : `$${effectiveBuyIn.toFixed(2)}`],
                 ['Entries', String(entries)],
@@ -873,7 +890,7 @@ export default function CreateLeaguePage() {
                   style={{ flex: 1, padding: '12px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 12, letterSpacing: 1, color: C.sub }}
                 >Cancel</button>
                 <button
-                  onClick={() => { if (!agreementAccepted) return; setShowCommissionerAgreement(false); setStep(2); }}
+                  onClick={() => { if (!agreementAccepted) return; setShowCommissionerAgreement(false); setStep(leagueType === 'bracket' ? 3 : 2); }}
                   disabled={!agreementAccepted}
                   style={{ flex: 2, padding: '12px', background: agreementAccepted ? C.gold : C.surf3, border: 'none', borderRadius: 8, cursor: agreementAccepted ? 'pointer' : 'not-allowed', fontFamily: 'Anton, sans-serif', fontSize: 13, letterSpacing: 2, textTransform: 'uppercase', color: agreementAccepted ? C.bg : C.muted, transition: 'all .15s' }}
                 >I Agree — Continue</button>
@@ -917,7 +934,11 @@ export default function CreateLeaguePage() {
         {/* ── Nav Buttons ──────────────────────────────────────────────────── */}
         <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between' }}>
           <button
-            onClick={() => step > 1 ? setStep(s => s - 1) : router.push('/my-leagues')}
+            onClick={() => {
+              if (step === 3 && leagueType === 'bracket') setStep(1);
+              else if (step > 1) setStep(s => s - 1);
+              else router.push('/my-leagues');
+            }}
             style={{ padding: '13px 28px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 10, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 12, letterSpacing: 2, color: C.sub, textTransform: 'uppercase' }}
           >
             {step > 1 ? '← Back' : 'Cancel'}
@@ -926,8 +947,10 @@ export default function CreateLeaguePage() {
           {step < 4 ? (
             <button
               onClick={() => {
-                if (step === 1 && buyIn > 0 && !agreementAccepted) {
+                if (step === 1 && effectiveBuyIn > 0 && !agreementAccepted) {
                   setShowCommissionerAgreement(true);
+                } else if (step === 1 && leagueType === 'bracket') {
+                  setStep(3);
                 } else if (step === 2 && schools.size > 0 && !hasEnoughSchools) {
                   setShowSchoolWarningModal(true);
                 } else {
