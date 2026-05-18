@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase-browser';
 import { WalletPanel } from '@/components/wallet/WalletPanel';
+import AgeVerificationModal from '@/components/compliance/AgeVerificationModal';
+import TermsAcceptanceModal from '@/components/compliance/TermsAcceptanceModal';
 
 const IntroAnimation = dynamic(() => import('@/components/IntroAnimation'), { ssr: false });
 
@@ -33,6 +35,8 @@ export default function HomePage() {
   const [walletBalance, setWalletBalance] = useState(0);
   const [showIntro, setShowIntro] = useState(false);
   const [introChecked, setIntroChecked] = useState(false);
+  const [showAgeModal, setShowAgeModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
 
   useEffect(() => {
     try {
@@ -55,18 +59,18 @@ export default function HomePage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        setView('dashboard');
         loadLeagues(session.user.id);
         fetch('/api/wallet').then(r => r.json()).then(d => {
           setWalletBalance(d.wallet?.available ?? d.wallet?.balance ?? 0);
         }).catch(() => {});
+        checkCompliance();
       }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setUser(session.user);
-        setView('dashboard');
         loadLeagues(session.user.id);
+        checkCompliance();
       } else {
         setUser(null);
         setView('landing');
@@ -74,6 +78,16 @@ export default function HomePage() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  async function checkCompliance() {
+    const [ageRes, termsRes] = await Promise.all([
+      fetch('/api/compliance/verify-age').then(r => r.json()).catch(() => ({ verified: false })),
+      fetch('/api/compliance/accept-terms').then(r => r.json()).catch(() => ({ accepted: false })),
+    ]);
+    if (!ageRes.verified) { setShowAgeModal(true); return; }
+    if (!termsRes.accepted) { setShowTermsModal(true); return; }
+    setView('dashboard');
+  }
 
   async function loadLeagues(userId: string) {
     const { data } = await supabase
@@ -322,6 +336,20 @@ export default function HomePage() {
       {/* WALLET */}
       {walletOpen && <WalletPanel onClose={() => setWalletOpen(false)} />}
     </div>
+
+    {/* COMPLIANCE MODALS */}
+    {showAgeModal && (
+      <AgeVerificationModal
+        onVerified={() => { setShowAgeModal(false); setShowTermsModal(true); }}
+        onDecline={() => { supabase.auth.signOut(); setShowAgeModal(false); }}
+      />
+    )}
+    {showTermsModal && (
+      <TermsAcceptanceModal
+        onAccepted={() => { setShowTermsModal(false); setView('dashboard'); }}
+        onDecline={() => { supabase.auth.signOut(); setShowTermsModal(false); }}
+      />
+    )}
     </>
   );
 }
