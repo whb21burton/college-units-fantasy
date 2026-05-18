@@ -33,8 +33,22 @@ export async function DELETE(
     }
 
     // Delete in dependency order
+    // 1. ledger_entries linked to transactions for this league
+    const { data: leagueTxs } = await admin.from('transactions').select('id').eq('league_id', params.id);
+    if (leagueTxs?.length) {
+      await admin.from('ledger_entries').delete().in('transaction_id', leagueTxs.map(t => t.id));
+    }
+
+    // 2. transactions
+    await admin.from('transactions').delete().eq('league_id', params.id);
+
+    // 3. draft_picks
     await admin.from('draft_picks').delete().eq('league_id', params.id);
+
+    // 4. league_members
     await admin.from('league_members').delete().eq('league_id', params.id);
+
+    // 5. leagues (last)
     const { error } = await admin.from('leagues').delete().eq('id', params.id);
     if (error) {
       console.error('[DELETE league] error:', error.message);
