@@ -18,11 +18,22 @@ const SPORTS = [
 export default function BracketsPage() {
   const router  = useRouter()
   const supabase = createClientComponentClient()
-  const [sport,    setSport]    = useState('football')
-  const [contests, setContests] = useState<any[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [userId,   setUserId]   = useState<string | null>(null)
-  const [balance,  setBalance]  = useState(0)
+  const [sport,          setSport]          = useState('football')
+  const [contests,       setContests]       = useState<any[]>([])
+  const [loading,        setLoading]        = useState(true)
+  const [userId,         setUserId]         = useState<string | null>(null)
+  const [balance,        setBalance]        = useState(0)
+  const [myEntryCounts,  setMyEntryCounts]  = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'active_bracket_sport')
+      .single()
+      .then(({ data }) => { if (data?.value) setSport(data.value as any) })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -47,6 +58,24 @@ export default function BracketsPage() {
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sport])
+
+  useEffect(() => {
+    if (!userId || contests.length === 0) return
+    const ids = contests.map(c => c.id)
+    supabase
+      .from('user_bracket_entries')
+      .select('contest_id')
+      .eq('user_id', userId)
+      .in('contest_id', ids)
+      .then(({ data }) => {
+        const counts: Record<string, number> = {}
+        for (const row of data ?? []) {
+          counts[row.contest_id] = (counts[row.contest_id] ?? 0) + 1
+        }
+        setMyEntryCounts(counts)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, contests])
 
   const activeSport = SPORTS.find(s => s.key === sport)!
 
@@ -160,10 +189,36 @@ export default function BracketsPage() {
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, marginBottom: 4 }}>
                     {contest.name}
                   </div>
-                  <div style={{ display: 'flex', gap: 16, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>
-                    <span>🏆 Prize: <strong style={{ color: C.gold }}>${((contest.prize_pool_cents ?? 0) / 100).toFixed(0)}</strong></span>
-                    <span>👥 Entries: <strong style={{ color: C.text }}>{contest.entry_count ?? 0}/{contest.max_entries ?? '∞'}</strong></span>
-                    <span>💰 Entry: <strong style={{ color: C.text }}>{contest.entry_fee_cents === 0 ? 'Free' : `$${(contest.entry_fee_cents / 100).toFixed(2)}`}</strong></span>
+                  {contest.settings?.description && (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 8 }}>
+                      {contest.settings.description}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                    <div style={{ background: C.surf3, borderRadius: 6, padding: '4px 10px' }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>Your Entries</div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>
+                        {myEntryCounts[contest.id] ?? 0}/{contest.settings?.max_per_account ?? 1}
+                      </div>
+                    </div>
+                    <div style={{ background: C.surf3, borderRadius: 6, padding: '4px 10px' }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>Entry Fee</div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>
+                        {contest.entry_fee_cents === 0 ? 'FREE' : `$${(contest.entry_fee_cents / 100).toFixed(2)}`}
+                      </div>
+                    </div>
+                    <div style={{ background: C.surf3, borderRadius: 6, padding: '4px 10px' }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>Total Prizes</div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.green }}>
+                        ${((contest.prize_pool_cents ?? 0) / 100).toFixed(0)}
+                      </div>
+                    </div>
+                    <div style={{ background: C.surf3, borderRadius: 6, padding: '4px 10px' }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>Entries</div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>
+                        {contest.entry_count ?? 0}{contest.max_entries ? `/${contest.max_entries}` : ''}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>

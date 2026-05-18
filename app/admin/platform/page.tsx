@@ -249,7 +249,9 @@ function WeeklyPickemCreator() {
 
 function PublicBracketCreator() {
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
   const [sport, setSport] = useState<'football' | 'basketball' | 'baseball'>('baseball')
+  const [activeSport, setActiveSport] = useState<'football' | 'basketball' | 'baseball' | null>(null)
   const [entryFeeCents, setEntryFeeCents] = useState(0)
   const [maxAccounts, setMaxAccounts] = useState<number | null>(null)
   const [maxPerAccount, setMaxPerAccount] = useState(1)
@@ -279,6 +281,7 @@ function PublicBracketCreator() {
           settings: {
             max_per_account: maxPerAccount,
             payout_structure: payoutStructure,
+            description,
           },
           created_by: user?.id,
         })
@@ -288,6 +291,13 @@ function PublicBracketCreator() {
         return
       }
       results.push(contestName)
+    }
+    if (activeSport) {
+      await supabase.from('platform_settings').upsert({
+        key: 'active_bracket_sport',
+        value: activeSport,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'key' })
     }
     setSubmitting(false)
     setSuccess(`✓ ${results.length} bracket contest${results.length > 1 ? 's' : ''} created and live!`)
@@ -300,22 +310,59 @@ function PublicBracketCreator() {
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.green, textTransform: 'uppercase', marginBottom: 4 }}>Public Bracket</div>
       <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 20 }}>🏆 Create Bracket Contest</div>
 
-      <label style={labelStyle}>Sport</label>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {([['football', '🏈'], ['basketball', '🏀'], ['baseball', '⚾']] as const).map(([s, icon]) => (
-          <button key={s} onClick={() => setSport(s)}
-            style={{ flex: 1, padding: '10px 4px', border: `2px solid ${sport === s ? C.gold : C.surf3}`, borderRadius: 8, cursor: 'pointer', background: sport === s ? 'rgba(245,166,35,.1)' : C.surf2, color: sport === s ? C.gold : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center' }}>
-            <div style={{ fontSize: 18, marginBottom: 2 }}>{icon}</div>
-            <div style={{ textTransform: 'capitalize' }}>{s}</div>
-          </button>
-        ))}
+      <label style={{ ...labelStyle, marginBottom: 6 }}>
+        Sport (click to set active — users will only see this sport's brackets)
+      </label>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        {([['football', '🏈'], ['basketball', '🏀'], ['baseball', '⚾']] as const).map(([s, icon]) => {
+          const isActive = activeSport === s
+          return (
+            <button key={s} onClick={() => setSport(s)}
+              style={{
+                flex: 1, padding: '12px 4px',
+                border: `2px solid ${isActive ? C.green : sport === s ? C.gold : C.surf3}`,
+                borderRadius: 8, cursor: 'pointer',
+                background: isActive ? 'rgba(21,198,120,.12)' : sport === s ? 'rgba(245,166,35,.1)' : C.surf2,
+                color: isActive ? C.green : sport === s ? C.gold : C.sub,
+                fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center' as const,
+                transition: 'all .15s',
+              }}>
+              <div style={{ fontSize: 20, marginBottom: 2 }}>{icon}</div>
+              <div style={{ textTransform: 'capitalize' as const }}>{s}</div>
+              {isActive && <div style={{ fontSize: 8, letterSpacing: 1, marginTop: 2 }}>● ACTIVE</div>}
+            </button>
+          )
+        })}
       </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button onClick={() => setActiveSport(sport)}
+          style={{ flex: 1, padding: '8px', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.green }}>
+          ✓ Set {sport} as Active Sport
+        </button>
+        {activeSport && (
+          <button onClick={() => setActiveSport(null)}
+            style={{ padding: '8px 12px', background: 'rgba(240,58,90,.08)', border: '1px solid rgba(240,58,90,.2)', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red }}>
+            Clear
+          </button>
+        )}
+      </div>
+      {activeSport && (
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, marginBottom: 12 }}>
+          ✓ Users will see <strong>{activeSport}</strong> brackets by default on the public brackets page
+        </div>
+      )}
 
       <label style={labelStyle}>Contest Name</label>
       <input value={name} onChange={e => setName(e.target.value)}
         placeholder={`e.g. 2025 ${sport.charAt(0).toUpperCase() + sport.slice(1)} Bracket`}
         maxLength={60}
         style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13, marginBottom: 16, boxSizing: 'border-box', outline: 'none' }} />
+
+      <label style={labelStyle}>Contest Description (optional)</label>
+      <input value={description} onChange={e => setDescription(e.target.value)}
+        placeholder="e.g. Pick all 27 games in the 2025 CWS bracket"
+        maxLength={100}
+        style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, marginBottom: 16, boxSizing: 'border-box' as const }} />
 
       <label style={labelStyle}>Entry Fee</label>
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
