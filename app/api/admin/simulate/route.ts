@@ -58,13 +58,34 @@ export async function POST(req: Request) {
 
     const botId = newUser.user.id
 
-    const { data: wallet } = await admin.from('wallets').insert({ user_id: botId }).select('id').single()
-    if (!wallet) { errors.push(`Wallet failed for bot ${i}`); continue }
+    // Wait for create_wallet_for_new_user trigger to fire
+    await new Promise(resolve => setTimeout(resolve, 500))
 
-    const { data: accounts } = await admin.from('ledger_accounts').insert([
-      { name: `user_available_${botId}`, type: 'user_available', wallet_id: wallet.id, description: 'Bot available balance' },
-      { name: `user_pending_${botId}`,   type: 'user_pending',   wallet_id: wallet.id, description: 'Bot pending balance'   },
-    ]).select('id, type')
+    // Fetch wallet created by trigger, or create via upsert if trigger didn't run
+    let { data: wallet } = await admin.from('wallets').select('id').eq('user_id', botId).single()
+    if (!wallet) {
+      const { data: upserted, error: walletError } = await admin
+        .from('wallets')
+        .upsert({ user_id: botId }, { onConflict: 'user_id' })
+        .select('id')
+        .single()
+      if (walletError) { errors.push(`Wallet error bot ${i}: ${walletError.message} (code: ${walletError.code})`); continue }
+      wallet = upserted
+    }
+    if (!wallet) { errors.push(`Wallet failed for bot ${i}: could not create or find wallet`); continue }
+
+    // Fetch ledger accounts created by trigger, or upsert if missing
+    let { data: accounts } = await admin.from('ledger_accounts').select('id, type').eq('wallet_id', wallet.id)
+    if (!accounts || accounts.length < 2) {
+      const { data: newAccounts } = await admin
+        .from('ledger_accounts')
+        .upsert([
+          { name: `user_available_${botId}`, type: 'user_available', wallet_id: wallet.id, description: 'Bot available balance' },
+          { name: `user_pending_${botId}`,   type: 'user_pending',   wallet_id: wallet.id, description: 'Bot pending balance'   },
+        ], { onConflict: 'name' })
+        .select('id, type')
+      accounts = newAccounts
+    }
 
     const availAcct   = accounts?.find(a => a.type === 'user_available')
     const pendingAcct = accounts?.find(a => a.type === 'user_pending')
