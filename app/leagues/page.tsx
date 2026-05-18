@@ -834,11 +834,12 @@ function PublicLeaguesContent() {
     setDeleting(league.id);
     try {
       const res = await fetch(`/api/leagues/${league.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setLeagues(prev => prev.filter(l => l.id !== league.id));
+        if (data.refunded > 0) alert(data.message);
       } else {
-        const d = await res.json().catch(() => ({}));
-        alert(d.error ?? 'Failed to delete league.');
+        alert('Error: ' + (data.error ?? 'Failed to delete'));
       }
     } finally {
       setDeleting(null);
