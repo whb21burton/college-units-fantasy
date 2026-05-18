@@ -148,14 +148,37 @@ function WeeklyPickemCreator() {
         ))}
       </div>
 
-      <label style={labelStyle}>Max Accounts</label>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {([null, 50, 100, 250, 500, 1000] as (number | null)[]).map(n => (
+      <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+        Max Accounts
+      </label>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' as const }}>
+        {([null, 10, 20, 30, 40, 50, 100] as (number | null)[]).map(n => (
           <button key={n ?? 'unlimited'} onClick={() => setMaxAccounts(n)}
-            style={selBtn(maxAccounts === n)}>
+            style={{ padding: '7px 8px', border: `2px solid ${maxAccounts === n ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: maxAccounts === n ? 'rgba(245,166,35,.1)' : C.surf2, color: maxAccounts === n ? C.gold : C.sub, fontFamily: 'Anton,sans-serif', fontSize: 11, minWidth: 36 }}>
             {n === null ? '∞' : n}
           </button>
         ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Custom:</span>
+        <input
+          type="number"
+          min={1}
+          max={100000}
+          placeholder="Enter amount"
+          value={maxAccounts ?? ''}
+          onChange={e => {
+            const val = parseInt(e.target.value)
+            setMaxAccounts(isNaN(val) || val < 1 ? null : val)
+          }}
+          style={{ width: 100, padding: '6px 8px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none' }}
+        />
+        {maxAccounts !== null && (
+          <button onClick={() => setMaxAccounts(null)}
+            style={{ padding: '5px 8px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
+            Clear
+          </button>
+        )}
       </div>
 
       <label style={labelStyle}>Entries Per Account</label>
@@ -374,14 +397,37 @@ function PublicBracketCreator() {
         ))}
       </div>
 
-      <label style={labelStyle}>Max Accounts</label>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {([null, 50, 100, 250, 500, 1000] as (number | null)[]).map(n => (
+      <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+        Max Accounts
+      </label>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' as const }}>
+        {([null, 10, 20, 30, 40, 50, 100] as (number | null)[]).map(n => (
           <button key={n ?? 'unlimited'} onClick={() => setMaxAccounts(n)}
-            style={selBtn(maxAccounts === n)}>
+            style={{ padding: '7px 8px', border: `2px solid ${maxAccounts === n ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: maxAccounts === n ? 'rgba(245,166,35,.1)' : C.surf2, color: maxAccounts === n ? C.gold : C.sub, fontFamily: 'Anton,sans-serif', fontSize: 11, minWidth: 36 }}>
             {n === null ? '∞' : n}
           </button>
         ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Custom:</span>
+        <input
+          type="number"
+          min={1}
+          max={100000}
+          placeholder="Enter amount"
+          value={maxAccounts ?? ''}
+          onChange={e => {
+            const val = parseInt(e.target.value)
+            setMaxAccounts(isNaN(val) || val < 1 ? null : val)
+          }}
+          style={{ width: 100, padding: '6px 8px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none' }}
+        />
+        {maxAccounts !== null && (
+          <button onClick={() => setMaxAccounts(null)}
+            style={{ padding: '5px 8px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 4, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
+            Clear
+          </button>
+        )}
       </div>
 
       <label style={labelStyle}>Entries Per Account</label>
