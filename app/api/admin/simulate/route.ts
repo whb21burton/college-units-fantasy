@@ -21,10 +21,13 @@ export async function POST(req: Request) {
   let contestName = ''
 
   if (contestType === 'weekly') {
-    const { data: league } = await admin.from('leagues').select('buy_in, name, settings').eq('id', contestId).single()
+    const { data: league } = await admin.from('leagues').select('buy_in, name, settings, league_size, league_type').eq('id', contestId).single()
     entryFeeCents = Math.round((league?.buy_in ?? 0) * 100)
-    payoutStructure = league?.settings?.payout_structure ?? 'winner_take_all'
+    const settings = league?.settings as any
+    payoutStructure = settings?.payout_structure ?? 'winner_take_all'
     contestName = league?.name ?? 'Weekly Contest'
+    console.log('[simulate] league settings:', JSON.stringify(settings))
+    console.log('[simulate] payoutStructure:', payoutStructure)
   } else {
     const { data: contest } = await admin.from('bracket_contests').select('entry_fee_cents, name, settings').eq('id', contestId).single()
     entryFeeCents = contest?.entry_fee_cents ?? 0
@@ -163,12 +166,17 @@ export async function POST(req: Request) {
       payoutStructure === 'top2' ? [{ rank: 1, pct: 0.70 }, { rank: 2, pct: 0.30 }] :
                                    [{ rank: 1, pct: 1.00 }]
 
-    const winnerIds = new Set<string>()
-
+    // Build winner map: rank → bot (consistent index for both payout and loser exclusion)
+    const winnerMap = new Map<number, typeof ranked[number]>()
     for (const split of splits) {
       const winner = ranked[split.rank - 1]
-      if (!winner) continue
-      winnerIds.add(winner.id)
+      if (winner) winnerMap.set(split.rank, winner)
+    }
+
+    // Pay out winners
+    for (const rank of Array.from(winnerMap.keys())) {
+      const winner = winnerMap.get(rank)!
+      const split = splits.find(s => s.rank === rank)!
       const payoutCents = Math.floor(netPool * split.pct)
 
       const { data: payoutTx } = await admin.from('transactions').insert({
@@ -177,8 +185,8 @@ export async function POST(req: Request) {
         status: 'completed',
         amount_cents: payoutCents,
         league_id: contestType === 'weekly' ? contestId : null,
-        idempotency_key: `sim_payout_${winner.id}_${contestId}_rank${split.rank}`,
-        description: `Simulation payout - Rank #${split.rank}: ${contestName}`,
+        idempotency_key: `sim_payout_${winner.id}_${contestId}_rank${rank}`,
+        description: `Simulation payout - Rank #${rank}: ${contestName}`,
         completed_at: new Date().toISOString(),
       }).select('id').single()
 
@@ -189,8 +197,10 @@ export async function POST(req: Request) {
         ])
       }
 
-      payouts.push({ rank: split.rank, botEmail: winner.email, payoutCents, payoutDollars: (payoutCents / 100).toFixed(2) })
+      payouts.push({ rank, botEmail: winner.email, payoutCents, payoutDollars: (payoutCents / 100).toFixed(2) })
     }
+
+    const winnerIds = new Set(Array.from(winnerMap.values()).map(w => w.id))
 
     // Settle losers — debit pending (funds go to rake)
     for (const loser of ranked.filter(b => !winnerIds.has(b.id))) {

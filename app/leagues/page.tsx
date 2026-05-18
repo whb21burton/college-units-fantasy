@@ -139,6 +139,9 @@ function isGPP(l: League): boolean {
 }
 
 function totalPrize(l: League): number {
+  if (l.league_type === 'weekly') {
+    return (l.buy_in ?? 0) * (l.member_count ?? 0) * 0.95;
+  }
   return (l.buy_in ?? 0) * (l.league_size ?? 0);
 }
 
@@ -168,7 +171,7 @@ function autoSummary(l: League, members: Member[]): string {
   const cf = styleLabel(l.conference_filter ?? '');
   const confStr = cf === 'All D1' ? 'All D1' : `${cf} Only`;
   const type = l.league_type === 'weekly' ? 'weekly DFS' : 'season';
-  const size = l.league_size;
+  const size = l.league_type === 'weekly' ? (l.member_count ?? members.length) : l.league_size;
   const prize = totalPrize(l);
   const po = payouts(l);
   const feeStr = l.buy_in === 0 ? 'free to enter' : `$${l.buy_in.toFixed(2)} entry fee`;
