@@ -1034,8 +1034,17 @@ function PublicLeaguesContent() {
                     </div>
 
                     <div style={{ padding: '12px 8px', textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                      {gpp && prize > 0 && <span style={{ background: C.green, color: '#04150b', fontFamily: 'Anton,sans-serif', fontSize: 9, borderRadius: 3, padding: '1px 4px' }}>G</span>}
-                      <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: prize > 0 ? C.green : C.muted }}>{prize > 0 ? `$${prize.toFixed(2)}` : '—'}</span>
+                      {(() => {
+                        const displayPrize = league.league_type === 'weekly'
+                          ? (league.buy_in ?? 0) * (league.member_count ?? 0) * 0.95
+                          : prize;
+                        return (
+                          <>
+                            {gpp && displayPrize > 0 && <span style={{ background: C.green, color: '#04150b', fontFamily: 'Anton,sans-serif', fontSize: 9, borderRadius: 3, padding: '1px 4px' }}>G</span>}
+                            <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: displayPrize > 0 ? C.green : C.muted }}>{displayPrize > 0 ? `$${displayPrize.toFixed(2)}` : '—'}</span>
+                          </>
+                        );
+                      })()}
                     </div>
 
                     <div style={{ padding: '12px 8px', textAlign: 'right' }}>
@@ -1043,7 +1052,9 @@ function PublicLeaguesContent() {
                     </div>
 
                     <div style={{ padding: '12px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {tick > -1 && formatStartTime(league)}
+                      {league.league_type === 'weekly'
+                        ? <span style={{ lineHeight: 1.3, display: 'inline-block' }}>When first<br />game starts</span>
+                        : tick > -1 && formatStartTime(league)}
                     </div>
 
                     <div style={{ padding: '10px 8px 10px 4px', textAlign: 'right' }}>

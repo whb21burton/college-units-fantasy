@@ -172,66 +172,57 @@ export default function BracketsPage() {
             </div>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {contests.map(contest => (
-              <div
-                key={contest.id}
-                style={{
-                  background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12,
-                  padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20,
-                  cursor: 'pointer', transition: 'border-color .15s',
-                }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = C.gold + '66'}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = C.surf3}
-                onClick={() => router.push(`/brackets/${contest.id}`)}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, marginBottom: 4 }}>
-                    {contest.name}
+          <div>
+            {/* Header row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '8px 16px', borderBottom: `1px solid ${C.surf3}`, marginBottom: 4 }}>
+              {['Contest', 'Your Entries', 'Entry Fee', 'Total Prizes', 'Entries', 'Live/Start', ''].map((h, i) => (
+                <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{h}</div>
+              ))}
+            </div>
+            {contests.map(contest => {
+              const myCount    = myEntryCounts[contest.id] ?? 0
+              const maxPerAcct = contest.settings?.max_per_account ?? 1
+              const entryFee   = contest.entry_fee_cents / 100
+              const totalEntries = contest.entry_count ?? 0
+              const totalPrize = (entryFee * totalEntries * 0.95).toFixed(2)
+              const sportIcon  = contest.sport === 'football' ? '🏈' : contest.sport === 'basketball' ? '🏀' : '⚾'
+              return (
+                <div key={contest.id}
+                  style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '14px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 6, alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600 }}>{contest.name}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
+                      {sportIcon} {contest.sport.charAt(0).toUpperCase() + contest.sport.slice(1)} · Bracket
+                    </div>
+                    {contest.settings?.description && (
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, marginTop: 2 }}>{contest.settings.description}</div>
+                    )}
                   </div>
-                  {contest.settings?.description && (
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 8 }}>
-                      {contest.settings.description}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-                    <div style={{ background: C.surf3, borderRadius: 6, padding: '4px 10px' }}>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>Your Entries</div>
-                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>
-                        {myEntryCounts[contest.id] ?? 0}/{contest.settings?.max_per_account ?? 1}
-                      </div>
-                    </div>
-                    <div style={{ background: C.surf3, borderRadius: 6, padding: '4px 10px' }}>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>Entry Fee</div>
-                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>
-                        {contest.entry_fee_cents === 0 ? 'FREE' : `$${(contest.entry_fee_cents / 100).toFixed(2)}`}
-                      </div>
-                    </div>
-                    <div style={{ background: C.surf3, borderRadius: 6, padding: '4px 10px' }}>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>Total Prizes</div>
-                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.green }}>
-                        ${((contest.prize_pool_cents ?? 0) / 100).toFixed(0)}
-                      </div>
-                    </div>
-                    <div style={{ background: C.surf3, borderRadius: 6, padding: '4px 10px' }}>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, textTransform: 'uppercase' }}>Entries</div>
-                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>
-                        {contest.entry_count ?? 0}{contest.max_entries ? `/${contest.max_entries}` : ''}
-                      </div>
-                    </div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: myCount > 0 ? C.gold : C.muted }}>
+                    {myCount} / {maxPerAcct === 999 ? '∞' : maxPerAcct}
                   </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
+                    {contest.entry_fee_cents === 0
+                      ? <span style={{ color: C.green, fontFamily: 'Anton,sans-serif', fontSize: 13 }}>FREE</span>
+                      : <span>🪙 ${entryFee.toFixed(2)}</span>}
+                  </div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>
+                    ${totalPrize}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
+                    {totalEntries}{contest.max_entries ? `/${contest.max_entries}` : '/∞'}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, lineHeight: 1.3 }}>
+                    When first<br />game starts
+                  </div>
+                  <button
+                    onClick={() => router.push(`/brackets/${contest.id}`)}
+                    style={{ padding: '8px 16px', background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: C.bg, whiteSpace: 'nowrap' as const }}>
+                    Enter
+                  </button>
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{
-                    padding: '8px 18px', background: C.gold, borderRadius: 8,
-                    fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2,
-                    color: C.bg, textTransform: 'uppercase',
-                  }}>
-                    Enter →
-                  </div>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
