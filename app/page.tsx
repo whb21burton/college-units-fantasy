@@ -63,14 +63,14 @@ export default function HomePage() {
         fetch('/api/wallet').then(r => r.json()).then(d => {
           setWalletBalance(d.wallet?.available ?? d.wallet?.balance ?? 0);
         }).catch(() => {});
-        checkCompliance();
+        checkCompliance(session.user.id);
       }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setUser(session.user);
         loadLeagues(session.user.id);
-        checkCompliance();
+        checkCompliance(session.user.id);
       } else {
         setUser(null);
         setView('landing');
@@ -79,13 +79,30 @@ export default function HomePage() {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function checkCompliance() {
-    const [ageRes, termsRes] = await Promise.all([
-      fetch('/api/compliance/verify-age').then(r => r.json()).catch(() => ({ verified: false })),
-      fetch('/api/compliance/accept-terms').then(r => r.json()).catch(() => ({ accepted: false })),
-    ]);
-    if (!ageRes.verified) { setShowAgeModal(true); return; }
-    if (!termsRes.accepted) { setShowTermsModal(true); return; }
+  async function checkCompliance(userId: string) {
+    const { data: verification } = await supabase
+      .from('user_verifications')
+      .select('is_age_verified')
+      .eq('user_id', userId)
+      .single();
+
+    if (!verification?.is_age_verified) {
+      setShowAgeModal(true);
+      return;
+    }
+
+    const { data: terms } = await supabase
+      .from('user_terms_acceptance')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('terms_version', '1.0')
+      .single();
+
+    if (!terms) {
+      setShowTermsModal(true);
+      return;
+    }
+
     setView('dashboard');
   }
 
@@ -338,16 +355,16 @@ export default function HomePage() {
     </div>
 
     {/* COMPLIANCE MODALS */}
-    {showAgeModal && (
-      <AgeVerificationModal
-        onVerified={() => { setShowAgeModal(false); setShowTermsModal(true); }}
-        onDecline={() => { supabase.auth.signOut(); setShowAgeModal(false); }}
-      />
-    )}
     {showTermsModal && (
       <TermsAcceptanceModal
-        onAccepted={() => { setShowTermsModal(false); setView('dashboard'); }}
+        onAccepted={() => { setShowTermsModal(false); setShowAgeModal(true); }}
         onDecline={() => { supabase.auth.signOut(); setShowTermsModal(false); }}
+      />
+    )}
+    {showAgeModal && (
+      <AgeVerificationModal
+        onVerified={() => { setShowAgeModal(false); setView('dashboard'); }}
+        onDecline={() => { supabase.auth.signOut(); setShowAgeModal(false); }}
       />
     )}
     </>

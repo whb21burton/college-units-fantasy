@@ -26,21 +26,24 @@ const HIGHLIGHTS = [
 export default function TermsAcceptanceModal({ onAccepted, onDecline }: Props) {
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleAccept() {
     if (!agreed) return;
     setLoading(true);
-
-    const res = await fetch('/api/compliance/accept-terms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (res.ok) {
-      onAccepted();
-    } else {
-      const data = await res.json().catch(() => ({}));
-      console.error('[terms acceptance] error:', data.error);
+    try {
+      const res = await fetch('/api/compliance/accept-terms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ termsVersion: '1.0', privacyVersion: '1.0' }),
+      });
+      if (res.ok) {
+        onAccepted();
+      } else {
+        setError('Failed to save acceptance. Please try again.');
+      }
+    } catch (e) {
+      setError('Network error. Please try again.');
     }
     setLoading(false);
   }
@@ -86,6 +89,12 @@ export default function TermsAcceptanceModal({ onAccepted, onDecline }: Props) {
             I have read and agree to the Terms of Service, Privacy Policy, and Contest Rules. I am 18 or older and located in an eligible state.
           </span>
         </label>
+
+        {error && (
+          <div style={{ background: 'rgba(231,76,60,.1)', border: '1px solid rgba(231,76,60,.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 12, color: C.red, fontSize: 13 }}>
+            {error}
+          </div>
+        )}
 
         <button
           onClick={handleAccept}
