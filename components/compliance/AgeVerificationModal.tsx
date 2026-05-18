@@ -27,7 +27,7 @@ export default function AgeVerificationModal({ onVerified, onDecline }: Props) {
     const res = await fetch('/api/compliance/verify-age', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dob }),
+      body: JSON.stringify({ dateOfBirth: dob }),
     });
     const data = await res.json();
 
