@@ -477,6 +477,173 @@ function PublicBracketCreator() {
   )
 }
 
+function SimulationRunner() {
+  const supabase = createClientComponentClient()
+  const [contestType,      setContestType]      = useState<'weekly' | 'bracket'>('weekly')
+  const [contestId,        setContestId]        = useState('')
+  const [contests,         setContests]         = useState<any[]>([])
+  const [numBots,          setNumBots]          = useState(5)
+  const [simulateResults,  setSimulateResults]  = useState(true)
+  const [running,          setRunning]          = useState(false)
+  const [result,           setResult]           = useState<any>(null)
+  const [error,            setError]            = useState('')
+  const [cleaning,         setCleaning]         = useState(false)
+
+  useEffect(() => {
+    if (contestType === 'weekly') {
+      supabase.from('leagues').select('id, name, buy_in').eq('league_type', 'weekly').eq('is_public', true)
+        .then(({ data }) => { setContests(data ?? []); setContestId(data?.[0]?.id ?? '') })
+    } else {
+      supabase.from('bracket_contests').select('id, name, entry_fee_cents').eq('status', 'open')
+        .then(({ data }) => { setContests(data ?? []); setContestId(data?.[0]?.id ?? '') })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contestType])
+
+  async function runSimulation() {
+    if (!contestId) return
+    setRunning(true)
+    setResult(null)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contestType, contestId, numBots, simulateResults }),
+      })
+      const data = await res.json()
+      if (res.ok) setResult(data)
+      else setError(data.error ?? 'Simulation failed')
+    } catch (e: any) {
+      setError(e.message)
+    }
+    setRunning(false)
+  }
+
+  async function cleanupBots() {
+    if (!confirm('Delete ALL bot simulation accounts? This cannot be undone.')) return
+    setCleaning(true)
+    try {
+      const res = await fetch('/api/admin/cleanup-bots', { method: 'POST' })
+      const data = await res.json()
+      alert(`Cleaned up ${data.deleted} bot account${data.deleted !== 1 ? 's' : ''}${data.errors?.length ? `\n${data.errors.length} error(s)` : ''}`)
+    } catch (e: any) {
+      alert('Cleanup error: ' + e.message)
+    }
+    setCleaning(false)
+  }
+
+  return (
+    <div style={{ background: C.surf, border: `2px solid rgba(240,58,90,.3)`, borderRadius: 12, padding: 24, marginTop: 20 }}>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.red, textTransform: 'uppercase', marginBottom: 4 }}>Admin Only</div>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 20 }}>🤖 Contest Simulator</div>
+
+      <label style={labelStyle}>Contest Type</label>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {(['weekly', 'bracket'] as const).map(t => (
+          <button key={t} onClick={() => setContestType(t)}
+            style={{ flex: 1, padding: '10px', border: `2px solid ${contestType === t ? C.gold : C.surf3}`, borderRadius: 8, cursor: 'pointer', background: contestType === t ? 'rgba(245,166,35,.1)' : C.surf2, color: contestType === t ? C.gold : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, textTransform: 'capitalize' as const }}>
+            {t === 'weekly' ? '⚡ Weekly' : '🏆 Bracket'}
+          </button>
+        ))}
+      </div>
+
+      <label style={labelStyle}>Select Contest</label>
+      <select value={contestId} onChange={e => setContestId(e.target.value)}
+        style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13, marginBottom: 16, outline: 'none' }}>
+        {contests.length === 0 && <option value="">No contests available</option>}
+        {contests.map(c => (
+          <option key={c.id} value={c.id}>
+            {c.name} — {c.buy_in != null && c.buy_in > 0 ? `$${c.buy_in}` : c.entry_fee_cents != null && c.entry_fee_cents > 0 ? `$${(c.entry_fee_cents / 100).toFixed(2)}` : 'Free'}
+          </option>
+        ))}
+      </select>
+
+      <label style={labelStyle}>Number of Bots</label>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+        {[3, 5, 10, 20, 50].map(n => (
+          <button key={n} onClick={() => setNumBots(n)}
+            style={{ flex: 1, padding: '7px 4px', border: `2px solid ${numBots === n ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: numBots === n ? 'rgba(245,166,35,.1)' : C.surf2, color: numBots === n ? C.gold : C.sub, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+            {n}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Custom:</span>
+        <input type="number" min={1} max={1000} value={numBots}
+          onChange={e => setNumBots(Math.max(1, parseInt(e.target.value) || 1))}
+          style={{ width: 80, padding: '6px 8px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12 }} />
+      </div>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 20 }}>
+        <input type="checkbox" checked={simulateResults} onChange={e => setSimulateResults(e.target.checked)}
+          style={{ accentColor: C.gold, width: 16, height: 16 }} />
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
+          Simulate results &amp; pay out winners
+        </span>
+      </label>
+
+      {error && (
+        <div style={{ padding: '10px 12px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, marginBottom: 12 }}>
+          {error}
+        </div>
+      )}
+
+      {result && (
+        <div style={{ padding: '14px 16px', background: 'rgba(21,198,120,.08)', border: '1px solid rgba(21,198,120,.2)', borderRadius: 8, marginBottom: 16 }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.green, marginBottom: 10 }}>
+            ✓ Simulation Complete — {result.contestName}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+            {([
+              ['Bots Created',    result.botsCreated],
+              ['Entries',        result.entriesCreated],
+              ['Total Pool',     `$${(result.totalPoolCents / 100).toFixed(2)}`],
+              ['Net Prize Pool', `$${(result.netPoolCents / 100).toFixed(2)}`],
+              ['Platform Rake',  `$${(result.rakeCents / 100).toFixed(2)}`],
+            ] as [string, any][]).map(([label, value]) => (
+              <div key={label} style={{ background: C.surf2, borderRadius: 6, padding: '8px 10px' }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' as const }}>{label}</div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.gold }}>{value}</div>
+              </div>
+            ))}
+          </div>
+          {result.payouts.length > 0 && (
+            <>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' as const, marginBottom: 6 }}>Payouts</div>
+              {result.payouts.map((p: any) => (
+                <div key={p.rank} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 4 }}>
+                  <span>🏆 Rank #{p.rank} — {p.botEmail}</span>
+                  <span style={{ color: C.gold }}>${p.payoutDollars}</span>
+                </div>
+              ))}
+            </>
+          )}
+          {result.errors?.length > 0 && (
+            <div style={{ marginTop: 8, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red }}>
+              {result.errors.length} error(s): {result.errors[0]}
+            </div>
+          )}
+        </div>
+      )}
+
+      <button onClick={runSimulation} disabled={!contestId || running}
+        style={{ width: '100%', padding: '13px', background: contestId && !running ? C.red : C.surf3, border: 'none', borderRadius: 8, cursor: contestId && !running ? 'pointer' : 'not-allowed', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: contestId && !running ? '#fff' : C.muted, textTransform: 'uppercase' as const, marginBottom: 12 }}>
+        {running ? '⏳ Running Simulation…' : '🤖 Run Simulation'}
+      </button>
+
+      <button onClick={cleanupBots} disabled={cleaning}
+        style={{ width: '100%', padding: '10px', background: 'none', border: `1px solid rgba(240,58,90,.25)`, borderRadius: 8, cursor: cleaning ? 'not-allowed' : 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const }}>
+        {cleaning ? 'Cleaning up…' : '🗑️ Delete All Bot Accounts'}
+      </button>
+
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 8, textAlign: 'center' as const }}>
+        Bot accounts are real Supabase users. Use cleanup tool after testing.
+      </div>
+    </div>
+  )
+}
+
 export default function PlatformManagerPage() {
   const router = useRouter()
   const supabase = createClientComponentClient()
@@ -508,6 +675,7 @@ export default function PlatformManagerPage() {
           <WeeklyPickemCreator />
           <PublicBracketCreator />
         </div>
+        <SimulationRunner />
       </div>
     </div>
   )
