@@ -20,17 +20,16 @@ export async function DELETE(
 
     const { data: league } = await admin
       .from('leagues')
-      .select('created_by, name')
+      .select('commissioner_id, name')
       .eq('id', params.id)
       .single();
 
-    if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 });
-
     const isAdmin = user.email === ADMIN_EMAIL;
-    console.log('[DELETE league] id:', params.id, 'user:', user.id, 'created_by:', league.created_by, 'isAdmin:', isAdmin);
+    if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 });
+    console.log('[DELETE league] id:', params.id, 'user:', user.id, 'commissioner_id:', league.commissioner_id, 'isAdmin:', isAdmin);
 
-    if (league.created_by !== user.id && !isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (league.commissioner_id !== user.id && !isAdmin) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
     // Delete in dependency order
