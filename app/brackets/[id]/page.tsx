@@ -360,8 +360,9 @@ export default function BracketPage() {
   const [loading,      setLoading]      = useState(true)
   const [submitting,   setSubmitting]   = useState(false)
   const [msg,          setMsg]          = useState<{ ok: boolean; text: string } | null>(null)
-  const [hasPaid,      setHasPaid]      = useState<boolean>(false)
-  const [walletBalance,setWalletBalance]= useState<number | null>(null)
+  const [hasPaid,        setHasPaid]        = useState<boolean>(false)
+  const [walletBalance,  setWalletBalance]  = useState<number | null>(null)
+  const [showWalletModal,setShowWalletModal]= useState(false)
   const [chatMessages, setChatMessages] = useState<any[]>([])
   const [chatInput,    setChatInput]    = useState('')
   const chatEndRef = useRef<HTMLDivElement>(null)
@@ -397,7 +398,10 @@ export default function BracketPage() {
     setLoading(false)
   }, [supabase, contestId])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    console.log('[bracket] contestId:', contestId)
+    loadData()
+  }, [loadData])
 
   // Chat: subscribe to bracket_messages
   useEffect(() => {
@@ -695,21 +699,20 @@ export default function BracketPage() {
             ? <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.green }}>✓ BRACKET SUBMITTED</span>
             : msg && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: msg.ok ? C.green : C.red }}>{msg.text}</span>
           }
-          {!isLocked && !entry?.is_submitted && (
+          {contest === null ? (
+            <div style={{ color: '#7a90aa', fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>Loading...</div>
+          ) : !isLocked && !entry?.is_submitted && (
             !hasPaid && entryFeeCents > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>
+                <div
+                  onClick={() => setShowWalletModal(true)}
+                  style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, cursor: 'pointer' }}
+                >
                   Wallet: {walletBalance !== null ? `$${(walletBalance / 100).toFixed(2)}` : '—'}
                 </div>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red }}>
                   Entry fee: ${(entryFeeCents / 100).toFixed(2)}
                 </div>
-                <button
-                  onClick={() => window.open('/wallet', '_blank')}
-                  style={{ padding: '8px 18px', borderRadius: 6, border: 'none', cursor: 'pointer', background: C.gold, color: C.bg, fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase' }}
-                >
-                  Add Funds →
-                </button>
               </div>
             ) : (
               <button
@@ -861,6 +864,37 @@ export default function BracketPage() {
           .bracket-mobile  { display: block !important; }
         }
       `}</style>
+
+      {/* ── Wallet modal ── */}
+      {showWalletModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowWalletModal(false)}
+        >
+          <div
+            style={{ background: '#0c1422', border: '1px solid #1e2d47', borderRadius: 14, padding: 28, maxWidth: 380, width: '90%' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: '#f5a623', letterSpacing: 1, marginBottom: 16 }}>💰 Your Wallet</div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, color: '#f5a623', marginBottom: 8 }}>
+              ${((walletBalance ?? 0) / 100).toFixed(2)}
+            </div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: '#7a90aa', marginBottom: 20 }}>Available balance</div>
+            <button
+              onClick={() => { setShowWalletModal(false); window.open('/wallet', '_blank') }}
+              style={{ width: '100%', padding: '12px', background: '#f5a623', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: '#070a12' }}
+            >
+              Add Funds (opens in new tab)
+            </button>
+            <button
+              onClick={() => setShowWalletModal(false)}
+              style={{ width: '100%', padding: '10px', background: 'none', border: '1px solid #1e2d47', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: '#7a90aa', marginTop: 8 }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
