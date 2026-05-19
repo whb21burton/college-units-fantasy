@@ -16,212 +16,380 @@ const C = {
   red:   '#f03a5a',
 };
 
-type LeagueEntry = {
+type LeagueData = {
+  id: string;
+  name: string;
+  league_type: string;
+  status: string;
+  buy_in: number;
+  league_size: number;
+  is_public: boolean;
+  week?: number;
+  settings: any;
+  commissioner_id?: string;
   team_name: string;
-  league_id: string;
-  leagues: {
-    id: string;
-    name: string;
-    league_type: string;
-    status: string;
-    buy_in: number;
-    league_size: number;
-    settings: any;
-  } | null;
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  forming:    C.sub,
-  drafting:   C.gold,
-  active:     C.green,
-  completed:  C.muted,
+type Selection =
+  | { type: 'league'; id: string; data: LeagueData }
+  | { type: 'history' }
+  | null;
+
+type HistoryEntry = {
+  league: any;
+  entryFee: number;
+  payout: number;
+  net: number;
+  result: 'won' | 'lost' | 'refunded' | 'free';
 };
 
 export default function MyLeaguesPage() {
   const router = useRouter();
-  const [user,          setUser]          = useState<any>(null);
-  const [entries,       setEntries]       = useState<LeagueEntry[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [tab,           setTab]           = useState<'season' | 'weekly' | 'bracket'>('season');
+  const [user,           setUser]           = useState<any>(null);
+  const [loading,        setLoading]        = useState(true);
+  const [leagues,        setLeagues]        = useState<LeagueData[]>([]);
+  const [selected,       setSelected]       = useState<Selection>(null);
+  const [memberCount,    setMemberCount]    = useState<number | null>(null);
+  const [history,        setHistory]        = useState<HistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user: u } }) => {
       if (!u) { router.push('/'); return; }
       setUser(u);
-      const { data } = await supabase
+      const { data: memberships } = await supabase
         .from('league_members')
-        .select('team_name, league_id, leagues(id, name, league_type, status, buy_in, league_size, settings)')
+        .select(`
+          team_name,
+          leagues (
+            id, name, league_type, status, buy_in,
+            league_size, is_public, week, settings,
+            commissioner_id
+          )
+        `)
         .eq('user_id', u.id);
-      setEntries((data ?? []) as unknown as LeagueEntry[]);
+      const validLeagues = (memberships ?? [])
+        .map((m: any) => m.leagues ? { ...m.leagues, team_name: m.team_name } : null)
+        .filter(Boolean) as LeagueData[];
+      setLeagues(validLeagues);
       setLoading(false);
     });
   }, [router]);
 
+  const selectedLeagueId = selected?.type === 'league' ? selected.id : null;
+
+  useEffect(() => {
+    if (!selectedLeagueId) { setMemberCount(null); return; }
+    supabase
+      .from('league_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('league_id', selectedLeagueId)
+      .then(({ count }) => setMemberCount(count));
+  }, [selectedLeagueId]);
+
+  useEffect(() => {
+    if (selected?.type !== 'history' || !user) return;
+    setHistoryLoading(true);
+    async function fetchHistory() {
+      const { data: memberships } = await supabase
+        .from('league_members')
+        .select('league_id, team_name, leagues(id, name, status, buy_in, league_type, is_public, settings)')
+        .eq('user_id', user.id);
+      const completed = (memberships ?? []).filter((m: any) => {
+        const s = m.leagues?.status;
+        return s === 'completed' || s === 'cancelled';
+      });
+      const leagueIds = completed.map((m: any) => m.league_id).filter(Boolean);
+      let payouts: any[] = [];
+      if (leagueIds.length > 0) {
+        const { data: txData } = await supabase
+          .from('transactions')
+          .select('league_id, type, amount_cents, status')
+          .eq('user_id', user.id)
+          .in('type', ['contest_settlement', 'winnings', 'refund'])
+          .eq('status', 'completed')
+          .in('league_id', leagueIds);
+        payouts = txData ?? [];
+      }
+      const entries: HistoryEntry[] = completed
+        .filter((m: any) => m.leagues !== null)
+        .map((m: any) => {
+          const lg = m.leagues;
+          const entryFee = Math.round((lg?.buy_in ?? 0) * 100);
+          const payoutTx = payouts.find((p: any) => p.league_id === m.league_id);
+          const payoutAmount = payoutTx?.amount_cents ?? 0;
+          const net = payoutAmount - entryFee;
+          let result: HistoryEntry['result'];
+          if (entryFee === 0) result = 'free';
+          else if (lg?.status === 'cancelled') result = 'refunded';
+          else if (payoutAmount > 0) result = 'won';
+          else result = 'lost';
+          return { league: lg, entryFee, payout: payoutAmount, net, result };
+        });
+      setHistory(entries);
+      setHistoryLoading(false);
+    }
+    fetchHistory();
+  }, [selected?.type, user?.id]);
+
   const displayName = user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? '…';
-  const initials    = displayName.slice(0, 2).toUpperCase();
 
-  const seasonLeagues  = entries.filter(e => e.leagues?.league_type === 'season');
-  const weeklyLeagues  = entries.filter(e => e.leagues?.league_type === 'weekly');
-  const bracketLeagues = entries.filter(e => e.leagues?.league_type === 'bracket');
-  const shown          = tab === 'season' ? seasonLeagues : tab === 'weekly' ? weeklyLeagues : bracketLeagues;
+  const seasonLeagues  = leagues.filter(l => l.league_type === 'season');
+  const weeklyLeagues  = leagues.filter(l => l.league_type === 'weekly');
+  const bracketLeagues = leagues.filter(l => l.league_type === 'bracket');
 
-  return (
-    <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', fontFamily: 'sans-serif' }}>
-
-      {/* SIDEBAR */}
-      <div style={{ width: 240, flexShrink: 0, background: C.surf, borderRight: `1px solid ${C.surf3}`, display: 'flex', flexDirection: 'column', padding: '24px 0' }}>
-        {/* Avatar */}
-        <div style={{ padding: '0 20px 24px', borderBottom: `1px solid ${C.surf3}` }}>
-          <div style={{ width: 48, height: 48, borderRadius: '50%', background: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton, sans-serif', fontSize: 18, color: C.bg, marginBottom: 10 }}>
-            {initials}
-          </div>
-          <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 16, letterSpacing: 1, color: C.text, textTransform: 'uppercase' }}>
-            {displayName}
-          </div>
-          <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginTop: 2 }}>
-            My Leagues
+  function renderSection(emoji: string, title: string, items: LeagueData[]) {
+    return (
+      <div>
+        <div style={{ padding: '12px 16px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const }}>
+            {emoji} {title}{items.length > 0 ? ` (${items.length})` : ''}
           </div>
         </div>
-
-        {/* Nav */}
-        <div style={{ padding: '16px 0', flex: 1 }}>
-          {([
-            { key: 'season',  label: '🏈 Season Leagues', count: seasonLeagues.length },
-            { key: 'weekly',  label: '⚡ Weekly Leagues',  count: weeklyLeagues.length },
-            { key: 'bracket', label: '🏆 Bracket',         count: bracketLeagues.length },
-          ] as const).map(({ key, label, count }) => (
+        {items.length === 0 ? (
+          <div style={{ padding: '4px 19px 10px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, opacity: 0.5 }}>
+            No leagues
+          </div>
+        ) : items.map(league => {
+          const isActive = selected?.type === 'league' && selected.id === league.id;
+          return (
             <button
-              key={key}
-              onClick={() => setTab(key)}
+              key={league.id}
+              onClick={() => setSelected({ type: 'league', id: league.id, data: league })}
               style={{
-                width: '100%', padding: '12px 20px', background: 'none', border: 'none',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                borderLeft: tab === key ? `3px solid ${C.gold}` : '3px solid transparent',
-                fontFamily: 'Oswald, sans-serif', fontSize: 12, letterSpacing: 1,
-                color: tab === key ? C.gold : C.sub, textTransform: 'uppercase', transition: 'all .12s',
+                width: '100%', padding: '9px 16px',
+                background: isActive ? 'rgba(245,166,35,.1)' : 'none',
+                border: 'none',
+                borderLeft: `3px solid ${isActive ? C.gold : 'transparent'}`,
+                cursor: 'pointer', textAlign: 'left',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               }}
             >
-              <span>{label}</span>
-              {count > 0 && (
-                <span style={{ background: tab === key ? C.gold : C.surf3, color: tab === key ? C.bg : C.sub, borderRadius: 10, padding: '1px 7px', fontSize: 10, fontFamily: 'Oswald, sans-serif' }}>
-                  {count}
-                </span>
-              )}
+              <span style={{
+                fontFamily: 'Oswald,sans-serif', fontSize: 12,
+                color: league.is_public ? C.gold : C.text,
+                letterSpacing: 0.5,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+                maxWidth: 155,
+                display: 'block',
+              }}>
+                {league.name}
+              </span>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, flexShrink: 0, marginLeft: 4 }}>
+                {league.status}
+              </span>
             </button>
-          ))}
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ height: '100vh', background: C.bg, display: 'flex', fontFamily: 'sans-serif', overflow: 'hidden' }}>
+
+      {/* SIDEBAR */}
+      <div style={{
+        width: 260, flexShrink: 0,
+        background: C.surf,
+        borderRight: `1px solid ${C.surf3}`,
+        display: 'flex', flexDirection: 'column',
+        height: '100vh',
+      }}>
+        {/* User avatar */}
+        <div style={{ padding: '20px 16px', borderBottom: `1px solid ${C.surf3}`, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: '50%', background: C.gold,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.bg, flexShrink: 0,
+            }}>
+              {displayName[0]?.toUpperCase() ?? '?'}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                {displayName}
+              </div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>My Leagues</div>
+            </div>
+          </div>
         </div>
 
-        {/* Bottom actions */}
-        <div style={{ padding: '0 20px', borderTop: `1px solid ${C.surf3}`, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Scrollable league list */}
+        <div style={{ flex: 1, overflowY: 'auto' as const }}>
+          {loading ? (
+            <div style={{ padding: '24px 16px', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, letterSpacing: 1 }}>
+              Loading…
+            </div>
+          ) : (
+            <>
+              {renderSection('🏈', 'Season Leagues', seasonLeagues)}
+              <div style={{ height: 1, background: C.surf3, margin: '4px 16px' }} />
+              {renderSection('⚡', 'Weekly Leagues', weeklyLeagues)}
+              <div style={{ height: 1, background: C.surf3, margin: '4px 16px' }} />
+              {renderSection('🏆', 'Bracket', bracketLeagues)}
+            </>
+          )}
+        </div>
+
+        {/* Bottom pinned */}
+        <div style={{ borderTop: `1px solid ${C.surf3}`, flexShrink: 0 }}>
           <button
-            onClick={() => router.push('/create-league')}
-            style={{ width: '100%', padding: '10px', background: 'rgba(245,166,35,.12)', border: `1px solid ${C.gold}44`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 2, color: C.gold, textTransform: 'uppercase' }}
+            onClick={() => setSelected({ type: 'history' })}
+            style={{
+              width: '100%', padding: '12px 16px',
+              background: selected?.type === 'history' ? 'rgba(245,166,35,.08)' : 'none',
+              border: 'none',
+              borderLeft: `3px solid ${selected?.type === 'history' ? C.gold : 'transparent'}`,
+              cursor: 'pointer', textAlign: 'left',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}
           >
-            + Create League
+            <span style={{ fontSize: 14 }}>📜</span>
+            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: selected?.type === 'history' ? C.gold : C.sub }}>
+              League History
+            </span>
           </button>
           <button
-            onClick={() => router.push('/')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', padding: 0 }}
+            onClick={() => router.push('/create-league')}
+            style={{
+              width: '100%', padding: '12px 16px',
+              background: 'none', border: 'none',
+              borderTop: `1px solid ${C.surf3}`,
+              cursor: 'pointer', textAlign: 'left',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}
           >
-            ← Back to Home
+            <span style={{ fontSize: 14 }}>➕</span>
+            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.green }}>
+              Create League
+            </span>
           </button>
         </div>
       </div>
 
       {/* MAIN CONTENT */}
-      <div style={{ flex: 1, padding: '32px 40px', overflowY: 'auto' }}>
-        <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 24, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 24 }}>
-          {tab === 'season' ? '🏈 Season Leagues' : tab === 'weekly' ? '⚡ Weekly Leagues' : '🏆 Bracket Leagues'}
-        </div>
+      <div style={{ flex: 1, overflowY: 'auto' as const }}>
 
-        {loading ? (
-          <div style={{ color: C.muted, fontFamily: 'Oswald, sans-serif', fontSize: 13, letterSpacing: 1 }}>Loading…</div>
-        ) : shown.length === 0 ? (
-          <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: '48px 32px', textAlign: 'center' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>{tab === 'bracket' ? '🏆' : '🏟️'}</div>
-            <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 16, color: C.sub, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-              No {tab === 'season' ? 'season' : tab === 'weekly' ? 'weekly' : 'bracket'} leagues yet
+        {/* Welcome screen */}
+        {selected === null && (
+          <div style={{ textAlign: 'center', padding: '80px 40px' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🏟️</div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+              Welcome, {displayName}
             </div>
-            <button
-              onClick={() => router.push(tab === 'bracket' ? '/brackets' : '/leagues')}
-              style={{ marginTop: 16, padding: '10px 24px', background: 'rgba(245,166,35,.12)', border: `1px solid ${C.gold}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 2, color: C.gold, textTransform: 'uppercase' }}
-            >
-              {tab === 'bracket' ? 'Browse Bracket Contests →' : 'Browse Public Contests →'}
-            </button>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted }}>
+              Select a league from the sidebar to get started
+            </div>
           </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {shown.map(entry => {
-              const lg = entry.leagues;
-              if (!lg) return null;
+        )}
 
-              if (lg.league_type === 'bracket') {
-                const contestId = lg.settings?.bracket_contest_id;
-                return (
-                  <div key={`${entry.league_id}-${entry.team_name}`} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '18px 20px', marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 1 }}>
-                          {lg.name}
-                        </div>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginTop: 4 }}>
-                          🏆 Bracket · {lg.buy_in === 0 ? 'Free' : `$${lg.buy_in} entry`}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (contestId) router.push(`/brackets/${contestId}`);
-                          else alert('Bracket not yet assigned to this league');
-                        }}
-                        style={{ padding: '8px 16px', background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.bg }}
-                      >
-                        View Bracket →
-                      </button>
-                    </div>
-                  </div>
-                );
-              }
-
-              const statusColor = STATUS_COLORS[lg.status] ?? C.muted;
-              return (
-                <div
-                  key={`${entry.league_id}-${entry.team_name}`}
-                  style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'border-color .12s' }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = C.gold + '55')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = C.surf3)}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                      <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 18, letterSpacing: 1, color: C.text, textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {lg.name}
-                      </div>
-                      <span style={{ flexShrink: 0, fontFamily: 'Oswald, sans-serif', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', background: statusColor + '22', border: `1px solid ${statusColor}44`, borderRadius: 4, padding: '2px 7px', color: statusColor }}>
-                        {lg.status}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: C.sub, letterSpacing: 1 }}>
-                        🏈 {entry.team_name}
-                      </span>
-                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: C.sub, letterSpacing: 1 }}>
-                        👥 {lg.league_size} teams
-                      </span>
-                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: lg.buy_in > 0 ? C.gold : C.green, letterSpacing: 1 }}>
-                        {lg.buy_in === 0 ? '🆓 Free' : `🪙 $${lg.buy_in.toFixed(2)} entry`}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => router.push(`/league/${lg.id}`)}
-                    style={{ flexShrink: 0, marginLeft: 20, padding: '10px 20px', background: 'rgba(245,166,35,.1)', border: `1px solid ${C.gold}44`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', transition: 'all .12s', whiteSpace: 'nowrap' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(245,166,35,.2)'; e.currentTarget.style.borderColor = C.gold; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(245,166,35,.1)'; e.currentTarget.style.borderColor = C.gold + '44'; }}
-                  >
-                    Enter League →
-                  </button>
+        {/* League detail */}
+        {selected?.type === 'league' && (
+          <div style={{ padding: 32 }}>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' as const }}>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: selected.data.is_public ? C.gold : C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
+                  {selected.data.name}
                 </div>
-              );
-            })}
+                <div style={{ padding: '3px 10px', borderRadius: 4, background: selected.data.is_public ? 'rgba(245,166,35,.15)' : 'rgba(255,255,255,.08)', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: selected.data.is_public ? C.gold : C.muted, textTransform: 'uppercase' }}>
+                  {selected.data.is_public ? 'Public' : 'Private'}
+                </div>
+              </div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted }}>
+                {selected.data.league_type === 'season' ? '🏈 Season Long' : selected.data.league_type === 'weekly' ? "⚡ Weekly Pick'em" : '🏆 Bracket'}
+                {selected.data.week ? ` · Week ${selected.data.week}` : ''}
+              </div>
+            </div>
+
+            {/* Stats grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+              {([
+                ['Entry Fee', selected.data.buy_in === 0 ? 'Free' : `$${selected.data.buy_in}`],
+                ['Teams', `${memberCount ?? '?'}/${selected.data.league_size === 999999 ? '∞' : selected.data.league_size}`],
+                ['Status', selected.data.status],
+              ] as [string, string][]).map(([label, value]) => (
+                <div key={label} style={{ background: C.surf2, borderRadius: 8, padding: '12px 14px' }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text }}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Your team name */}
+            {selected.data.team_name && (
+              <div style={{ marginBottom: 24, padding: '12px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>Your Team</div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text }}>{selected.data.team_name}</div>
+              </div>
+            )}
+
+            <button
+              onClick={() => router.push(`/league/${selected.id}`)}
+              style={{ width: '100%', padding: '14px', background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' }}
+            >
+              Enter League →
+            </button>
+
+            {selected.data.league_type === 'bracket' && selected.data.settings?.bracket_contest_id && (
+              <button
+                onClick={() => router.push(`/brackets/${selected.data.settings.bracket_contest_id}`)}
+                style={{ width: '100%', padding: '14px', background: 'none', border: `1px solid ${C.gold}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginTop: 10 }}
+              >
+                View Bracket →
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* League History */}
+        {selected?.type === 'history' && (
+          <div style={{ padding: 32 }}>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+              📜 League History
+            </div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginBottom: 24 }}>
+              All leagues you've participated in
+            </div>
+
+            {historyLoading ? (
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, letterSpacing: 1 }}>Loading history…</div>
+            ) : history.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 40px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12 }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.muted }}>No completed leagues yet</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {history.map((entry, i) => (
+                  <div key={entry.league?.id ?? i} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: entry.league?.is_public ? C.gold : C.text, marginBottom: 2 }}>
+                        {entry.league?.name}
+                      </div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                        {entry.league?.league_type} · {entry.league?.status}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        fontFamily: 'Anton,sans-serif', fontSize: 16,
+                        color: entry.result === 'won' ? C.green : entry.result === 'refunded' ? C.gold : entry.result === 'free' ? C.sub : C.red,
+                      }}>
+                        {entry.result === 'won'      ? `+$${(entry.net / 100).toFixed(2)}` :
+                         entry.result === 'lost'     ? `-$${(entry.entryFee / 100).toFixed(2)}` :
+                         entry.result === 'refunded' ? 'Refunded' : 'Free'}
+                      </div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 2 }}>
+                        {entry.result === 'won'      ? '🏆 Won' :
+                         entry.result === 'lost'     ? '❌ Lost' :
+                         entry.result === 'refunded' ? '↩️ Refunded' : '✓ Free'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
