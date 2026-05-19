@@ -259,7 +259,6 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const [members,      setMembers]      = useState<any[]>([]);
   const [userId,       setUserId]       = useState<string | null>(null);
   const [userEmail,    setUserEmail]    = useState('');
-  const [myLeagues,    setMyLeagues]    = useState<any[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [copied,       setCopied]       = useState(false);
   const [activeTab,    setActiveTab]    = useState<Tab>('draft');
@@ -286,17 +285,6 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       .order('draft_slot', { ascending: true });
     setMembers(membersData || []);
 
-    if (resolvedUid) {
-      const { data: myMemberships } = await supabase
-        .from('league_members').select('league_id').eq('user_id', resolvedUid);
-      if (myMemberships?.length) {
-        const ids = myMemberships.map((m: any) => m.league_id);
-        const { data: leaguesData } = await supabase
-          .from('leagues').select('id, name, status').in('id', ids);
-        setMyLeagues(leaguesData || []);
-      }
-    }
-
     const { data: msgs } = await supabase
       .from('league_messages').select('*').eq('league_id', params.id)
       .order('created_at', { ascending: true }).limit(100);
@@ -311,7 +299,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       setUserEmail(user.email || '');
       await loadData(user.id);
       setLoading(false);
-      // Load wallet balance for sidebar display
+      // Load wallet balance for entry fee payment gate
       fetch('/api/wallet').then(r => r.ok ? r.json() : null).then(d => {
         if (d?.wallet?.balance != null) setWalletBalance(d.wallet.balance);
       }).catch(() => {});
@@ -390,7 +378,6 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           : t
       );
   const inviteUrl      = league ? appUrl + '/join/' + league.invite_code : '';
-  const userInitial    = (userEmail || 'U').charAt(0).toUpperCase();
 
   function copyLink() {
     navigator.clipboard.writeText(inviteUrl);
@@ -611,120 +598,23 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       )}
 
       {/* ══════════════════════════════════════════════
-          LEFT SIDEBAR
-      ══════════════════════════════════════════════ */}
-      {!isEmbed && <aside className="mob-hide" style={{
-        width: 220, flexShrink: 0,
-        background: 'linear-gradient(180deg, #0b1628 0%, #090e1c 100%)',
-        borderRight: '1px solid ' + C.surf3,
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      }}>
-        {/* Brand mark */}
-        <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
-          <button
-            onClick={() => router.push('/')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 8 }}
-          >
-            <div style={{
-              width: 28, height: 28, borderRadius: 6,
-              background: 'linear-gradient(135deg, #f5a623 0%, #e8841a 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Anton,sans-serif', fontSize: 12, color: '#07090e', letterSpacing: 0.5, flexShrink: 0,
-            }}>CUF</div>
-            <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: 0.3 }}>College Units</span>
-          </button>
-        </div>
-
-        {/* My Leagues */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          <div style={{ padding: '12px 16px 6px', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            My Leagues
-            <button
-              onClick={() => router.push('/')}
-              title="Create new league"
-              style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 2px', marginRight: 2 }}
-            >+</button>
-          </div>
-          {myLeagues.map((lg: any) => {
-            const active = lg.id === params.id;
-            return (
-              <button
-                key={lg.id}
-                onClick={() => router.push('/league/' + lg.id)}
-                style={{
-                  width: '100%', textAlign: 'left', background: active ? 'rgba(212,168,40,.08)' : 'none',
-                  border: 'none', borderLeft: active ? '3px solid ' + C.gold : '3px solid transparent',
-                  padding: '10px 16px', cursor: 'pointer',
-                }}
-              >
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: active ? C.gold : C.text, fontWeight: active ? 600 : 400, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{lg.name}</div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted, textTransform: 'uppercase', marginTop: 2 }}>{lg.status}</div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Wallet widget */}
-        <div style={{ padding: '10px 14px', borderTop: '1px solid ' + C.surf3, flexShrink: 0 }}>
-          <button
-            onClick={() => router.push('/wallet')}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(212,168,40,.06)', border: '1px solid rgba(212,168,40,.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', textDecoration: 'none' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ fontSize: 14 }}>💰</span>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase' }}>Wallet</span>
-            </div>
-            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold, letterSpacing: 0.5 }}>
-              {walletBalance != null ? `$${(walletBalance / 100).toFixed(2)}` : '—'}
-            </span>
-          </button>
-        </div>
-
-        {/* User footer */}
-        <div style={{ padding: 14, borderTop: '1px solid ' + C.surf3, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-              background: 'linear-gradient(135deg,#d4a828,#f0c94a)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.bg,
-            }}>{userInitial}</div>
-            <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, fontWeight: 600, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                {myMember?.team_name || userEmail.split('@')[0]}
-              </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>MANAGER</div>
-                <button
-                  onClick={() => setShowSettings(true)}
-                  title="League Settings"
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    padding: 2, color: C.muted, display: 'flex', alignItems: 'center',
-                    borderRadius: 4, transition: 'color .15s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = C.gold}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = C.muted}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={async () => { await supabase.auth.signOut(); router.push('/'); }}
-            style={{ width: '100%', padding: '7px', background: 'none', border: '1px solid ' + C.surf3, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: C.muted }}
-          >Sign Out</button>
-        </div>
-      </aside>}
-
-      {/* ══════════════════════════════════════════════
           MAIN CONTENT
       ══════════════════════════════════════════════ */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+
+        {/* ← My Leagues back button (hidden when embedded) */}
+        {!isEmbed && (
+          <div style={{ padding: '12px 20px', borderBottom: `1px solid ${C.surf3}`, display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+            <button
+              onClick={() => router.push('/my-leagues')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, padding: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+            >← My Leagues</button>
+            <span style={{ color: C.surf3 }}>|</span>
+            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
+              {league?.name}
+            </span>
+          </div>
+        )}
 
         {/* League header + tabs */}
         <div style={{ background: 'linear-gradient(180deg, #0d1827 0%, #0c1422 100%)', borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
