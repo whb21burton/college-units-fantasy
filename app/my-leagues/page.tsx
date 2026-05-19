@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { supabase } from '@/lib/supabase-browser';
 
 const C = {
@@ -34,8 +33,8 @@ type LeagueData = {
 };
 
 type Selection =
-  | { type: 'league';  id: string; data: LeagueData }
-  | { type: 'bracket'; id: string; data: LeagueData }
+  | { type: 'league';  id: string;        data: LeagueData }
+  | { type: 'bracket'; contestId: string; data: LeagueData }
   | { type: 'history' }
   | null;
 
@@ -47,135 +46,25 @@ type HistoryEntry = {
   result: 'won' | 'lost' | 'refunded' | 'free';
 };
 
-// ── InlineLeagueView ──────────────────────────────────────────────────────────
+// ── Iframe panel components ───────────────────────────────────────────────────
 
-function InlineLeagueView({ leagueId, leagueData, onBack }: {
-  leagueId: string;
-  leagueData: LeagueData;
-  onBack?: () => void;
-}) {
-  const router = useRouter();
-  const sb = createClientComponentClient();
-  const [members, setMembers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    sb.from('league_members')
-      .select('user_id, team_name, is_bot')
-      .eq('league_id', leagueId)
-      .then(({ data }) => {
-        setMembers((data ?? []).filter((m: any) => !m.is_bot));
-        setLoading(false);
-      });
-  }, [leagueId]);
-
+function InlineLeagueDashboard({ leagueId }: { leagueId: string }) {
   return (
-    <div style={{ padding: '32px 32px', maxWidth: 700 }}>
-      {/* Mobile back button */}
-      {onBack && (
-        <button
-          onClick={onBack}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, letterSpacing: 1, marginBottom: 20, padding: 0 }}
-        >
-          ← Back
-        </button>
-      )}
+    <iframe
+      src={`/league/${leagueId}`}
+      style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
+      title="League Dashboard"
+    />
+  );
+}
 
-      {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' as const }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 30, color: leagueData.is_public ? C.gold : C.text, letterSpacing: 1, textTransform: 'uppercase', lineHeight: 1 }}>
-            {leagueData.name}
-          </div>
-          <div style={{ padding: '3px 10px', borderRadius: 4, background: leagueData.is_public ? 'rgba(245,166,35,.15)' : 'rgba(255,255,255,.08)', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: leagueData.is_public ? C.gold : C.muted, textTransform: 'uppercase' }}>
-            {leagueData.is_public ? '🌐 Public' : '🔒 Private'}
-          </div>
-          {leagueData.buy_in > 0 && (
-            <div style={{ padding: '3px 10px', borderRadius: 4, background: 'rgba(21,198,120,.12)', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.green, textTransform: 'uppercase' }}>
-              $ Paid
-            </div>
-          )}
-        </div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted }}>
-          {leagueData.league_type === 'season'  ? '🏈 Season Long' :
-           leagueData.league_type === 'weekly'  ? `⚡ Weekly Pick'em${leagueData.week ? ` · Week ${leagueData.week}` : ''}` :
-           '🏆 Bracket'}
-          {leagueData.conference_filter && leagueData.conference_filter !== 'All D1'
-            ? ` · ${leagueData.conference_filter}` : ''}
-        </div>
-      </div>
-
-      {/* Stats grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 24 }}>
-        {([
-          ['Entry Fee', leagueData.buy_in === 0 ? 'Free' : `$${Number(leagueData.buy_in).toFixed(2)}`],
-          ['Teams',     loading ? '…' : `${members.length}/${leagueData.league_size === 999999 ? '∞' : leagueData.league_size}`],
-          ['Status',    leagueData.status ?? 'pending'],
-          ['Type',      leagueData.draft_type ?? 'snake'],
-        ] as [string, string][]).map(([label, value]) => (
-          <div key={label} style={{ background: C.surf2, borderRadius: 8, padding: '12px 14px' }}>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.text, textTransform: 'capitalize' }}>{value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Your team */}
-      {leagueData.team_name && (
-        <div style={{ marginBottom: 20, padding: '12px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 3 }}>Your Team</div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text }}>{leagueData.team_name}</div>
-          </div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: leagueData.status === 'active' ? C.green : C.muted, letterSpacing: 1 }}>
-            {leagueData.status === 'active' ? '● ACTIVE' : leagueData.status === 'completed' ? '✓ DONE' : '○ PENDING'}
-          </div>
-        </div>
-      )}
-
-      {/* Members list */}
-      {!loading && members.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
-            Members ({members.length})
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {members.slice(0, 8).map((m, i) => (
-              <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: C.surf2, borderRadius: 6 }}>
-                <div style={{ width: 24, height: 24, borderRadius: '50%', background: C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 10, color: C.muted, flexShrink: 0 }}>
-                  {i + 1}
-                </div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
-                  {m.team_name || `Team ${i + 1}`}
-                </div>
-              </div>
-            ))}
-            {members.length > 8 && (
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, padding: '4px 12px' }}>
-                +{members.length - 8} more
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Open full dashboard */}
-      <button
-        onClick={() => router.push(`/league/${leagueId}`)}
-        style={{ width: '100%', padding: '13px', background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' }}
-      >
-        Open Full Dashboard →
-      </button>
-
-      {leagueData.league_type === 'bracket' && leagueData.settings?.bracket_contest_id && (
-        <button
-          onClick={() => router.push(`/brackets/${leagueData.settings.bracket_contest_id}`)}
-          style={{ width: '100%', padding: '12px', background: 'none', border: `1px solid ${C.gold}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginTop: 10 }}
-        >
-          View Bracket →
-        </button>
-      )}
-    </div>
+function InlineBracketDashboard({ contestId }: { contestId: string }) {
+  return (
+    <iframe
+      src={`/brackets/${contestId}`}
+      style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
+      title="Bracket"
+    />
   );
 }
 
@@ -192,7 +81,6 @@ export default function MyLeaguesPage() {
   const [collapsed,      setCollapsed]      = useState<Record<string, boolean>>({
     season: false, weekly: false, bracket: false,
   });
-  const [mobileShowContent, setMobileShowContent] = useState(false);
 
   function toggleSection(key: string) {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -273,9 +161,11 @@ export default function MyLeaguesPage() {
   const bracketLeagues = leagues.filter(l => l.league_type === 'bracket');
 
   function selectLeague(league: LeagueData) {
-    const type = league.league_type === 'bracket' ? 'bracket' : 'league';
-    setSelected({ type, id: league.id, data: league } as Selection);
-    setMobileShowContent(true);
+    if (league.league_type === 'bracket') {
+      setSelected({ type: 'bracket', contestId: league.settings?.bracket_contest_id ?? league.id, data: league });
+    } else {
+      setSelected({ type: 'league', id: league.id, data: league });
+    }
   }
 
   function renderSection(sectionKey: string, emoji: string, title: string, items: LeagueData[]) {
@@ -312,7 +202,9 @@ export default function MyLeaguesPage() {
               No leagues
             </div>
           ) : items.map(league => {
-            const isActive = (selected?.type === 'league' || selected?.type === 'bracket') && selected.id === league.id;
+            const isActive =
+              (selected?.type === 'league'  && selected.id        === league.id) ||
+              (selected?.type === 'bracket' && selected.data?.id  === league.id);
             return (
               <button
                 key={league.id}
@@ -350,29 +242,17 @@ export default function MyLeaguesPage() {
     );
   }
 
-  // On mobile: show sidebar OR content, not both
-  const showSidebar = !mobileShowContent || selected === null;
-  const showContent = !showSidebar || typeof window === 'undefined' || window.innerWidth >= 768;
-
-  function handleBack() {
-    setSelected(null);
-    setMobileShowContent(false);
-  }
-
   return (
-    <div style={{ height: '100vh', background: C.bg, display: 'flex', fontFamily: 'sans-serif', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: 'sans-serif' }}>
 
-      {/* SIDEBAR — hidden on mobile when content is showing */}
+      {/* LEFT SIDEBAR — always visible */}
       <div style={{
         width: 260, flexShrink: 0,
         background: C.surf,
         borderRight: `1px solid ${C.surf3}`,
-        display: mobileShowContent && selected ? 'none' : 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-      }}
-        className="my-leagues-sidebar"
-      >
+        display: 'flex', flexDirection: 'column',
+        height: '100vh', position: 'sticky', top: 0, overflowY: 'auto',
+      }}>
         {/* User avatar */}
         <div style={{ padding: '20px 16px', borderBottom: `1px solid ${C.surf3}`, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -412,7 +292,7 @@ export default function MyLeaguesPage() {
         {/* Bottom pinned */}
         <div style={{ borderTop: `1px solid ${C.surf3}`, flexShrink: 0 }}>
           <button
-            onClick={() => { setSelected({ type: 'history' }); setMobileShowContent(true); }}
+            onClick={() => setSelected({ type: 'history' })}
             style={{
               width: '100%', padding: '12px 16px',
               background: selected?.type === 'history' ? 'rgba(245,166,35,.08)' : 'none',
@@ -445,8 +325,8 @@ export default function MyLeaguesPage() {
         </div>
       </div>
 
-      {/* MAIN CONTENT */}
-      <div style={{ flex: 1, overflowY: 'auto' as const }}>
+      {/* RIGHT PANEL — inline content */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
 
         {/* Welcome screen */}
         {selected === null && (
@@ -461,27 +341,19 @@ export default function MyLeaguesPage() {
           </div>
         )}
 
-        {/* Inline league view */}
-        {(selected?.type === 'league' || selected?.type === 'bracket') && (
-          <InlineLeagueView
-            leagueId={selected.id}
-            leagueData={selected.data}
-            onBack={mobileShowContent ? handleBack : undefined}
-          />
+        {/* League iframe */}
+        {selected?.type === 'league' && (
+          <InlineLeagueDashboard leagueId={selected.id} />
+        )}
+
+        {/* Bracket iframe */}
+        {selected?.type === 'bracket' && (
+          <InlineBracketDashboard contestId={selected.contestId} />
         )}
 
         {/* League History */}
         {selected?.type === 'history' && (
           <div style={{ padding: 32 }}>
-            {/* Mobile back */}
-            {mobileShowContent && (
-              <button
-                onClick={handleBack}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, letterSpacing: 1, marginBottom: 20, padding: 0 }}
-              >
-                ← Back
-              </button>
-            )}
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
               📜 League History
             </div>
