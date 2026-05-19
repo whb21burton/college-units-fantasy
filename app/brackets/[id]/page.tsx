@@ -361,7 +361,6 @@ export default function BracketPage() {
   const [submitting,   setSubmitting]   = useState(false)
   const [msg,          setMsg]          = useState<{ ok: boolean; text: string } | null>(null)
   const [hasPaid,      setHasPaid]      = useState<boolean>(false)
-  const [linkedLeague, setLinkedLeague] = useState<{ id: string; name: string; buy_in: number } | null>(null)
   const [walletBalance,setWalletBalance]= useState<number | null>(null)
   const [chatMessages, setChatMessages] = useState<any[]>([])
   const [chatInput,    setChatInput]    = useState('')
@@ -374,38 +373,16 @@ export default function BracketPage() {
     const { data: c } = await supabase.from('bracket_contests').select('*').eq('id', contestId).single()
     if (c) setContest(c)
 
-    // Fetch the league linked to this contest (stores the real buy_in)
-    const { data: league } = await supabase
-      .from('leagues')
-      .select('id, name, buy_in')
-      .filter('settings->>bracket_contest_id', 'eq', contestId)
-      .maybeSingle()
-    setLinkedLeague(league ?? null)
+    const entryFeeCents = c?.entry_fee_cents ?? 0
 
     if (user?.id) {
       const { data: e } = await supabase.from('user_bracket_entries').select('*')
-        .eq('contest_id', contestId).eq('user_id', user.id).single()
+        .eq('contest_id', contestId).eq('user_id', user.id).maybeSingle()
       if (e) {
         setEntry(e)
         if (e.bracket_data?.picks) setPicks(e.bracket_data.picks)
       }
-
-      // Check paid status via league membership
-      if (league) {
-        if (league.buy_in === 0) {
-          setHasPaid(true)
-        } else {
-          const { data: membership } = await supabase
-            .from('league_members')
-            .select('id, paid')
-            .eq('league_id', league.id)
-            .eq('user_id', user.id)
-            .maybeSingle()
-          setHasPaid(membership?.paid === true)
-        }
-      } else {
-        setHasPaid(true) // no linked league — allow submission
-      }
+      setHasPaid(entryFeeCents === 0 || !!e?.is_submitted)
     }
 
     // Fetch wallet balance
@@ -522,26 +499,6 @@ export default function BracketPage() {
     setPicks(prev => ({ ...prev, champion: team }))
   }
 
-  /* ── Pay entry fee inline ── */
-  async function handlePayAndJoin() {
-    if (!linkedLeague || !userId || submitting) return
-    setSubmitting(true)
-    setMsg(null)
-    const res = await fetch('/api/wallet/join-contest', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ league_id: linkedLeague.id, team_name: 'Bracket Entry' }),
-    })
-    const json = await res.json()
-    if (!res.ok) {
-      setMsg({ ok: false, text: json.error ?? 'Payment failed' })
-    } else {
-      setHasPaid(true)
-      setWalletBalance(prev => prev !== null ? prev - Math.round(linkedLeague.buy_in * 100) : null)
-    }
-    setSubmitting(false)
-  }
-
   /* ── Bracket chat ── */
   async function sendBracketChat() {
     if (!chatInput.trim() || !userId) return
@@ -592,6 +549,8 @@ export default function BracketPage() {
       <span style={{ color: C.red, fontFamily: 'Oswald,sans-serif' }}>Contest not found.</span>
     </div>
   )
+
+  const entryFeeCents = contest.entry_fee_cents ?? 0
 
   /* ── Bracket columns (shared by desktop & mobile) ── */
   const leftRegionalsCol = (
@@ -722,16 +681,10 @@ export default function BracketPage() {
         background: C.surf, borderBottom: `1px solid ${C.surf3}`,
         padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
       }}>
-        <button onClick={() => router.back()} style={{
-          background: C.surf3, border: 'none', color: C.sub,
-          padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
-          fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1,
-        }}>← BACK</button>
-
         <div style={{ flex: 1, minWidth: 160 }}>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, letterSpacing: 1 }}>{contest.name}</div>
           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, marginTop: 2 }}>
-            Entry: <strong style={{ color: C.gold }}>{(linkedLeague?.buy_in ?? 0) === 0 ? 'Free' : `$${(linkedLeague?.buy_in ?? 0).toFixed(2)}`}</strong>
+            Entry: <strong style={{ color: C.gold }}>{entryFeeCents === 0 ? 'Free' : `$${(entryFeeCents / 100).toFixed(2)}`}</strong>
             &ensp;·&ensp;Status: <strong style={{ color: contest.status === 'open' ? C.green : C.muted, textTransform: 'uppercase' }}>{contest.status}</strong>
           </div>
         </div>
@@ -743,20 +696,19 @@ export default function BracketPage() {
             : msg && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: msg.ok ? C.green : C.red }}>{msg.text}</span>
           }
           {!isLocked && !entry?.is_submitted && (
-            !hasPaid && (linkedLeague?.buy_in ?? 0) > 0 ? (
+            !hasPaid && entryFeeCents > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>
                   Wallet: {walletBalance !== null ? `$${(walletBalance / 100).toFixed(2)}` : '—'}
                 </div>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red }}>
-                  Pay ${(linkedLeague?.buy_in ?? 0).toFixed(2)} entry fee to submit
+                  Entry fee: ${(entryFeeCents / 100).toFixed(2)}
                 </div>
                 <button
-                  onClick={handlePayAndJoin}
-                  disabled={submitting || (walletBalance !== null && walletBalance < Math.round((linkedLeague?.buy_in ?? 0) * 100))}
+                  onClick={() => window.open('/wallet', '_blank')}
                   style={{ padding: '8px 18px', borderRadius: 6, border: 'none', cursor: 'pointer', background: C.gold, color: C.bg, fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase' }}
                 >
-                  {submitting ? 'Processing…' : walletBalance !== null && walletBalance < Math.round((linkedLeague?.buy_in ?? 0) * 100) ? 'Insufficient Balance' : `Pay $${(linkedLeague?.buy_in ?? 0).toFixed(2)} →`}
+                  Add Funds →
                 </button>
               </div>
             ) : (

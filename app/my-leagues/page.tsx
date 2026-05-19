@@ -51,6 +51,7 @@ type HistoryEntry = {
 function InlineLeagueDashboard({ leagueId }: { leagueId: string }) {
   return (
     <iframe
+      key={leagueId}
       src={`/league/${leagueId}?embed=1`}
       style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
       title="League Dashboard"
@@ -61,6 +62,7 @@ function InlineLeagueDashboard({ leagueId }: { leagueId: string }) {
 function InlineBracketDashboard({ contestId }: { contestId: string }) {
   return (
     <iframe
+      key={contestId}
       src={`/brackets/${contestId}`}
       style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
       title="Bracket"
