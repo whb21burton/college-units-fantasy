@@ -594,6 +594,11 @@ function SimulationRunner() {
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.green, marginBottom: 10 }}>
             ✓ Simulation Complete — {result.contestName}
           </div>
+          {result.botsCreated < numBots && (
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.gold, marginBottom: 8 }}>
+              ⚠️ Only {result.botsCreated} bots entered — contest was capped at {result.botsCreated} remaining spots
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
             {([
               ['Bots Created',    result.botsCreated],

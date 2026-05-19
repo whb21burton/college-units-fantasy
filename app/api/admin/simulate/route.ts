@@ -12,7 +12,9 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (user?.id !== ADMIN_ID) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 
-  const { contestType, contestId, numBots, simulateResults } = await req.json()
+  const body = await req.json()
+  const { contestType, contestId, simulateResults } = body
+  let numBots: number = body.numBots
   const admin = createAdminClient()
 
   // Get contest details
@@ -21,18 +23,68 @@ export async function POST(req: Request) {
   let contestName = ''
 
   if (contestType === 'weekly') {
-    const { data: league } = await admin.from('leagues').select('buy_in, name, settings, league_size, league_type').eq('id', contestId).single()
+    const { data: league } = await admin
+      .from('leagues')
+      .select('buy_in, name, settings, league_size, is_capped, max_entries_per_user')
+      .eq('id', contestId)
+      .single()
+
     entryFeeCents = Math.round((league?.buy_in ?? 0) * 100)
     const settings = league?.settings as any
     payoutStructure = settings?.payout_structure ?? 'winner_take_all'
     contestName = league?.name ?? 'Weekly Contest'
     console.log('[simulate] league settings:', JSON.stringify(settings))
     console.log('[simulate] payoutStructure:', payoutStructure)
+
+    // ── MAX ENTRIES CHECK ──────────────────────────────────
+    const maxAllowed = league?.league_size ?? 999999
+    const isCapped = league?.is_capped ?? false
+
+    if (isCapped && maxAllowed < 999999) {
+      const { count: currentCount } = await admin
+        .from('league_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('league_id', contestId)
+
+      const spotsRemaining = maxAllowed - (currentCount ?? 0)
+
+      if (spotsRemaining <= 0) {
+        return NextResponse.json({
+          error: `Contest is full — ${maxAllowed}/${maxAllowed} entries filled`,
+          botsCreated: 0,
+        }, { status: 400 })
+      }
+
+      if (numBots > spotsRemaining) {
+        console.log(`[simulate] capping bots from ${numBots} to ${spotsRemaining} (contest max: ${maxAllowed})`)
+        numBots = spotsRemaining
+      }
+    }
   } else {
-    const { data: contest } = await admin.from('bracket_contests').select('entry_fee_cents, name, settings').eq('id', contestId).single()
+    const { data: contest } = await admin
+      .from('bracket_contests')
+      .select('entry_fee_cents, name, settings, max_entries, entry_count')
+      .eq('id', contestId)
+      .single()
+
     entryFeeCents = contest?.entry_fee_cents ?? 0
     payoutStructure = contest?.settings?.payout_structure ?? 'winner_take_all'
     contestName = contest?.name ?? 'Bracket Contest'
+
+    // Cap bots to remaining spots
+    if (contest?.max_entries) {
+      const spotsRemaining = contest.max_entries - (contest.entry_count ?? 0)
+      if (spotsRemaining <= 0) {
+        return NextResponse.json({
+          error: `Bracket contest is full — ${contest.max_entries}/${contest.max_entries} entries`,
+          botsCreated: 0,
+        }, { status: 400 })
+      }
+      if (numBots > spotsRemaining) {
+        console.log(`[simulate] capping bots from ${numBots} to ${spotsRemaining}`)
+        numBots = spotsRemaining
+      }
+    }
   }
 
   const botUsers: {
