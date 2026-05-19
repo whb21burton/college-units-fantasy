@@ -213,23 +213,32 @@ export async function POST(req: Request) {
     const netPool   = Math.floor(totalPool * 0.95)
     const rake      = totalPool - netPool
 
+    const isDoubleUp = payoutStructure === 'double_up'
+    const doubleUpWinners = isDoubleUp ? Math.floor(ranked.length / 2) : 0
+    const doubleUpPayoutCents = isDoubleUp ? Math.floor(entryFeeCents * 1.95) : 0
+
     const splits =
       payoutStructure === 'top3' ? [{ rank: 1, pct: 0.60 }, { rank: 2, pct: 0.25 }, { rank: 3, pct: 0.15 }] :
       payoutStructure === 'top2' ? [{ rank: 1, pct: 0.70 }, { rank: 2, pct: 0.30 }] :
                                    [{ rank: 1, pct: 1.00 }]
 
-    // Build winner map: rank → bot (consistent index for both payout and loser exclusion)
+    // Build winner map: rank → bot
     const winnerMap = new Map<number, typeof ranked[number]>()
-    for (const split of splits) {
-      const winner = ranked[split.rank - 1]
-      if (winner) winnerMap.set(split.rank, winner)
+    if (isDoubleUp) {
+      ranked.slice(0, doubleUpWinners).forEach((bot, idx) => winnerMap.set(idx + 1, bot))
+    } else {
+      for (const split of splits) {
+        const winner = ranked[split.rank - 1]
+        if (winner) winnerMap.set(split.rank, winner)
+      }
     }
 
     // Pay out winners
     for (const rank of Array.from(winnerMap.keys())) {
       const winner = winnerMap.get(rank)!
-      const split = splits.find(s => s.rank === rank)!
-      const payoutCents = Math.floor(netPool * split.pct)
+      const payoutCents = isDoubleUp
+        ? doubleUpPayoutCents
+        : Math.floor(netPool * splits.find(s => s.rank === rank)!.pct)
 
       const { data: payoutTx } = await admin.from('transactions').insert({
         user_id: winner.id,

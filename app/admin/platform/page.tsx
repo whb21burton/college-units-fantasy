@@ -31,36 +31,52 @@ function PayoutPreview({
 }: {
   feeAmount: number
   maxAccounts: number | null
-  payoutStructure: 'winner_take_all' | 'top2' | 'top3'
-  setPayoutStructure: (v: 'winner_take_all' | 'top2' | 'top3') => void
+  payoutStructure: 'winner_take_all' | 'top2' | 'top3' | 'double_up'
+  setPayoutStructure: (v: 'winner_take_all' | 'top2' | 'top3' | 'double_up') => void
 }) {
-  const totalPool = feeAmount * (maxAccounts ?? 100)
+  const count = maxAccounts ?? 100
+  const totalPool = feeAmount * count
   const net = totalPool * 0.95
   const presets = {
     winner_take_all: [{ place: '1st', pct: 100, amt: net }],
     top2: [{ place: '1st', pct: 70, amt: net * 0.70 }, { place: '2nd', pct: 30, amt: net * 0.30 }],
     top3: [{ place: '1st', pct: 60, amt: net * 0.60 }, { place: '2nd', pct: 25, amt: net * 0.25 }, { place: '3rd', pct: 15, amt: net * 0.15 }],
   }
+  const numWinners = Math.floor(count / 2)
+  const perWinner = feeAmount * 1.95
   return (
     <div style={{ marginBottom: 16 }}>
       <label style={labelStyle}>Payout Structure</label>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-        {(['winner_take_all', 'top2', 'top3'] as const).map((key) => (
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' as const }}>
+        {(['winner_take_all', 'top2', 'top3', 'double_up'] as const).map((key) => (
           <button key={key} onClick={() => setPayoutStructure(key)}
-            style={{ flex: 1, padding: '8px 4px', border: `2px solid ${payoutStructure === key ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: payoutStructure === key ? 'rgba(245,166,35,.1)' : C.surf2, color: payoutStructure === key ? C.gold : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 0.5 }}>
-            {key === 'winner_take_all' ? 'Winner Take All' : key === 'top2' ? 'Top 2' : 'Top 3'}
+            style={{ flex: 1, minWidth: 60, padding: '8px 4px', border: `2px solid ${payoutStructure === key ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: payoutStructure === key ? 'rgba(245,166,35,.1)' : C.surf2, color: payoutStructure === key ? C.gold : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 0.5 }}>
+            {key === 'winner_take_all' ? 'Winner Take All' : key === 'top2' ? 'Top 2' : key === 'top3' ? 'Top 3' : 'Double Up'}
           </button>
         ))}
       </div>
       <div style={{ background: C.surf2, borderRadius: 6, padding: '10px 12px' }}>
-        {presets[payoutStructure].map(p => (
-          <div key={p.place} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 3 }}>
-            <span>{p.place} place</span>
-            <span style={{ color: C.gold }}>${p.amt.toFixed(2)} ({p.pct}%)</span>
-          </div>
-        ))}
+        {payoutStructure === 'double_up' ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 3 }}>
+              <span>Top {numWinners} players each win</span>
+              <span style={{ color: C.gold }}>${perWinner.toFixed(2)} (1.95×)</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
+              <span>Bottom {count - numWinners} players</span>
+              <span style={{ color: C.red }}>lose entry fee</span>
+            </div>
+          </>
+        ) : (
+          presets[payoutStructure].map(p => (
+            <div key={p.place} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 3 }}>
+              <span>{p.place} place</span>
+              <span style={{ color: C.gold }}>${p.amt.toFixed(2)} ({p.pct}%)</span>
+            </div>
+          ))
+        )}
         <div style={{ borderTop: `1px solid ${C.surf3}`, marginTop: 6, paddingTop: 6, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
-          Based on {maxAccounts ?? 100} entries · 5% platform fee deducted
+          Based on {count} entries · 5% platform fee deducted
         </div>
       </div>
     </div>
@@ -74,7 +90,7 @@ function WeeklyPickemCreator() {
   const [maxAccounts, setMaxAccounts] = useState<number | null>(null)
   const [maxPerAccount, setMaxPerAccount] = useState(1)
   const [copies, setCopies] = useState(1)
-  const [payoutStructure, setPayoutStructure] = useState<'winner_take_all' | 'top2' | 'top3'>('winner_take_all')
+  const [payoutStructure, setPayoutStructure] = useState<'winner_take_all' | 'top2' | 'top3' | 'double_up'>('winner_take_all')
   const [poolMode, setPoolMode] = useState<'all' | 'conference' | 'custom'>('all')
   const [conferenceFilter, setConferenceFilter] = useState<string>('All D1')
   const [selectedSchools, setSelectedSchools] = useState<Set<string>>(new Set())
@@ -279,7 +295,7 @@ function PublicBracketCreator() {
   const [maxAccounts, setMaxAccounts] = useState<number | null>(null)
   const [maxPerAccount, setMaxPerAccount] = useState(1)
   const [copies, setCopies] = useState(1)
-  const [payoutStructure, setPayoutStructure] = useState<'winner_take_all' | 'top2' | 'top3'>('winner_take_all')
+  const [payoutStructure, setPayoutStructure] = useState<'winner_take_all' | 'top2' | 'top3' | 'double_up'>('winner_take_all')
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')

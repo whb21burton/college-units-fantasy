@@ -22,10 +22,10 @@ const BUYIN_PRESETS = [0, 1, 5, 10, 25, 50];
 const TIME_OPTIONS  = ['30s', '1min', '2min', '5min', 'No limit'];
 const CAP_PRESETS   = [100, 150, 200, 250];
 
-type PayoutStructure = 'winner_take_all' | 'top2' | 'top3' | 'custom';
+type PayoutStructure = 'winner_take_all' | 'top2' | 'top3' | 'double_up' | 'custom';
 type PayoutSplit = { place: number; label: string; pct: number; amount: number };
 
-const PAYOUT_PRESETS: { key: PayoutStructure; label: string; desc: string; splits: (net: number) => PayoutSplit[] }[] = [
+const PAYOUT_PRESETS: { key: PayoutStructure; label: string; desc: string; splits: (net: number, entries?: number) => PayoutSplit[] }[] = [
   {
     key: 'winner_take_all',
     label: 'Winner Take All',
@@ -50,6 +50,12 @@ const PAYOUT_PRESETS: { key: PayoutStructure; label: string; desc: string; split
       { place: 2, label: '2nd', pct: 25, amount: net * 0.25 },
       { place: 3, label: '3rd', pct: 15, amount: net * 0.15 },
     ],
+  },
+  {
+    key: 'double_up',
+    label: 'Double Up',
+    desc: 'Top half wins 1.95× entry',
+    splits: () => [],
   },
 ];
 
@@ -561,7 +567,7 @@ export default function CreateLeaguePage() {
             {effectiveBuyIn > 0 && (
               <div style={{ marginTop: 20, marginBottom: 20 }}>
                 <Label>Payout Structure</Label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
                   {PAYOUT_PRESETS.map(preset => (
                     <button
                       key={preset.key}
@@ -578,16 +584,35 @@ export default function CreateLeaguePage() {
                   ))}
                 </div>
                 <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '12px 14px' }}>
-                  {splits.map((s, i) => (
-                    <div key={s.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: i < splits.length - 1 ? 6 : 0 }}>
-                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
-                        {placeEmoji(i)} {s.label} place
-                      </span>
-                      <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>
-                        ${s.amount.toFixed(2)} ({s.pct}%)
-                      </span>
-                    </div>
-                  ))}
+                  {payoutStructure === 'double_up' ? (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
+                          Top {Math.floor(entries / 2)} players each win
+                        </span>
+                        <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>
+                          ${(effectiveBuyIn * 1.95).toFixed(2)} (1.95×)
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
+                          Bottom {entries - Math.floor(entries / 2)} players
+                        </span>
+                        <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.red }}>lose entry fee</span>
+                      </div>
+                    </>
+                  ) : (
+                    splits.map((s, i) => (
+                      <div key={s.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: i < splits.length - 1 ? 6 : 0 }}>
+                        <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
+                          {placeEmoji(i)} {s.label} place
+                        </span>
+                        <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>
+                          ${s.amount.toFixed(2)} ({s.pct}%)
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -811,14 +836,31 @@ export default function CreateLeaguePage() {
                 <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
                   Payout Structure — {activePreset.label}
                 </div>
-                {splits.map((s, i) => (
-                  <div key={s.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: i < splits.length - 1 ? 6 : 0 }}>
-                    <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
-                      {placeEmoji(i)} {s.label} place ({s.pct}%)
-                    </span>
-                    <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>${s.amount.toFixed(2)}</span>
-                  </div>
-                ))}
+                {payoutStructure === 'double_up' ? (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
+                        Top {Math.floor(entries / 2)} players each win
+                      </span>
+                      <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>${(effectiveBuyIn * 1.95).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
+                        Bottom {entries - Math.floor(entries / 2)} players
+                      </span>
+                      <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.red }}>lose entry fee</span>
+                    </div>
+                  </>
+                ) : (
+                  splits.map((s, i) => (
+                    <div key={s.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: i < splits.length - 1 ? 6 : 0 }}>
+                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
+                        {placeEmoji(i)} {s.label} place ({s.pct}%)
+                      </span>
+                      <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>${s.amount.toFixed(2)}</span>
+                    </div>
+                  ))
+                )}
               </div>
             )}
 

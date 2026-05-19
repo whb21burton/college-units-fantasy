@@ -515,6 +515,26 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.sub }}>${(((walletBalance ?? 0) / 100) - (league?.buy_in ?? 0)).toFixed(2)}</span>
             </div>
           </div>
+          {(() => {
+            const ps = (league?.settings as any)?.payout_structure as string ?? 'winner_take_all'
+            const size = league?.league_size ?? 0
+            const buyIn = league?.buy_in ?? 0
+            const payoutLabel =
+              ps === 'double_up'      ? `Top ${Math.floor(size / 2)} players each win $${(buyIn * 1.95).toFixed(2)} (1.95×)` :
+              ps === 'top3'           ? '60% / 25% / 15% split (top 3)' :
+              ps === 'top2'           ? '70% / 30% split (top 2)' :
+                                       'Winner take all (95% of pool)'
+            return (
+              <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, textAlign: 'left' }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>
+                  Prize Structure
+                </div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.gold }}>
+                  {payoutLabel}
+                </div>
+              </div>
+            )
+          })()}
           {!canAfford ? (
             <div>
               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.red, marginBottom: 12 }}>
