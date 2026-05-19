@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import BracketLeaderboard from '@/components/bracket/BracketLeaderboard'
@@ -69,7 +69,7 @@ function countPicks(p: BracketPicks): number {
 
 const TOTAL = 16 // 8 reg + 4 SR + 2 semi + 1 champ + 1 series
 
-type Tab = 'bracket' | 'leaderboard'
+type Tab = 'bracket' | 'leaderboard' | 'chat'
 type MSection = 'left' | 'super-left' | 'cws' | 'super-right' | 'right'
 
 /* ── Sub-components ────────────────────────────────────── */
@@ -351,16 +351,21 @@ export default function BracketPage() {
   const contestId = params.id as string
   const supabase  = createClientComponentClient()
 
-  const [userId,    setUserId]    = useState<string | null>(null)
-  const [contest,   setContest]   = useState<any>(null)
-  const [entry,     setEntry]     = useState<any>(null)
-  const [picks,     setPicks]     = useState<BracketPicks>(empty())
-  const [tab,       setTab]       = useState<Tab>('bracket')
-  const [mSection,  setMSection]  = useState<MSection>('left')
-  const [loading,   setLoading]   = useState(true)
-  const [submitting,setSubmitting]= useState(false)
-  const [msg,       setMsg]       = useState<{ ok: boolean; text: string } | null>(null)
-  const [hasPaid,   setHasPaid]   = useState<boolean>(true)
+  const [userId,       setUserId]       = useState<string | null>(null)
+  const [contest,      setContest]      = useState<any>(null)
+  const [entry,        setEntry]        = useState<any>(null)
+  const [picks,        setPicks]        = useState<BracketPicks>(empty())
+  const [tab,          setTab]          = useState<Tab>('bracket')
+  const [mSection,     setMSection]     = useState<MSection>('left')
+  const [loading,      setLoading]      = useState(true)
+  const [submitting,   setSubmitting]   = useState(false)
+  const [msg,          setMsg]          = useState<{ ok: boolean; text: string } | null>(null)
+  const [hasPaid,      setHasPaid]      = useState<boolean>(false)
+  const [linkedLeague, setLinkedLeague] = useState<{ id: string; name: string; buy_in: number } | null>(null)
+  const [walletBalance,setWalletBalance]= useState<number | null>(null)
+  const [chatMessages, setChatMessages] = useState<any[]>([])
+  const [chatInput,    setChatInput]    = useState('')
+  const chatEndRef = useRef<HTMLDivElement>(null)
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -369,6 +374,14 @@ export default function BracketPage() {
     const { data: c } = await supabase.from('bracket_contests').select('*').eq('id', contestId).single()
     if (c) setContest(c)
 
+    // Fetch the league linked to this contest (stores the real buy_in)
+    const { data: league } = await supabase
+      .from('leagues')
+      .select('id, name, buy_in')
+      .filter('settings->>bracket_contest_id', 'eq', contestId)
+      .maybeSingle()
+    setLinkedLeague(league ?? null)
+
     if (user?.id) {
       const { data: e } = await supabase.from('user_bracket_entries').select('*')
         .eq('contest_id', contestId).eq('user_id', user.id).single()
@@ -376,25 +389,63 @@ export default function BracketPage() {
         setEntry(e)
         if (e.bracket_data?.picks) setPicks(e.bracket_data.picks)
       }
+
+      // Check paid status via league membership
+      if (league) {
+        if (league.buy_in === 0) {
+          setHasPaid(true)
+        } else {
+          const { data: membership } = await supabase
+            .from('league_members')
+            .select('id, paid')
+            .eq('league_id', league.id)
+            .eq('user_id', user.id)
+            .maybeSingle()
+          setHasPaid(membership?.paid === true)
+        }
+      } else {
+        setHasPaid(true) // no linked league — allow submission
+      }
     }
+
+    // Fetch wallet balance
+    try {
+      const walletRes = await fetch('/api/wallet')
+      if (walletRes.ok) {
+        const walletData = await walletRes.json()
+        setWalletBalance(walletData.wallet?.balance ?? null)
+      }
+    } catch {}
+
     setLoading(false)
   }, [supabase, contestId])
 
   useEffect(() => { loadData() }, [loadData])
 
+  // Chat: subscribe to bracket_messages
   useEffect(() => {
-    if (!contest || contest.entry_fee_cents === 0) { setHasPaid(true); return }
     if (!userId) return
-    supabase
-      .from('transactions')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('league_id', contest.id)
-      .eq('type', 'contest_entry')
-      .eq('status', 'completed')
-      .single()
-      .then(({ data }) => setHasPaid(!!data))
-  }, [contest?.id, userId])
+    supabase.from('bracket_messages')
+      .select('*')
+      .eq('contest_id', contestId)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => setChatMessages(data ?? []))
+
+    const ch = supabase.channel('bracket-chat-' + contestId)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'bracket_messages',
+        filter: 'contest_id=eq.' + contestId,
+      }, (payload) => {
+        setChatMessages(prev => [...prev, payload.new])
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(ch) }
+  }, [supabase, contestId, userId])
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages])
 
   const isLocked = !!(
     contest?.status === 'locked' || contest?.status === 'active' ||
@@ -469,6 +520,39 @@ export default function BracketPage() {
   function pickChampion(team: Team) {
     if (isLocked) return
     setPicks(prev => ({ ...prev, champion: team }))
+  }
+
+  /* ── Pay entry fee inline ── */
+  async function handlePayAndJoin() {
+    if (!linkedLeague || !userId || submitting) return
+    setSubmitting(true)
+    setMsg(null)
+    const res = await fetch('/api/wallet/join-contest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ league_id: linkedLeague.id, team_name: 'Bracket Entry' }),
+    })
+    const json = await res.json()
+    if (!res.ok) {
+      setMsg({ ok: false, text: json.error ?? 'Payment failed' })
+    } else {
+      setHasPaid(true)
+      setWalletBalance(prev => prev !== null ? prev - Math.round(linkedLeague.buy_in * 100) : null)
+    }
+    setSubmitting(false)
+  }
+
+  /* ── Bracket chat ── */
+  async function sendBracketChat() {
+    if (!chatInput.trim() || !userId) return
+    const msg = chatInput.trim()
+    setChatInput('')
+    await supabase.from('bracket_messages').insert({
+      contest_id:   contestId,
+      user_id:      userId,
+      message:      msg,
+      display_name: 'You',
+    })
   }
 
   /* ── Submit ── */
@@ -647,7 +731,7 @@ export default function BracketPage() {
         <div style={{ flex: 1, minWidth: 160 }}>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, letterSpacing: 1 }}>{contest.name}</div>
           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, marginTop: 2 }}>
-            Entry: <strong style={{ color: C.gold }}>{contest.entry_fee_cents === 0 ? 'Free' : `$${(contest.entry_fee_cents / 100).toFixed(2)}`}</strong>
+            Entry: <strong style={{ color: C.gold }}>{(linkedLeague?.buy_in ?? 0) === 0 ? 'Free' : `$${(linkedLeague?.buy_in ?? 0).toFixed(2)}`}</strong>
             &ensp;·&ensp;Status: <strong style={{ color: contest.status === 'open' ? C.green : C.muted, textTransform: 'uppercase' }}>{contest.status}</strong>
           </div>
         </div>
@@ -659,15 +743,21 @@ export default function BracketPage() {
             : msg && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: msg.ok ? C.green : C.red }}>{msg.text}</span>
           }
           {!isLocked && !entry?.is_submitted && (
-            !hasPaid && contest?.entry_fee_cents > 0 ? (
+            !hasPaid && (linkedLeague?.buy_in ?? 0) > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>
+                  Wallet: {walletBalance !== null ? `$${(walletBalance / 100).toFixed(2)}` : '—'}
+                </div>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red }}>
-                  Pay ${(contest.entry_fee_cents / 100).toFixed(2)} entry fee to submit
+                  Pay ${(linkedLeague?.buy_in ?? 0).toFixed(2)} entry fee to submit
                 </div>
                 <button
-                  onClick={() => router.push('/wallet')}
+                  onClick={handlePayAndJoin}
+                  disabled={submitting || (walletBalance !== null && walletBalance < Math.round((linkedLeague?.buy_in ?? 0) * 100))}
                   style={{ padding: '8px 18px', borderRadius: 6, border: 'none', cursor: 'pointer', background: C.gold, color: C.bg, fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase' }}
-                >Pay Entry Fee →</button>
+                >
+                  {submitting ? 'Processing…' : walletBalance !== null && walletBalance < Math.round((linkedLeague?.buy_in ?? 0) * 100) ? 'Insufficient Balance' : `Pay $${(linkedLeague?.buy_in ?? 0).toFixed(2)} →`}
+                </button>
               </div>
             ) : (
               <button
@@ -689,7 +779,7 @@ export default function BracketPage() {
 
       {/* ── Tabs ── */}
       <div style={{ background: C.surf, borderBottom: `1px solid ${C.surf3}`, padding: '6px 20px', display: 'flex', gap: 6 }}>
-        {(['bracket', 'leaderboard'] as Tab[]).map(t => (
+        {(['bracket', 'leaderboard', 'chat'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '7px 18px',
             background: tab === t ? C.gold : 'transparent',
@@ -705,6 +795,56 @@ export default function BracketPage() {
       {tab === 'leaderboard' && (
         <div style={{ padding: 20, maxWidth: 700, margin: '0 auto' }}>
           <BracketLeaderboard contestId={contestId} currentUserId={userId} />
+        </div>
+      )}
+
+      {/* ── Chat ── */}
+      {tab === 'chat' && (
+        <div style={{ maxWidth: 600, margin: '0 auto', padding: '20px 20px 0', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 130px)' }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
+            Bracket Chat
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 8 }}>
+            {chatMessages.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
+                No messages yet. Start the conversation!
+              </div>
+            )}
+            {chatMessages.map((m: any, i: number) => {
+              const isMe = m.user_id === userId
+              return (
+                <div key={m.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 3 }}>
+                    {isMe ? 'You' : (m.display_name || 'Player')}
+                  </div>
+                  <div style={{
+                    maxWidth: '80%', padding: '8px 11px',
+                    borderRadius: isMe ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+                    background: isMe ? 'rgba(245,166,35,.12)' : C.surf2,
+                    border: isMe ? '1px solid rgba(245,166,35,.22)' : `1px solid ${C.surf3}`,
+                    fontFamily: 'Inter,sans-serif', fontSize: 13, color: C.text, lineHeight: 1.4,
+                    wordBreak: 'break-word',
+                  }}>{m.message}</div>
+                </div>
+              )
+            })}
+            <div ref={chatEndRef} />
+          </div>
+          <div style={{ borderTop: `1px solid ${C.surf3}`, paddingTop: 10, paddingBottom: 16, display: 'flex', gap: 8, flexShrink: 0 }}>
+            <input
+              type="text"
+              placeholder="Message..."
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBracketChat() } }}
+              style={{ flex: 1, padding: '9px 11px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Inter,sans-serif', fontSize: 13, outline: 'none' }}
+            />
+            <button
+              onClick={sendBracketChat}
+              disabled={!chatInput.trim()}
+              style={{ padding: '9px 13px', background: chatInput.trim() ? C.gold : C.surf3, border: 'none', borderRadius: 8, cursor: chatInput.trim() ? 'pointer' : 'default', fontFamily: 'Anton,sans-serif', fontSize: 14, color: chatInput.trim() ? C.bg : C.muted }}
+            >↑</button>
+          </div>
         </div>
       )}
 

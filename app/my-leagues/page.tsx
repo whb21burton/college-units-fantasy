@@ -86,6 +86,7 @@ export default function MyLeaguesPage() {
   const [editingProfile,  setEditingProfile]  = useState(false);
   const [newDisplayName,  setNewDisplayName]  = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [walletBalance,   setWalletBalance]   = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function toggleSection(key: string) {
@@ -107,21 +108,28 @@ export default function MyLeaguesPage() {
       setUser(u);
       setAvatarUrl(u.user_metadata?.avatar_url ?? null);
       setDisplayName(u.user_metadata?.display_name ?? u.email?.split('@')[0] ?? 'User');
-      const { data: memberships } = await supabase
-        .from('league_members')
-        .select(`
-          team_name,
-          leagues (
-            id, name, league_type, status, buy_in,
-            league_size, is_public, week, settings,
-            commissioner_id, draft_type, conference_filter
-          )
-        `)
-        .eq('user_id', u.id);
+      const [{ data: memberships }, walletRes] = await Promise.all([
+        supabase
+          .from('league_members')
+          .select(`
+            team_name,
+            leagues (
+              id, name, league_type, status, buy_in,
+              league_size, is_public, week, settings,
+              commissioner_id, draft_type, conference_filter
+            )
+          `)
+          .eq('user_id', u.id),
+        fetch('/api/wallet'),
+      ]);
       const validLeagues = (memberships ?? [])
         .map((m: any) => m.leagues ? { ...m.leagues, team_name: m.team_name } : null)
         .filter(Boolean) as LeagueData[];
       setLeagues(validLeagues);
+      if (walletRes.ok) {
+        const walletData = await walletRes.json();
+        setWalletBalance(walletData.wallet?.balance ?? null);
+      }
       setLoading(false);
     });
   }, [router]);
@@ -319,17 +327,25 @@ export default function MyLeaguesPage() {
               <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarUpload} />
 
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                <div
+                  onClick={() => { setEditingProfile(true); setNewDisplayName(displayName); }}
+                  title="Click to edit name"
+                  style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, cursor: 'pointer' }}
+                >
                   {displayName}
                 </div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>My Leagues</div>
+                {walletBalance !== null ? (
+                  <div
+                    onClick={() => window.open('/wallet', '_blank')}
+                    title="Open wallet"
+                    style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, cursor: 'pointer' }}
+                  >
+                    ${(walletBalance / 100).toFixed(2)}
+                  </div>
+                ) : (
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>My Leagues</div>
+                )}
               </div>
-
-              <button
-                onClick={() => { setEditingProfile(true); setNewDisplayName(displayName); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 13, padding: 4 }}
-                title="Edit profile"
-              >✏️</button>
             </div>
           ) : (
             <div>
