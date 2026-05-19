@@ -326,6 +326,14 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
+  // Embed guard: if somehow the homepage loads inside the iframe, push parent to my-leagues
+  useEffect(() => {
+    if (!isEmbed) return;
+    if (window.location.pathname === '/') {
+      window.parent.postMessage({ type: 'NAVIGATE', path: '/my-leagues' }, '*');
+    }
+  }, [isEmbed]);
+
   // Auto-switch tabs based on league type / status
   useEffect(() => {
     if (league?.league_type === 'weekly') {

@@ -147,6 +147,7 @@ function PaymentForm({
 function WalletInner() {
   const router       = useRouter();
   const searchParams = useSearchParams();
+  const isEmbed               = searchParams.get('embed') === '1';
   const connectResult         = searchParams.get('connect');
   const paymentIntentResult   = searchParams.get('payment_intent_result');
   // Legacy Stripe Checkout result param
@@ -200,11 +201,11 @@ function WalletInner() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: u } }) => {
-      if (!u) { router.push('/'); return; }
+      if (!u) { if (!isEmbed) router.push('/'); return; }
       loadWallet();
       checkOnboarded();
     });
-  }, [loadWallet, checkOnboarded, router]);
+  }, [loadWallet, checkOnboarded, router, isEmbed]);
 
   // Handle return from Stripe (redirect back after confirmPayment)
   useEffect(() => {
@@ -317,8 +318,8 @@ function WalletInner() {
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '40px 20px' }}>
 
         {/* Back */}
-        <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, marginBottom: 24, padding: 0 }}>
-          ← Back to Dashboard
+        <button onClick={() => router.back()} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, marginBottom: 24, padding: 0 }}>
+          ← Back
         </button>
 
         {/* Balance hero */}

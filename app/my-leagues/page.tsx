@@ -92,6 +92,15 @@ export default function MyLeaguesPage() {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
+  // Listen for NAVIGATE messages from embedded iframes (e.g. league page guard)
+  useEffect(() => {
+    function handleMessage(e: MessageEvent) {
+      if (e.data?.type === 'NAVIGATE') router.push(e.data.path);
+    }
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [router]);
+
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user: u } }) => {
       if (!u) { router.push('/'); return; }
