@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 import DraftOrderEditor from '@/components/league/DraftOrderEditor';
@@ -252,6 +253,8 @@ const WEEKLY_TABS: { key: Tab; label: string }[] = [
 
 export default function LeaguePage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isEmbed = searchParams.get('embed') === '1';
   const [league,       setLeague]       = useState<any>(null);
   const [members,      setMembers]      = useState<any[]>([]);
   const [userId,       setUserId]       = useState<string | null>(null);
@@ -608,7 +611,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       {/* ══════════════════════════════════════════════
           LEFT SIDEBAR
       ══════════════════════════════════════════════ */}
-      <aside className="mob-hide" style={{
+      {!isEmbed && <aside className="mob-hide" style={{
         width: 220, flexShrink: 0,
         background: 'linear-gradient(180deg, #0b1628 0%, #090e1c 100%)',
         borderRight: '1px solid ' + C.surf3,
@@ -714,7 +717,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
             style={{ width: '100%', padding: '7px', background: 'none', border: '1px solid ' + C.surf3, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: C.muted }}
           >Sign Out</button>
         </div>
-      </aside>
+      </aside>}
 
       {/* ══════════════════════════════════════════════
           MAIN CONTENT

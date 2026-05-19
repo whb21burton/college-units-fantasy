@@ -51,7 +51,7 @@ type HistoryEntry = {
 function InlineLeagueDashboard({ leagueId }: { leagueId: string }) {
   return (
     <iframe
-      src={`/league/${leagueId}`}
+      src={`/league/${leagueId}?embed=1`}
       style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
       title="League Dashboard"
     />
