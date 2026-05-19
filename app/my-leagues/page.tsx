@@ -52,6 +52,13 @@ export default function MyLeaguesPage() {
   const [memberCount,    setMemberCount]    = useState<number | null>(null);
   const [history,        setHistory]        = useState<HistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [collapsed,      setCollapsed]      = useState<Record<string, boolean>>({
+    season: false, weekly: false, bracket: false,
+  });
+
+  function toggleSection(key: string) {
+    setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user: u } }) => {
@@ -138,49 +145,84 @@ export default function MyLeaguesPage() {
   const weeklyLeagues  = leagues.filter(l => l.league_type === 'weekly');
   const bracketLeagues = leagues.filter(l => l.league_type === 'bracket');
 
-  function renderSection(emoji: string, title: string, items: LeagueData[]) {
+  function renderSection(sectionKey: string, emoji: string, title: string, items: LeagueData[]) {
+    const isCollapsed = collapsed[sectionKey];
     return (
       <div>
-        <div style={{ padding: '12px 16px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const }}>
-            {emoji} {title}{items.length > 0 ? ` (${items.length})` : ''}
-          </div>
-        </div>
-        {items.length === 0 ? (
-          <div style={{ padding: '4px 19px 10px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, opacity: 0.5 }}>
-            No leagues
-          </div>
-        ) : items.map(league => {
-          const isActive = selected?.type === 'league' && selected.id === league.id;
-          return (
-            <button
-              key={league.id}
-              onClick={() => setSelected({ type: 'league', id: league.id, data: league })}
-              style={{
-                width: '100%', padding: '9px 16px',
-                background: isActive ? 'rgba(245,166,35,.1)' : 'none',
-                border: 'none',
-                borderLeft: `3px solid ${isActive ? C.gold : 'transparent'}`,
-                cursor: 'pointer', textAlign: 'left',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              }}
-            >
-              <span style={{
-                fontFamily: 'Oswald,sans-serif', fontSize: 12,
-                color: league.is_public ? C.gold : C.text,
-                letterSpacing: 0.5,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
-                maxWidth: 155,
-                display: 'block',
-              }}>
-                {league.name}
+        <button
+          onClick={() => toggleSection(sectionKey)}
+          style={{
+            width: '100%', padding: '10px 16px',
+            background: 'none', border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14 }}>{emoji}</span>
+            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const }}>
+              {title}
+            </span>
+            {items.length > 0 && (
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, background: C.surf3, padding: '1px 6px', borderRadius: 10 }}>
+                {items.length}
               </span>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, flexShrink: 0, marginLeft: 4 }}>
-                {league.status}
-              </span>
-            </button>
-          );
-        })}
+            )}
+          </div>
+          <span style={{ color: C.muted, fontSize: 12, display: 'inline-block', transition: 'transform .2s', transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+            ▾
+          </span>
+        </button>
+
+        {!isCollapsed && (
+          items.length === 0 ? (
+            <div style={{ padding: '4px 19px 10px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, opacity: 0.5 }}>
+              No leagues
+            </div>
+          ) : items.map(league => {
+            const isActive = selected?.type === 'league' && selected.id === league.id;
+            const navigate = () => {
+              setSelected({ type: 'league', id: league.id, data: league });
+              if (league.league_type === 'bracket' && league.settings?.bracket_contest_id) {
+                router.push(`/brackets/${league.settings.bracket_contest_id}`);
+              } else {
+                router.push(`/league/${league.id}`);
+              }
+            };
+            return (
+              <button
+                key={league.id}
+                onClick={navigate}
+                style={{
+                  width: '100%', padding: '9px 16px',
+                  background: isActive ? 'rgba(245,166,35,.1)' : 'none',
+                  border: 'none',
+                  borderLeft: `3px solid ${isActive ? C.gold : 'transparent'}`,
+                  cursor: 'pointer', textAlign: 'left',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                  {league.buy_in > 0 && (
+                    <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.green, flexShrink: 0 }}>
+                      $
+                    </span>
+                  )}
+                  <span style={{
+                    fontFamily: 'Oswald,sans-serif', fontSize: 12,
+                    color: league.is_public ? C.gold : C.text,
+                    letterSpacing: 0.5,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+                  }}>
+                    {league.name}
+                  </span>
+                </div>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, flexShrink: 0 }}>
+                  {league.status === 'active' ? '🟢' : league.status === 'completed' ? '✓' : '○'}
+                </span>
+              </button>
+            );
+          })
+        )}
       </div>
     );
   }
@@ -223,11 +265,11 @@ export default function MyLeaguesPage() {
             </div>
           ) : (
             <>
-              {renderSection('🏈', 'Season Leagues', seasonLeagues)}
+              {renderSection('season',  '🏈', 'Season Leagues', seasonLeagues)}
               <div style={{ height: 1, background: C.surf3, margin: '4px 16px' }} />
-              {renderSection('⚡', 'Weekly Leagues', weeklyLeagues)}
+              {renderSection('weekly',  '⚡', 'Weekly Leagues', weeklyLeagues)}
               <div style={{ height: 1, background: C.surf3, margin: '4px 16px' }} />
-              {renderSection('🏆', 'Bracket', bracketLeagues)}
+              {renderSection('bracket', '🏆', 'Bracket',        bracketLeagues)}
             </>
           )}
         </div>
@@ -326,9 +368,9 @@ export default function MyLeaguesPage() {
 
             <button
               onClick={() => router.push(`/league/${selected.id}`)}
-              style={{ width: '100%', padding: '14px', background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' }}
+              style={{ padding: '10px 20px', background: 'none', border: `1px solid ${C.gold}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.gold }}
             >
-              Enter League →
+              Open League Dashboard →
             </button>
 
             {selected.data.league_type === 'bracket' && selected.data.settings?.bracket_contest_id && (
