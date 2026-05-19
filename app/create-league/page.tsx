@@ -297,17 +297,6 @@ export default function CreateLeaguePage() {
     });
   }, [router]);
 
-  useEffect(() => {
-    if (leagueType !== 'bracket') return;
-    supabase
-      .from('bracket_contests')
-      .select('id, name, sport, entry_fee_cents, status')
-      .eq('status', 'open')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setAvailableBrackets(data ?? []));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leagueType]);
-
   const isAdmin = userEmail === 'whb21burton@gmail.com';
 
   const effectiveBuyIn = customBuyIn ? parseFloat(customBuyIn) || 0 : buyIn;
@@ -468,29 +457,6 @@ export default function CreateLeaguePage() {
                   🏆 Bracket contests are open to unlimited participants. No team limit required.
                 </div>
               )}
-              {leagueType === 'bracket' && availableBrackets.length > 0 && (
-                <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(21,198,120,.06)', border: '1px solid rgba(21,198,120,.2)', borderRadius: 8 }}>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.green, textTransform: 'uppercase', marginBottom: 6 }}>
-                    Active Bracket Contest
-                  </div>
-                  {availableBrackets.slice(0, 1).map(b => (
-                    <div key={b.id} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
-                      🏆 {b.name}
-                      <span style={{ color: C.muted, marginLeft: 8, fontSize: 10 }}>
-                        {b.sport} · {b.entry_fee_cents === 0 ? 'Free' : `$${(b.entry_fee_cents / 100).toFixed(2)} entry`}
-                      </span>
-                    </div>
-                  ))}
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 4 }}>
-                    Your league will be automatically linked to this contest.
-                  </div>
-                </div>
-              )}
-              {leagueType === 'bracket' && availableBrackets.length === 0 && (
-                <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(240,58,90,.06)', border: '1px solid rgba(240,58,90,.2)', borderRadius: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red }}>
-                  ⚠️ No active bracket contests available right now. Check back soon.
-                </div>
-              )}
             </div>
 
             {/* League Name */}
@@ -587,31 +553,33 @@ export default function CreateLeaguePage() {
                   ))}
                 </div>
                 <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '12px 14px' }}>
-                  {payoutStructure === 'double_up' ? (
-                    <div style={{ background: 'rgba(245,166,35,.06)', border: '1px solid rgba(245,166,35,.15)', borderRadius: 8, padding: '12px 14px' }}>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.gold, marginBottom: 6 }}>🔁 Double-up</div>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, lineHeight: 1.7 }}>
-                        <strong style={{ color: C.text }}>Top 50%</strong> of players each win{' '}
-                        <strong style={{ color: C.gold }}>${(effectiveBuyIn * 1.95).toFixed(2)}</strong> (1.95× entry fee)
-                        <br />
-                        <strong style={{ color: C.text }}>Bottom 50%</strong> of players lose their entry fee
-                        <br />
-                        <span style={{ color: C.muted, fontSize: 10 }}>
-                          e.g. 10 entries → top 5 win ${(effectiveBuyIn * 1.95).toFixed(2)} each · bottom 5 lose ${effectiveBuyIn.toFixed(2)} each
-                        </span>
-                      </div>
+                  {payoutStructure === 'winner_take_all' && (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, lineHeight: 1.7 }}>
+                      🥇 1st place wins <strong style={{ color: C.gold }}>100%</strong> of the net prize pool
                     </div>
-                  ) : (
-                    splits.map((s, i) => (
-                      <div key={s.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: i < splits.length - 1 ? 6 : 0 }}>
-                        <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
-                          {placeEmoji(i)} {s.label} place
-                        </span>
-                        <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>
-                          ${s.amount.toFixed(2)} ({s.pct}%)
-                        </span>
-                      </div>
-                    ))
+                  )}
+                  {payoutStructure === 'top2' && (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, lineHeight: 1.7 }}>
+                      🥇 1st place — <strong style={{ color: C.gold }}>70%</strong> of net pool
+                      <br />🥈 2nd place — <strong style={{ color: C.gold }}>30%</strong> of net pool
+                    </div>
+                  )}
+                  {payoutStructure === 'top3' && (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, lineHeight: 1.7 }}>
+                      🥇 1st place — <strong style={{ color: C.gold }}>60%</strong> of net pool
+                      <br />🥈 2nd place — <strong style={{ color: C.gold }}>25%</strong> of net pool
+                      <br />🥉 3rd place — <strong style={{ color: C.gold }}>15%</strong> of net pool
+                    </div>
+                  )}
+                  {payoutStructure === 'double_up' && (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, lineHeight: 1.7 }}>
+                      <strong style={{ color: C.text }}>Top 50%</strong> of players each win{' '}
+                      <strong style={{ color: C.gold }}>1.95×</strong> their entry fee
+                      <br /><strong style={{ color: C.text }}>Bottom 50%</strong> lose their entry fee
+                      <br /><span style={{ color: C.muted, fontSize: 10 }}>
+                        e.g. 10 entries at ${effectiveBuyIn.toFixed(2)} → top 5 each win ${(effectiveBuyIn * 1.95).toFixed(2)}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
