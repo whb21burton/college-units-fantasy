@@ -276,6 +276,7 @@ export default function CreateLeaguePage() {
   const [customPayouts,   setCustomPayouts]   = useState<{ place: number; pct: number }[]>([{ place: 1, pct: 100 }]);
   const [userEmail,       setUserEmail]       = useState<string | null>(null);
   const [availableBrackets, setAvailableBrackets] = useState<any[]>([]);
+  const [entriesPerPerson, setEntriesPerPerson] = useState(1);
 
   // Step 2
   const [draftType,    setDraftType]    = useState<'snake' | 'salary'>('snake');
@@ -353,6 +354,7 @@ export default function CreateLeaguePage() {
           name:        leagueName.trim(),
           buy_in:      effectiveBuyIn,
           league_size: leagueType === 'bracket' ? 999999 : entries,
+          max_entries_per_user: leagueType === 'bracket' ? entriesPerPerson : 1,
           draft_type:  draftType,
           salary_cap:  draftType === 'salary' ? effectiveCap : null,
           is_public:   false,
@@ -455,6 +457,31 @@ export default function CreateLeaguePage() {
               {leagueType === 'bracket' && (
                 <div style={{ padding: '8px 12px', background: 'rgba(21,198,120,.06)', border: '1px solid rgba(21,198,120,.2)', borderRadius: 6, marginTop: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
                   🏆 Bracket contests are open to unlimited participants. No team limit required.
+                </div>
+              )}
+              {leagueType === 'bracket' && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>
+                    Entries Per Person
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                    {[1, 2, 3, 5, 10].map(n => (
+                      <button key={n} onClick={() => setEntriesPerPerson(n)}
+                        style={{ flex: 1, padding: '8px 4px', border: `2px solid ${entriesPerPerson === n ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: entriesPerPerson === n ? 'rgba(245,166,35,.1)' : C.surf2, color: entriesPerPerson === n ? C.gold : C.sub, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Custom:</span>
+                    <input
+                      type="number" min={1} max={100}
+                      value={entriesPerPerson}
+                      onChange={e => setEntriesPerPerson(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                      style={{ width: 80, padding: '6px 8px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none' }}
+                    />
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>entries per person</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -779,8 +806,8 @@ export default function CreateLeaguePage() {
                 ['Type', '🏆 Bracket'],
                 ['Entry Fee', effectiveBuyIn === 0 ? 'Free' : `$${effectiveBuyIn.toFixed(2)}`],
                 ['Entries', 'Unlimited'],
+                ['Entries Per Person', String(entriesPerPerson)],
                 ['Your Name', teamName],
-                ...(availableBrackets[0] ? [['Bracket Contest', `🏆 ${availableBrackets[0].name}`] as [string, string]] : []),
               ] : [
                 ['League Name', leagueName],
                 ['Entry Fee', effectiveBuyIn === 0 ? 'Free' : `$${effectiveBuyIn.toFixed(2)}`],
@@ -832,22 +859,24 @@ export default function CreateLeaguePage() {
               </div>
             )}
 
-            {/* Roster config summary */}
-            <div style={{ background: C.surf2, borderRadius: 8, padding: '14px 16px', marginBottom: 20 }}>
-              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
-                Roster Config
+            {/* Roster config summary — hidden for bracket leagues */}
+            {leagueType !== 'bracket' && (
+              <div style={{ background: C.surf2, borderRadius: 8, padding: '14px 16px', marginBottom: 20 }}>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
+                  Roster Config
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                  {ROSTER_POSITIONS.filter(p => rosterConfig[p.key].enabled).map(p => (
+                    <span key={p.key} style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 1, color: C.text, background: C.surf3, borderRadius: 4, padding: '4px 10px' }}>
+                      {p.emoji} {p.key}: {rosterConfig[p.key].count}
+                    </span>
+                  ))}
+                </div>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.sub, letterSpacing: 1 }}>
+                  Total: {totalRoster} players per team
+                </div>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-                {ROSTER_POSITIONS.filter(p => rosterConfig[p.key].enabled).map(p => (
-                  <span key={p.key} style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 1, color: C.text, background: C.surf3, borderRadius: 4, padding: '4px 10px' }}>
-                    {p.emoji} {p.key}: {rosterConfig[p.key].count}
-                  </span>
-                ))}
-              </div>
-              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.sub, letterSpacing: 1 }}>
-                Total: {totalRoster} players per team
-              </div>
-            </div>
+            )}
 
             {/* Invite Code */}
             <div style={{ background: 'rgba(245,166,35,.07)', border: `1px solid ${C.gold}33`, borderRadius: 10, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
