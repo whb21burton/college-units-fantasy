@@ -79,7 +79,7 @@ export default function StateRestrictionsPage() {
 
       <LegalSection id="updates" title="4. Legal Updates">
         <p>The landscape for daily fantasy sports regulation is constantly evolving. New legislation may open or close markets at any time. CUF monitors regulatory developments in all U.S. states and territories and updates this page accordingly.</p>
-        <p>If your state recently passed legislation permitting DFS and you believe it should be removed from the restricted list, please contact us at legal@collegeunitsfantasy.com with reference to the relevant legislation.</p>
+        <p>If your state recently passed legislation permitting DFS and you believe it should be removed from the restricted list, please contact us via <a href="/support" style={{ color: '#d4a828' }}>our support form</a> with reference to the relevant legislation.</p>
         <p>This list was last verified by our legal team on May 18, 2026. Users are responsible for ensuring they are in an eligible location when entering paid contests. CUF is not liable for entry fees submitted from restricted jurisdictions — any such entries will be refunded if detected.</p>
       </LegalSection>
     </LegalPageLayout>

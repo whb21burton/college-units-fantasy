@@ -87,7 +87,7 @@ export default function ContestRulesPage() {
       </LegalSection>
 
       <LegalSection id="disputes" title="7. Disputes">
-        <p>If you believe there is an error in contest results or scoring, you must submit a dispute within 72 hours of contest settlement by emailing support@collegeunitsfantasy.com with:</p>
+        <p>If you believe there is an error in contest results or scoring, you must submit a dispute within 72 hours of contest settlement via <a href="/support" style={{ color: '#d4a828' }}>our support form</a> with:</p>
         <ul>
           <li>Your account email address</li>
           <li>The contest ID</li>

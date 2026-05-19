@@ -46,7 +46,7 @@ export default function ResponsibleGamingPage() {
         <p><strong>Entry Limits:</strong> Limit the total amount you can spend on contest entries per day, week, or month.</p>
         <p><strong>Reality Check:</strong> Receive periodic notifications reminding you how long you've been active and how much you've spent or won in the current session.</p>
         <p><strong>Cool-Off Period:</strong> Take a temporary break from the Platform for 24 hours, 7 days, or 30 days. During a cool-off period, you cannot enter new contests or make new deposits, but your account remains active.</p>
-        <p><strong>Self-Exclusion:</strong> If you believe you have a gambling problem, you can permanently self-exclude from all paid contests on CUF. This action is irreversible for a minimum of 12 months. To self-exclude, contact us at support@collegeunitsfantasy.com.</p>
+        <p><strong>Self-Exclusion:</strong> If you believe you have a gambling problem, you can permanently self-exclude from all paid contests on CUF. This action is irreversible for a minimum of 12 months. To self-exclude, contact us via <a href="/support" style={{ color: '#d4a828' }}>our support form</a>.</p>
       </LegalSection>
 
       <LegalSection id="recognize" title="3. Recognizing Problem Gambling">
@@ -69,7 +69,7 @@ export default function ResponsibleGamingPage() {
         <p><strong>National Problem Gambling Helpline:</strong> Call or text <a href="tel:1-800-522-4700" style={{ color: '#2ecc71' }}>1-800-522-4700</a>. Available 24/7. Confidential. Free. Connects you to local treatment resources.</p>
         <p><strong>Chat:</strong> Visit <a href="https://www.ncpgambling.org/chat" target="_blank" rel="noopener noreferrer" style={{ color: '#d4a828' }}>ncpgambling.org/chat</a> for live chat support.</p>
         <p><strong>Text:</strong> Text "HELPLINE" to 53342 for text-based support.</p>
-        <p>If you would like CUF to restrict your account while you seek help, email us at support@collegeunitsfantasy.com and we will process your self-exclusion request within 24 hours.</p>
+        <p>If you would like CUF to restrict your account while you seek help, contact us via <a href="/support" style={{ color: '#d4a828' }}>our support form</a> and we will process your self-exclusion request within 24 hours.</p>
       </LegalSection>
 
       <LegalSection id="minors" title="5. Protecting Minors">
@@ -80,7 +80,7 @@ export default function ResponsibleGamingPage() {
           <li>Monitoring for accounts showing signs of minor activity</li>
         </ul>
         <p><strong>Parental Controls:</strong> If you share a device with minors, we strongly recommend using device-level parental controls or browser-based filtering to prevent access to the CUF platform.</p>
-        <p>If you suspect a minor has created an account, please contact us immediately at legal@collegeunitsfantasy.com. We will investigate and close the account promptly.</p>
+        <p>If you suspect a minor has created an account, please contact us immediately via <a href="/support" style={{ color: '#d4a828' }}>our support form</a>. We will investigate and close the account promptly.</p>
       </LegalSection>
 
       <LegalSection id="resources" title="6. External Resources">

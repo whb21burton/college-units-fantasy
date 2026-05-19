@@ -98,7 +98,7 @@ export default function TermsPage() {
       <LegalSection id="changes" title="10. Changes to Terms">
         <p>We may update these Terms at any time. We will notify you of material changes by posting the new Terms on the Platform and updating the "Last Updated" date. Your continued use of the Platform after the effective date of any changes constitutes acceptance of the new Terms.</p>
         <p>If you do not agree to the updated Terms, you must stop using the Platform and may request withdrawal of any available funds.</p>
-        <p>For questions about these Terms, contact us at legal@collegeunitsfantasy.com.</p>
+        <p>For questions about these Terms, contact us via <a href="/support" style={{ color: '#d4a828' }}>our support form</a>.</p>
       </LegalSection>
     </LegalPageLayout>
   );

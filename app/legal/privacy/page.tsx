@@ -117,19 +117,19 @@ export default function PrivacyPage() {
           <li><strong>Opt-out:</strong> Unsubscribe from promotional communications at any time</li>
         </ul>
         <p><strong>California Residents (CCPA):</strong> You have additional rights under the CCPA, including the right to know what personal information is sold or disclosed and to opt-out of the sale of your personal information (we do not sell personal information).</p>
-        <p>To exercise any of these rights, contact us at privacy@collegeunitsfantasy.com.</p>
+        <p>To exercise any of these rights, contact us via <a href="/support" style={{ color: '#d4a828' }}>our support form</a>.</p>
       </LegalSection>
 
       <LegalSection id="children" title="9. Children's Privacy">
         <p>CUF is intended for users aged 18 and older. We do not knowingly collect personal information from anyone under 18. If we become aware that we have collected data from a person under 18, we will promptly delete that information and close the account.</p>
-        <p>If you believe a minor has created an account on our Platform, please contact us immediately at privacy@collegeunitsfantasy.com.</p>
+        <p>If you believe a minor has created an account on our Platform, please contact us immediately via <a href="/support" style={{ color: '#d4a828' }}>our support form</a>.</p>
       </LegalSection>
 
       <LegalSection id="contact" title="10. Contact Us">
         <p>For questions about this Privacy Policy or your personal information, contact us at:</p>
         <p>
           <strong>College Units Fantasy — Privacy Team</strong><br />
-          Email: privacy@collegeunitsfantasy.com<br />
+          Contact: <a href="/support" style={{ color: '#d4a828' }}>collegeunitsfantasy.com/support</a><br />
           Response time: Within 30 days of receiving your request
         </p>
         <p>For California residents who wish to submit a CCPA request, please email us with the subject line "CCPA Request" and include your full name and email address associated with your account.</p>
