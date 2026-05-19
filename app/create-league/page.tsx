@@ -548,17 +548,20 @@ export default function CreateLeaguePage() {
                   💰 Prize Pool Breakdown
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>{leagueType === 'bracket' ? 'Per entry' : `Total entries (${entries} × $${effectiveBuyIn})`}</span>
-                  <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.text }}>${totalPool.toFixed(2)}</span>
+                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>Per entry</span>
+                  <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.text }}>${effectiveBuyIn.toFixed(2)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>Platform fee (5%)</span>
-                  <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.red }}>−${rakeCents.toFixed(2)}</span>
+                  <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.red }}>−${(effectiveBuyIn * 0.05).toFixed(2)}</span>
                 </div>
                 <div style={{ height: 1, background: C.surf3, margin: '8px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.gold }}>Net prize pool</span>
-                  <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 15, color: C.gold }}>${netPool.toFixed(2)}</span>
+                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.gold }}>Net per entry</span>
+                  <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 15, color: C.gold }}>${(effectiveBuyIn * 0.95).toFixed(2)}</span>
+                </div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 6 }}>
+                  Final prize pool = net per entry × total entries at contest close
                 </div>
               </div>
             )}
@@ -585,22 +588,19 @@ export default function CreateLeaguePage() {
                 </div>
                 <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '12px 14px' }}>
                   {payoutStructure === 'double_up' ? (
-                    <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
-                          Top {Math.floor(entries / 2)} players each win
-                        </span>
-                        <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>
-                          ${(effectiveBuyIn * 1.95).toFixed(2)} (1.95×)
+                    <div style={{ background: 'rgba(245,166,35,.06)', border: '1px solid rgba(245,166,35,.15)', borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.gold, marginBottom: 6 }}>🔁 Double-up</div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, lineHeight: 1.7 }}>
+                        <strong style={{ color: C.text }}>Top 50%</strong> of players each win{' '}
+                        <strong style={{ color: C.gold }}>${(effectiveBuyIn * 1.95).toFixed(2)}</strong> (1.95× entry fee)
+                        <br />
+                        <strong style={{ color: C.text }}>Bottom 50%</strong> of players lose their entry fee
+                        <br />
+                        <span style={{ color: C.muted, fontSize: 10 }}>
+                          e.g. 10 entries → top 5 win ${(effectiveBuyIn * 1.95).toFixed(2)} each · bottom 5 lose ${effectiveBuyIn.toFixed(2)} each
                         </span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
-                          Bottom {entries - Math.floor(entries / 2)} players
-                        </span>
-                        <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.red }}>lose entry fee</span>
-                      </div>
-                    </>
+                    </div>
                   ) : (
                     splits.map((s, i) => (
                       <div key={s.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: i < splits.length - 1 ? 6 : 0 }}>
