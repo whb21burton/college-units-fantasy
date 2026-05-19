@@ -353,10 +353,10 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     }
   }, [league?.league_type, league?.status]);
 
-  // Check if user has paid their entry fee
+  // Check if user has paid their entry fee — only enforced for season leagues
   useEffect(() => {
     if (!league || !userId) return;
-    if (league.buy_in === 0 || league.league_type === 'weekly') {
+    if (league.buy_in === 0 || league.league_type !== 'season') {
       setHasPaid(true);
       return;
     }
@@ -370,7 +370,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
       .limit(1)
       .then(({ data }) => setHasPaid((data?.length ?? 0) > 0));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league?.id, userId]);
+  }, [league?.id, league?.league_type, userId]);
 
   const isCommissioner = userId === league?.commissioner_id;
   const myMember       = members.find((m: any) => m.user_id === userId);
@@ -490,7 +490,9 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     </div>
   );
 
-  if (hasPaid === false) {
+  const needsPaymentGate = hasPaid === false && league?.league_type === 'season';
+
+  if (needsPaymentGate) {
     const entryFeeCents = Math.round((league?.buy_in ?? 0) * 100);
     const canAfford = (walletBalance ?? 0) >= entryFeeCents;
     return (

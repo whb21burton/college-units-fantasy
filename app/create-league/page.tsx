@@ -394,6 +394,14 @@ export default function CreateLeaguePage() {
   const card: React.CSSProperties = { background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 14, padding: '28px 32px', marginBottom: 20 };
   const placeEmoji = (i: number) => i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
 
+  const PAYOUT_DESCRIPTIONS: Record<PayoutStructure, string> = {
+    winner_take_all: '1st place wins 100% of net prize pool',
+    top2:            '1st: 70% · 2nd: 30% of net prize pool',
+    top3:            '1st: 60% · 2nd: 25% · 3rd: 15% of net prize pool',
+    double_up:       'Top 50% of players each win 1.95× their entry fee',
+    custom:          'Custom payout structure',
+  };
+
   // suppress unused-var warning for customPayouts setter — state kept for future custom editor
   void customPayouts; void setCustomPayouts;
 
@@ -831,31 +839,9 @@ export default function CreateLeaguePage() {
                 <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
                   Payout Structure — {activePreset.label}
                 </div>
-                {payoutStructure === 'double_up' ? (
-                  <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
-                        Top {Math.floor(entries / 2)} players each win
-                      </span>
-                      <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>${(effectiveBuyIn * 1.95).toFixed(2)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
-                        Bottom {entries - Math.floor(entries / 2)} players
-                      </span>
-                      <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.red }}>lose entry fee</span>
-                    </div>
-                  </>
-                ) : (
-                  splits.map((s, i) => (
-                    <div key={s.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: i < splits.length - 1 ? 6 : 0 }}>
-                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
-                        {placeEmoji(i)} {s.label} place ({s.pct}%)
-                      </span>
-                      <span style={{ fontFamily: 'Anton, sans-serif', fontSize: 13, color: C.gold }}>${s.amount.toFixed(2)}</span>
-                    </div>
-                  ))
-                )}
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>
+                  {PAYOUT_DESCRIPTIONS[payoutStructure]}
+                </div>
               </div>
             )}
 
