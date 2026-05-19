@@ -30,6 +30,7 @@ export default function Footer() {
                 { href: '/legal/privacy', label: 'Privacy Policy' },
                 { href: '/legal/contest-rules', label: 'Contest Rules' },
                 { href: '/legal/state-restrictions', label: 'Eligible States' },
+                { href: '/support', label: 'Contact Support' },
               ].map(l => (
                 <Link key={l.href} href={l.href} style={{ fontSize: 12, color: C.sub, textDecoration: 'none', fontFamily: "'Oswald', sans-serif", letterSpacing: 0.5 }}>
                   {l.label}
