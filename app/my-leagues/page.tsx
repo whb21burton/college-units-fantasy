@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 
@@ -72,15 +72,21 @@ function InlineBracketDashboard({ contestId }: { contestId: string }) {
 
 export default function MyLeaguesPage() {
   const router = useRouter();
-  const [user,           setUser]           = useState<any>(null);
-  const [loading,        setLoading]        = useState(true);
-  const [leagues,        setLeagues]        = useState<LeagueData[]>([]);
-  const [selected,       setSelected]       = useState<Selection>(null);
-  const [history,        setHistory]        = useState<HistoryEntry[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [collapsed,      setCollapsed]      = useState<Record<string, boolean>>({
+  const [user,            setUser]            = useState<any>(null);
+  const [loading,         setLoading]         = useState(true);
+  const [leagues,         setLeagues]         = useState<LeagueData[]>([]);
+  const [selected,        setSelected]        = useState<Selection>(null);
+  const [history,         setHistory]         = useState<HistoryEntry[]>([]);
+  const [historyLoading,  setHistoryLoading]  = useState(false);
+  const [collapsed,       setCollapsed]       = useState<Record<string, boolean>>({
     season: false, weekly: false, bracket: false,
   });
+  const [displayName,     setDisplayName]     = useState('…');
+  const [avatarUrl,       setAvatarUrl]       = useState<string | null>(null);
+  const [editingProfile,  setEditingProfile]  = useState(false);
+  const [newDisplayName,  setNewDisplayName]  = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function toggleSection(key: string) {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -90,6 +96,8 @@ export default function MyLeaguesPage() {
     supabase.auth.getUser().then(async ({ data: { user: u } }) => {
       if (!u) { router.push('/'); return; }
       setUser(u);
+      setAvatarUrl(u.user_metadata?.avatar_url ?? null);
+      setDisplayName(u.user_metadata?.display_name ?? u.email?.split('@')[0] ?? 'User');
       const { data: memberships } = await supabase
         .from('league_members')
         .select(`
@@ -154,7 +162,29 @@ export default function MyLeaguesPage() {
     fetchHistory();
   }, [selected?.type, user?.id]);
 
-  const displayName = user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? '…';
+  const userId = user?.id ?? '';
+
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    const { data } = await supabase.storage
+      .from('avatars')
+      .upload(`${userId}/${Date.now()}.${file.name.split('.').pop()}`, file, { upsert: true });
+    if (data) {
+      const url = supabase.storage.from('avatars').getPublicUrl(data.path).data.publicUrl;
+      setAvatarUrl(url);
+      await supabase.auth.updateUser({ data: { avatar_url: url } });
+    }
+    setUploadingAvatar(false);
+  }
+
+  async function handleSaveName() {
+    if (!newDisplayName.trim()) return;
+    await supabase.auth.updateUser({ data: { display_name: newDisplayName.trim() } });
+    setDisplayName(newDisplayName.trim());
+    setEditingProfile(false);
+  }
 
   const seasonLeagues  = leagues.filter(l => l.league_type === 'season');
   const weeklyLeagues  = leagues.filter(l => l.league_type === 'weekly');
@@ -253,23 +283,73 @@ export default function MyLeaguesPage() {
         display: 'flex', flexDirection: 'column',
         height: '100vh', position: 'sticky', top: 0, overflowY: 'auto',
       }}>
-        {/* User avatar */}
-        <div style={{ padding: '20px 16px', borderBottom: `1px solid ${C.surf3}`, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: '50%', background: C.gold,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.bg, flexShrink: 0,
-            }}>
-              {displayName[0]?.toUpperCase() ?? '?'}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-                {displayName}
+        {/* Editable profile */}
+        <div style={{ padding: '16px', borderBottom: `1px solid ${C.surf3}`, flexShrink: 0 }}>
+          {!editingProfile ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', cursor: 'pointer', flexShrink: 0, border: `2px solid ${C.surf3}`, position: 'relative' }}
+                title="Click to change photo"
+              >
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%', background: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.bg }}>
+                    {displayName[0]?.toUpperCase()}
+                  </div>
+                )}
+                <div
+                  style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity .15s' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = '1'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = '0'}
+                >
+                  <span style={{ fontSize: 16 }}>📷</span>
+                </div>
               </div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>My Leagues</div>
+              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarUpload} />
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                  {displayName}
+                </div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>My Leagues</div>
+              </div>
+
+              <button
+                onClick={() => { setEditingProfile(true); setNewDisplayName(displayName); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 13, padding: 4 }}
+                title="Edit profile"
+              >✏️</button>
             </div>
-          </div>
+          ) : (
+            <div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>
+                Edit Display Name
+              </div>
+              <input
+                value={newDisplayName}
+                onChange={e => setNewDisplayName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingProfile(false); }}
+                autoFocus
+                maxLength={32}
+                style={{ width: '100%', padding: '8px 10px', background: C.surf2, border: `1px solid ${C.gold}`, borderRadius: 6, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, marginBottom: 8 }}
+              />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={handleSaveName} style={{ flex: 1, padding: '7px', background: C.gold, border: 'none', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.bg }}>
+                  Save
+                </button>
+                <button onClick={() => setEditingProfile(false)} style={{ flex: 1, padding: '7px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {uploadingAvatar && (
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center' as const, marginTop: 4 }}>
+              Uploading…
+            </div>
+          )}
         </div>
 
         {/* Scrollable league list */}
@@ -308,18 +388,18 @@ export default function MyLeaguesPage() {
             </span>
           </button>
           <button
-            onClick={() => router.push('/create-league')}
+            onClick={() => router.push('/')}
             style={{
               width: '100%', padding: '12px 16px',
               background: 'none', border: 'none',
               borderTop: `1px solid ${C.surf3}`,
-              cursor: 'pointer', textAlign: 'left',
+              cursor: 'pointer', textAlign: 'left' as const,
               display: 'flex', alignItems: 'center', gap: 10,
             }}
           >
-            <span style={{ fontSize: 14 }}>➕</span>
-            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.green }}>
-              Create League
+            <span style={{ fontSize: 14 }}>🏠</span>
+            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, letterSpacing: 0.5 }}>
+              Home Page
             </span>
           </button>
         </div>
