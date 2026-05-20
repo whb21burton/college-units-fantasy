@@ -25,6 +25,8 @@ export default function BracketsPage() {
   const [balance,        setBalance]        = useState(0)
   const [myEntryCounts,  setMyEntryCounts]  = useState<Record<string, number>>({})
   const [isAdmin,        setIsAdmin]        = useState(false)
+  const [entering,       setEntering]       = useState<string | null>(null)
+  const [enterError,     setEnterError]     = useState<string | null>(null)
 
   useEffect(() => {
     supabase
@@ -78,6 +80,61 @@ export default function BracketsPage() {
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, contests])
+
+  async function handleEnterContest(contest: any) {
+    const feeCents = contest.entry_fee_cents ?? 0
+
+    if (feeCents === 0) {
+      router.push(`/brackets/${contest.id}`)
+      return
+    }
+
+    // Already entered — skip payment and go straight to bracket
+    const { data: existing } = await supabase
+      .from('user_bracket_entries')
+      .select('id')
+      .eq('contest_id', contest.id)
+      .eq('user_id', userId!)
+      .maybeSingle()
+
+    if (existing) {
+      router.push(`/brackets/${contest.id}`)
+      return
+    }
+
+    if (balance < feeCents) {
+      setEnterError(`Not enough funds. Need $${(feeCents / 100).toFixed(2)}, you have $${(balance / 100).toFixed(2)}.`)
+      return
+    }
+
+    setEntering(contest.id)
+    setEnterError(null)
+
+    const res = await fetch('/api/wallet/bracket-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contestId: contest.id, buyInCents: feeCents }),
+    })
+
+    if (!res.ok) {
+      const d = await res.json()
+      setEnterError(d.error ?? 'Failed to enter')
+      setEntering(null)
+      return
+    }
+
+    // Create entry row so My Leagues can find this contest
+    await supabase.from('user_bracket_entries').upsert({
+      contest_id:   contest.id,
+      user_id:      userId!,
+      entry_name:   'My Bracket',
+      is_submitted: false,
+    }, { onConflict: 'contest_id,user_id' })
+
+    setBalance(prev => prev - feeCents)
+    setEntering(null)
+    router.push('/my-leagues?contest=' + contest.id)
+  }
 
   async function handleDeleteContest(contestId: string, contestName: string) {
     if (!confirm(`Delete "${contestName}"? This cannot be undone.`)) return
@@ -231,11 +288,19 @@ export default function BracketsPage() {
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, lineHeight: 1.3 }}>
                     When first<br />game starts
                   </div>
-                  <button
-                    onClick={() => router.push(`/brackets/${contest.id}`)}
-                    style={{ padding: '8px 16px', background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: C.bg, whiteSpace: 'nowrap' as const }}>
-                    Enter
-                  </button>
+                  <div>
+                    <button
+                      onClick={() => handleEnterContest(contest)}
+                      disabled={entering === contest.id}
+                      style={{ padding: '8px 16px', background: entering === contest.id ? C.muted : C.gold, border: 'none', borderRadius: 8, cursor: entering === contest.id ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: C.bg, whiteSpace: 'nowrap' as const }}>
+                      {entering === contest.id ? 'Entering...' : 'Enter'}
+                    </button>
+                    {enterError && (
+                      <div style={{ color: C.red, fontFamily: 'Oswald,sans-serif', fontSize: 10, marginTop: 4, whiteSpace: 'nowrap' as const }}>
+                        {enterError}
+                      </div>
+                    )}
+                  </div>
                   {isAdmin && (
                     <button
                       onClick={e => { e.stopPropagation(); handleDeleteContest(contest.id, contest.name) }}

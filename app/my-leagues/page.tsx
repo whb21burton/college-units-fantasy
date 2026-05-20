@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 
 const C = {
@@ -30,6 +30,7 @@ type LeagueData = {
   draft_type?: string;
   conference_filter?: string;
   team_name: string;
+  isStandalone?: boolean;
 };
 
 type Selection =
@@ -72,8 +73,9 @@ function InlineBracketDashboard({ contestId }: { contestId: string }) {
 
 // ── MyLeaguesPage ─────────────────────────────────────────────────────────────
 
-export default function MyLeaguesPage() {
+function MyLeaguesContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [user,            setUser]            = useState<any>(null);
   const [loading,         setLoading]         = useState(true);
   const [leagues,         setLeagues]         = useState<LeagueData[]>([]);
@@ -88,7 +90,8 @@ export default function MyLeaguesPage() {
   const [editingProfile,  setEditingProfile]  = useState(false);
   const [newDisplayName,  setNewDisplayName]  = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [walletBalance,   setWalletBalance]   = useState<number | null>(null);
+  const [walletBalance,      setWalletBalance]      = useState<number | null>(null);
+  const [standaloneBrackets, setStandaloneBrackets] = useState<LeagueData[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function toggleSection(key: string) {
@@ -128,6 +131,40 @@ export default function MyLeaguesPage() {
         .map((m: any) => m.leagues ? { ...m.leagues, team_name: m.team_name } : null)
         .filter(Boolean) as LeagueData[];
       setLeagues(validLeagues);
+
+      // Also fetch standalone bracket contest entries (not linked to a league)
+      const { data: bracketEntries } = await supabase
+        .from('user_bracket_entries')
+        .select('contest_id, entry_name, contest:bracket_contests(id, name, sport, entry_fee_cents, status)')
+        .eq('user_id', u.id);
+
+      const linkedContestIds = new Set(
+        validLeagues
+          .filter(l => l.league_type === 'bracket')
+          .map(l => l.settings?.bracket_contest_id)
+          .filter(Boolean)
+      );
+
+      const standaloneItems: LeagueData[] = (bracketEntries ?? [])
+        .filter(e => !linkedContestIds.has(e.contest_id))
+        .map(e => {
+          const c = (e as any).contest;
+          return {
+            id:           e.contest_id,
+            name:         c?.name ?? 'Bracket',
+            league_type:  'bracket',
+            is_public:    true,
+            buy_in:       (c?.entry_fee_cents ?? 0) / 100,
+            league_size:  0,
+            status:       c?.status ?? 'open',
+            settings:     { bracket_contest_id: e.contest_id },
+            team_name:    e.entry_name ?? 'My Bracket',
+            isStandalone: true,
+          };
+        });
+
+      setStandaloneBrackets(standaloneItems);
+
       if (walletRes.ok) {
         const walletData = await walletRes.json();
         setWalletBalance(walletData.wallet?.balance ?? null);
@@ -205,9 +242,35 @@ export default function MyLeaguesPage() {
     setEditingProfile(false);
   }
 
-  const seasonLeagues  = leagues.filter(l => l.league_type === 'season');
-  const weeklyLeagues  = leagues.filter(l => l.league_type === 'weekly');
-  const bracketLeagues = leagues.filter(l => l.league_type === 'bracket');
+  const seasonLeagues     = leagues.filter(l => l.league_type === 'season');
+  const weeklyLeagues     = leagues.filter(l => l.league_type === 'weekly');
+  const bracketLeagues    = leagues.filter(l => l.league_type === 'bracket');
+  const allBracketLeagues = [...bracketLeagues, ...standaloneBrackets];
+
+  // Auto-select from ?contest= or ?league= query params after data loads
+  useEffect(() => {
+    const contestId = searchParams.get('contest');
+    const leagueId  = searchParams.get('league');
+
+    if (contestId && allBracketLeagues.length > 0) {
+      const found = allBracketLeagues.find(
+        l => l.settings?.bracket_contest_id === contestId || l.id === contestId
+      );
+      if (found) {
+        setSelected({ type: 'bracket', contestId: found.settings?.bracket_contest_id ?? found.id, data: found });
+        setCollapsed(prev => ({ ...prev, bracket: false }));
+      }
+    }
+
+    if (leagueId && (seasonLeagues.length + weeklyLeagues.length) > 0) {
+      const found = [...seasonLeagues, ...weeklyLeagues].find(l => l.id === leagueId);
+      if (found) {
+        setSelected({ type: 'league', id: found.id, data: found });
+        setCollapsed(prev => ({ ...prev, [found.league_type]: false }));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, allBracketLeagues.length, seasonLeagues.length, weeklyLeagues.length]);
 
   function selectLeague(league: LeagueData) {
     if (league.league_type === 'bracket') {
@@ -391,7 +454,7 @@ export default function MyLeaguesPage() {
               <div style={{ height: 1, background: C.surf3, margin: '4px 16px' }} />
               {renderSection('weekly',  '⚡', 'Weekly Leagues', weeklyLeagues)}
               <div style={{ height: 1, background: C.surf3, margin: '4px 16px' }} />
-              {renderSection('bracket', '🏆', 'Bracket',        bracketLeagues)}
+              {renderSection('bracket', '🏆', 'Bracket',        allBracketLeagues)}
             </>
           )}
         </div>
@@ -510,5 +573,13 @@ export default function MyLeaguesPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function MyLeaguesPage() {
+  return (
+    <Suspense fallback={<div style={{ background: '#070a12', minHeight: '100vh' }} />}>
+      <MyLeaguesContent />
+    </Suspense>
   );
 }

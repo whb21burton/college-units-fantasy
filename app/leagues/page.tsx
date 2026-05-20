@@ -643,8 +643,7 @@ function EnterModal({
       return;
     }
     onConfirm(teamName.trim());
-    if (d.redirect) router.push(d.redirect);
-    else router.push(league.league_type === 'weekly' ? `/league/${league.id}/lineup` : `/league/${league.id}/draft`);
+    router.push('/my-leagues?league=' + league.id);
   }
 
   return (
