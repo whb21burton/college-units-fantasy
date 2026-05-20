@@ -1,8 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import BracketLeaderboard from '@/components/bracket/BracketLeaderboard'
 import type { Team } from '@/lib/bracketTypes'
 
 const C = {
@@ -347,24 +346,26 @@ function ProgressBar({ n, total }: { n: number; total: number }) {
 /* ── Main Page ──────────────────────────────────────────── */
 export default function BracketPage() {
   const params    = useParams()
-  const router    = useRouter()
   const contestId = params.id as string
   const supabase  = createClientComponentClient()
 
-  const [userId,       setUserId]       = useState<string | null>(null)
-  const [contest,      setContest]      = useState<any>(null)
-  const [entry,        setEntry]        = useState<any>(null)
-  const [picks,        setPicks]        = useState<BracketPicks>(empty())
-  const [tab,          setTab]          = useState<Tab>('bracket')
-  const [mSection,     setMSection]     = useState<MSection>('left')
-  const [loading,      setLoading]      = useState(true)
-  const [submitting,   setSubmitting]   = useState(false)
-  const [msg,          setMsg]          = useState<{ ok: boolean; text: string } | null>(null)
-  const [hasPaid,        setHasPaid]        = useState<boolean>(false)
-  const [walletBalance,  setWalletBalance]  = useState<number | null>(null)
+  const [userId,         setUserId]         = useState<string | null>(null)
+  const [contest,        setContest]        = useState<any>(null)
+  const [picks,          setPicks]          = useState<BracketPicks>(empty())
+  const [tab,            setTab]            = useState<Tab>('bracket')
+  const [mSection,       setMSection]       = useState<MSection>('left')
+  const [loading,        setLoading]        = useState(true)
+  const [submitting,     setSubmitting]     = useState(false)
+  const [hasSubmitted,   setHasSubmitted]   = useState(false)
+  const [isLocked,       setIsLocked]       = useState(false)
+  const [walletBalance,  setWalletBalance]  = useState<number>(0)
   const [showWalletModal,setShowWalletModal]= useState(false)
-  const [chatMessages, setChatMessages] = useState<any[]>([])
-  const [chatInput,    setChatInput]    = useState('')
+  const [showNameModal,  setShowNameModal]  = useState(false)
+  const [bracketName,    setBracketName]    = useState('My Bracket')
+  const [submitError,    setSubmitError]    = useState('')
+  const [leaderboard,    setLeaderboard]    = useState<any[]>([])
+  const [chatMessages,   setChatMessages]   = useState<any[]>([])
+  const [chatInput,      setChatInput]      = useState('')
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const loadData = useCallback(async () => {
@@ -374,24 +375,11 @@ export default function BracketPage() {
     const { data: c } = await supabase.from('bracket_contests').select('*').eq('id', contestId).single()
     if (c) setContest(c)
 
-    const entryFeeCents = c?.entry_fee_cents ?? 0
-
-    if (user?.id) {
-      const { data: e } = await supabase.from('user_bracket_entries').select('*')
-        .eq('contest_id', contestId).eq('user_id', user.id).maybeSingle()
-      if (e) {
-        setEntry(e)
-        if (e.bracket_data?.picks) setPicks(e.bracket_data.picks)
-      }
-      setHasPaid(entryFeeCents === 0 || !!e?.is_submitted)
-    }
-
-    // Fetch wallet balance
     try {
       const walletRes = await fetch('/api/wallet')
       if (walletRes.ok) {
         const walletData = await walletRes.json()
-        setWalletBalance(walletData.wallet?.balance ?? null)
+        setWalletBalance(walletData.wallet?.balance ?? 0)
       }
     } catch {}
 
@@ -402,6 +390,45 @@ export default function BracketPage() {
     console.log('[bracket] contestId:', contestId)
     loadData()
   }, [loadData])
+
+  // Check submission status, restore picks, and check lock
+  useEffect(() => {
+    if (!userId || !contestId) return
+    supabase
+      .from('user_bracket_entries')
+      .select('id, entry_name, is_submitted, bracket_data')
+      .eq('contest_id', contestId)
+      .eq('user_id', userId)
+      .single()
+      .then(({ data }) => {
+        if (data?.is_submitted) {
+          setHasSubmitted(true)
+          setBracketName(data.entry_name ?? 'My Bracket')
+          if (data.bracket_data) setPicks(data.bracket_data)
+        }
+      })
+    supabase
+      .from('bracket_contests')
+      .select('status, locks_at')
+      .eq('id', contestId)
+      .single()
+      .then(({ data }) => {
+        if (data?.status === 'locked' || data?.status === 'active') setIsLocked(true)
+        if (data?.locks_at && new Date(data.locks_at) < new Date()) setIsLocked(true)
+      })
+  }, [userId, contestId])
+
+  // Fetch leaderboard when tab switches to leaderboard
+  useEffect(() => {
+    if (tab !== 'leaderboard') return
+    supabase
+      .from('user_bracket_entries')
+      .select('id, entry_name, user_id, total_score, correct_picks, submitted_at, is_submitted')
+      .eq('contest_id', contestId)
+      .eq('is_submitted', true)
+      .order('submitted_at', { ascending: true })
+      .then(({ data }) => setLeaderboard(data ?? []))
+  }, [tab, contestId])
 
   // Chat: subscribe to bracket_messages
   useEffect(() => {
@@ -427,11 +454,6 @@ export default function BracketPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
-
-  const isLocked = !!(
-    contest?.status === 'locked' || contest?.status === 'active' ||
-    contest?.status === 'completed' || entry?.is_locked
-  )
 
   /* ── Pick handlers ── */
   function pickRegional(key: string, team: Team) {
@@ -518,16 +540,39 @@ export default function BracketPage() {
 
   /* ── Submit ── */
   async function handleSubmit() {
-    if (!userId || !contestId) return
+    if (!userId || !contestId || !bracketName.trim()) return
     setSubmitting(true)
+    setSubmitError('')
     try {
-      // Upsert bracket entry
+      // Step 1: deduct entry fee on first submission
+      if (!hasSubmitted && entryFeeCents > 0) {
+        if (walletBalance < entryFeeCents) {
+          setSubmitError(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
+          setSubmitting(false)
+          return
+        }
+        const payRes = await fetch('/api/wallet/join-contest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ league_id: contestId, team_name: bracketName.trim() }),
+        })
+        if (!payRes.ok) {
+          const d = await payRes.json()
+          setSubmitError(d.error ?? 'Payment failed')
+          setSubmitting(false)
+          return
+        }
+        setWalletBalance(prev => prev - entryFeeCents)
+      }
+
+      // Step 2: upsert bracket entry with picks + name
       const { data: savedEntry, error: entryErr } = await supabase
         .from('user_bracket_entries')
         .upsert({
           contest_id:   contestId,
           user_id:      userId,
-          entry_name:   'My Bracket',
+          entry_name:   bracketName.trim(),
+          bracket_data: picks,
           is_submitted: true,
           submitted_at: new Date().toISOString(),
         }, { onConflict: 'contest_id,user_id' })
@@ -536,20 +581,22 @@ export default function BracketPage() {
 
       if (entryErr) throw entryErr
 
-      // Store full bracket data on the entry
-      await supabase
-        .from('user_bracket_entries')
-        .update({ bracket_data: picks })
-        .eq('id', savedEntry.id)
+      // Step 3: increment entry count on first submit (non-blocking)
+      if (!hasSubmitted) {
+        supabase.rpc('increment_entry_count', { contest_id: contestId }).then(() => {})
+      }
 
-      setHasPaid(true)
-      setSubmitting(false)
-      alert('🏆 Bracket submitted! Good luck!')
+      const wasSubmitted = hasSubmitted
+      setHasSubmitted(true)
+      setShowNameModal(false)
+      setSubmitError('')
+      alert(wasSubmitted
+        ? `✏️ Bracket "${bracketName}" updated! Your new picks are saved.`
+        : `🏆 Bracket "${bracketName}" submitted! Good luck!`)
     } catch (err: any) {
-      console.error('[bracket submit] error:', err)
-      alert('Failed to submit: ' + (err?.message ?? 'Unknown error'))
-      setSubmitting(false)
+      setSubmitError(err?.message ?? 'Submission failed')
     }
+    setSubmitting(false)
   }
 
   /* ── Derived CWS teams ── */
@@ -560,7 +607,6 @@ export default function BracketPage() {
   const semi1t2 = cwsT(CWS_SEMIS[1].rightSR)
   const champT1 = picks.semifinals[0] ?? null
   const champT2 = picks.semifinals[1] ?? null
-  const total   = countPicks(picks)
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -574,6 +620,7 @@ export default function BracketPage() {
   )
 
   const entryFeeCents = contest.entry_fee_cents ?? 0
+  const totalPicks    = countPicks(picks)  // re-declare here so JSX can use it post-guard
 
   /* ── Bracket columns (shared by desktop & mobile) ── */
   const leftRegionalsCol = (
@@ -699,55 +746,52 @@ export default function BracketPage() {
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text }}>
 
-      {/* ── Top bar ── */}
+      {/* ── Sticky header ── */}
       <div style={{
+        position: 'sticky', top: 0, zIndex: 100,
         background: C.surf, borderBottom: `1px solid ${C.surf3}`,
-        padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+        padding: '10px 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <div style={{ flex: 1, minWidth: 160 }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, letterSpacing: 1 }}>{contest.name}</div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, marginTop: 2 }}>
-            Entry: <strong style={{ color: C.gold }}>{entryFeeCents === 0 ? 'Free' : `$${(entryFeeCents / 100).toFixed(2)}`}</strong>
-            &ensp;·&ensp;Status: <strong style={{ color: contest.status === 'open' ? C.green : C.muted, textTransform: 'uppercase' }}>{contest.status}</strong>
-          </div>
+        {/* Left: contest name */}
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
+          {contest.name}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, minWidth: 200 }}>
-          <ProgressBar n={total} total={TOTAL} />
-          {entry?.is_submitted
-            ? <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.green }}>✓ BRACKET SUBMITTED</span>
-            : msg && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: msg.ok ? C.green : C.red }}>{msg.text}</span>
-          }
-          {contest === null ? (
-            <div style={{ color: '#7a90aa', fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>Loading...</div>
-          ) : !isLocked && !entry?.is_submitted && (
-            !hasPaid && entryFeeCents > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                <div
-                  onClick={() => setShowWalletModal(true)}
-                  style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, cursor: 'pointer' }}
-                >
-                  Wallet: {walletBalance !== null ? `$${(walletBalance / 100).toFixed(2)}` : '—'}
-                </div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red }}>
-                  Entry fee: ${(entryFeeCents / 100).toFixed(2)}
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={total < TOTAL || submitting}
-                style={{
-                  padding: '8px 18px', borderRadius: 6, border: 'none',
-                  cursor: total >= TOTAL ? 'pointer' : 'not-allowed',
-                  background: total >= TOTAL ? C.gold : C.surf3,
-                  color: total >= TOTAL ? C.bg : C.muted,
-                  fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase',
-                  transition: 'all .2s',
-                }}
-              >{submitting ? 'Submitting…' : total >= TOTAL ? 'Submit Bracket' : `${TOTAL - total} picks remaining`}</button>
-            )
+        {/* Center: submit / locked / edit */}
+        <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+          {isLocked ? (
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, letterSpacing: 1 }}>
+              🔒 Bracket Locked
+            </div>
+          ) : hasSubmitted ? (
+            <button onClick={() => setShowNameModal(true)}
+              style={{ padding: '8px 20px', background: 'none', border: `1px solid ${C.gold}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.gold }}>
+              ✏️ Edit Bracket
+            </button>
+          ) : (
+            <button
+              onClick={() => totalPicks >= TOTAL ? setShowNameModal(true) : undefined}
+              disabled={totalPicks < TOTAL}
+              style={{
+                padding: '8px 24px',
+                background: totalPicks >= TOTAL ? C.gold : C.surf3,
+                border: 'none', borderRadius: 8,
+                cursor: totalPicks >= TOTAL ? 'pointer' : 'not-allowed',
+                fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2,
+                color: totalPicks >= TOTAL ? C.bg : C.muted,
+                textTransform: 'uppercase' as const,
+              }}>
+              {totalPicks >= TOTAL ? 'Submit Bracket' : `${TOTAL - totalPicks} picks left`}
+            </button>
           )}
+        </div>
+
+        {/* Right: wallet balance */}
+        <div onClick={() => setShowWalletModal(true)} style={{ cursor: 'pointer', textAlign: 'right' as const }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>
+            ${(walletBalance / 100).toFixed(2)}
+          </div>
         </div>
       </div>
 
@@ -767,8 +811,30 @@ export default function BracketPage() {
 
       {/* ── Leaderboard ── */}
       {tab === 'leaderboard' && (
-        <div style={{ padding: 20, maxWidth: 700, margin: '0 auto' }}>
-          <BracketLeaderboard contestId={contestId} currentUserId={userId} />
+        <div style={{ padding: '20px 24px' }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
+            🏅 Leaderboard — {leaderboard.length} entries
+          </div>
+          {leaderboard.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
+              No entries yet — be the first to submit!
+            </div>
+          ) : leaderboard.map((e, i) => (
+            <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.surf, border: `1px solid ${e.user_id === userId ? C.gold : C.surf3}`, borderRadius: 8, marginBottom: 6 }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.muted, width: 28 }}>{i + 1}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: e.user_id === userId ? C.gold : C.text }}>
+                  {e.entry_name} {e.user_id === userId && '(You)'}
+                </div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 2 }}>
+                  Submitted {new Date(e.submitted_at).toLocaleDateString()}
+                </div>
+              </div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold }}>
+                {e.total_score ?? 0} pts
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -883,6 +949,66 @@ export default function BracketPage() {
           .bracket-mobile  { display: block !important; }
         }
       `}</style>
+
+      {/* ── Naming / submit modal ── */}
+      {showNameModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 14, padding: 28, maxWidth: 400, width: '100%' }}>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>
+              {hasSubmitted ? '✏️ Edit Bracket' : '🏆 Name Your Bracket'}
+            </div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 20 }}>
+              {hasSubmitted
+                ? 'Update your picks — no additional charge. Must resubmit to save changes.'
+                : `Entry fee: $${(entryFeeCents / 100).toFixed(2)} will be deducted from your wallet.`}
+            </div>
+
+            <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const, display: 'block', marginBottom: 6 }}>
+              Bracket Name
+            </label>
+            <input
+              value={bracketName}
+              onChange={e => setBracketName(e.target.value)}
+              maxLength={40}
+              autoFocus
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+              style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.gold}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, marginBottom: 16 }}
+            />
+
+            {!hasSubmitted && entryFeeCents > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, padding: '10px 12px', background: C.surf2, borderRadius: 8 }}>
+                <div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>ENTRY FEE</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold }}>${(entryFeeCents / 100).toFixed(2)}</div>
+                </div>
+                <div style={{ textAlign: 'right' as const }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>YOUR BALANCE</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: walletBalance >= entryFeeCents ? C.green : C.red }}>
+                    ${(walletBalance / 100).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {submitError && (
+              <div style={{ padding: '8px 12px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, marginBottom: 12 }}>
+                ⚠️ {submitError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { setShowNameModal(false); setSubmitError('') }}
+                style={{ flex: 1, padding: '12px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
+                Cancel
+              </button>
+              <button onClick={handleSubmit} disabled={submitting || !bracketName.trim()}
+                style={{ flex: 2, padding: '12px', background: submitting ? C.surf3 : C.gold, border: 'none', borderRadius: 8, cursor: submitting ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: submitting ? C.muted : C.bg, textTransform: 'uppercase' as const }}>
+                {submitting ? 'Submitting...' : hasSubmitted ? 'Resubmit Bracket' : 'Pay & Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Wallet modal ── */}
       {showWalletModal && (
