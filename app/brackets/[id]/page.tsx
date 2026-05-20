@@ -518,19 +518,38 @@ export default function BracketPage() {
 
   /* ── Submit ── */
   async function handleSubmit() {
-    if (countPicks(picks) < TOTAL || isLocked || submitting) return
+    if (!userId || !contestId) return
     setSubmitting(true)
-    setMsg(null)
     try {
-      const res = await fetch(`/api/brackets/${contestId}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ picks }),
-      })
-      const json = await res.json()
-      if (!res.ok) setMsg({ ok: false, text: json.error ?? 'Failed to submit' })
-      else { setMsg({ ok: true, text: 'Bracket submitted! 🎉' }); await loadData() }
-    } finally { setSubmitting(false) }
+      // Upsert bracket entry
+      const { data: savedEntry, error: entryErr } = await supabase
+        .from('user_bracket_entries')
+        .upsert({
+          contest_id:   contestId,
+          user_id:      userId,
+          entry_name:   'My Bracket',
+          is_submitted: true,
+          submitted_at: new Date().toISOString(),
+        }, { onConflict: 'contest_id,user_id' })
+        .select('id')
+        .single()
+
+      if (entryErr) throw entryErr
+
+      // Store full bracket data on the entry
+      await supabase
+        .from('user_bracket_entries')
+        .update({ bracket_data: picks })
+        .eq('id', savedEntry.id)
+
+      setHasPaid(true)
+      setSubmitting(false)
+      alert('🏆 Bracket submitted! Good luck!')
+    } catch (err: any) {
+      console.error('[bracket submit] error:', err)
+      alert('Failed to submit: ' + (err?.message ?? 'Unknown error'))
+      setSubmitting(false)
+    }
   }
 
   /* ── Derived CWS teams ── */
