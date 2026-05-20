@@ -404,10 +404,13 @@ export default function BracketPage() {
       .eq('user_id', userId)
       .single()
       .then(({ data }) => {
-        if (data?.is_submitted) {
-          setHasSubmitted(true)
+        if (data?.id) {
+          // Restore entry name from join time whether or not bracket is submitted
           setBracketName(data.entry_name ?? 'My Bracket')
-          if (data.bracket_data) setPicks(data.bracket_data)
+          if (data.is_submitted) {
+            setHasSubmitted(true)
+            if (data.bracket_data) setPicks(data.bracket_data)
+          }
         }
       })
     supabase
@@ -571,7 +574,76 @@ export default function BracketPage() {
     })
   }
 
-  /* ── Submit ── */
+  /* ── Direct submit (no modal — uses name already saved at join time) ── */
+  async function handleSubmitDirect() {
+    if (!userId || !contestId || totalPicks < TOTAL) return
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      // Charge only for private leagues that haven't paid yet
+      if (!hasPaid && entryFeeCents > 0 && !isPublicLeague) {
+        if (walletBalance < entryFeeCents) {
+          setSubmitError(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
+          setSubmitting(false)
+          return
+        }
+        if (leagueId) {
+          const payRes = await fetch('/api/wallet/join-contest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ league_id: leagueId, team_name: bracketName }),
+          })
+          if (!payRes.ok) {
+            const d = await payRes.json()
+            setSubmitError(d.error ?? 'Payment failed')
+            setSubmitting(false)
+            return
+          }
+        } else {
+          const payRes = await fetch('/api/wallet/bracket-entry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contestId, buyInCents: entryFeeCents }),
+          })
+          if (!payRes.ok) {
+            const d = await payRes.json()
+            setSubmitError(d.error ?? 'Payment failed')
+            setSubmitting(false)
+            return
+          }
+        }
+        setWalletBalance(prev => prev - entryFeeCents)
+        setHasPaid(true)
+      }
+
+      const { error } = await supabase
+        .from('user_bracket_entries')
+        .upsert({
+          contest_id:   contestId,
+          user_id:      userId,
+          entry_name:   bracketName,
+          bracket_data: picks,
+          is_submitted: true,
+          submitted_at: new Date().toISOString(),
+        }, { onConflict: 'contest_id,user_id' })
+
+      if (error) throw error
+
+      if (!hasSubmitted) {
+        supabase.rpc('increment_entry_count', { contest_id: contestId }).then(() => {})
+      }
+
+      setHasSubmitted(true)
+      alert(`🏆 Bracket "${bracketName}" submitted! Good luck!`)
+    } catch (err: any) {
+      const msg = err?.message ?? 'Submission failed'
+      setSubmitError(msg)
+      alert('Error: ' + msg)
+    }
+    setSubmitting(false)
+  }
+
+  /* ── Edit submit (modal — allows renaming + resubmit) ── */
   async function handleSubmit() {
     if (!userId || !contestId || !bracketName.trim()) return
     setSubmitting(true)
@@ -822,18 +894,18 @@ export default function BracketPage() {
             </button>
           ) : (
             <button
-              onClick={() => totalPicks >= TOTAL ? setShowNameModal(true) : undefined}
-              disabled={totalPicks < TOTAL}
+              onClick={() => totalPicks >= TOTAL ? handleSubmitDirect() : undefined}
+              disabled={totalPicks < TOTAL || submitting}
               style={{
                 padding: '8px 24px',
                 background: totalPicks >= TOTAL ? C.gold : C.surf3,
                 border: 'none', borderRadius: 8,
-                cursor: totalPicks >= TOTAL ? 'pointer' : 'not-allowed',
+                cursor: totalPicks >= TOTAL && !submitting ? 'pointer' : 'not-allowed',
                 fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2,
                 color: totalPicks >= TOTAL ? C.bg : C.muted,
                 textTransform: 'uppercase' as const,
               }}>
-              {totalPicks >= TOTAL ? 'Submit Bracket' : `${TOTAL - totalPicks} picks left`}
+              {submitting ? 'Submitting...' : totalPicks >= TOTAL ? 'Submit Bracket' : `${TOTAL - totalPicks} picks left`}
             </button>
           )}
         </div>
@@ -1006,14 +1078,10 @@ export default function BracketPage() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 14, padding: 28, maxWidth: 400, width: '100%' }}>
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>
-              {hasSubmitted ? '✏️ Edit Bracket' : '🏆 Name Your Bracket'}
+              ✏️ Edit Bracket
             </div>
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 20 }}>
-              {!hasPaid && entryFeeCents > 0
-                ? `Entry fee: $${(entryFeeCents / 100).toFixed(2)} will be deducted from your wallet.`
-                : hasSubmitted
-                  ? 'Update your picks — no additional charge. Must resubmit to save changes.'
-                  : 'Submit your bracket — entry already paid.'}
+              Rename your bracket and resubmit. No additional charge.
             </div>
 
             <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const, display: 'block', marginBottom: 6 }}>
