@@ -493,6 +493,70 @@ function PublicBracketCreator() {
   )
 }
 
+function AdminStats() {
+  const supabase = createClientComponentClient()
+  const [stats,   setStats]   = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('admin_contest_stats')
+      .select('*')
+      .order('completed_at', { ascending: false })
+      .then(({ data }) => { setStats(data ?? []); setLoading(false) })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const totalRake     = stats.reduce((s, r) => s + (r.rake_cents     ?? 0), 0)
+  const totalEntries  = stats.reduce((s, r) => s + (r.total_entries  ?? 0), 0)
+  const totalContests = stats.length
+
+  return (
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginTop: 20 }}>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.gold, textTransform: 'uppercase', marginBottom: 4 }}>Platform</div>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 20 }}>📊 Contest Stats</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+        {([
+          ['Total Contests', totalContests],
+          ['Total Entries',  totalEntries],
+          ['Total Rake',     `$${(totalRake / 100).toFixed(2)}`],
+        ] as [string, any][]).map(([label, value]) => (
+          <div key={label} style={{ background: C.surf2, borderRadius: 8, padding: '12px 14px', textAlign: 'center' as const }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' as const, marginBottom: 6 }}>{label}</div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.gold }}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>Loading…</div>
+      ) : stats.length === 0 ? (
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, textAlign: 'center' as const, padding: '20px 0' }}>
+          No completed contests yet
+        </div>
+      ) : (
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${C.surf3}`, marginBottom: 4 }}>
+            {['Contest', 'Type', 'Entries', 'Net Pool', 'Rake'].map(h => (
+              <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const }}>{h}</div>
+            ))}
+          </div>
+          {stats.map((row, i) => (
+            <div key={row.id ?? i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 8, padding: '10px 10px', borderBottom: `1px solid ${C.surf3}` }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{row.contest_name}</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textTransform: 'capitalize' as const }}>{row.contest_type}</div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>{row.total_entries}</div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${((row.net_pool_cents ?? 0) / 100).toFixed(2)}</div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.green }}>${((row.rake_cents ?? 0) / 100).toFixed(2)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SimulationRunner() {
   const supabase = createClientComponentClient()
   const [contestType,      setContestType]      = useState<'weekly' | 'bracket'>('weekly')
@@ -697,6 +761,7 @@ export default function PlatformManagerPage() {
           <PublicBracketCreator />
         </div>
         <SimulationRunner />
+        <AdminStats />
       </div>
     </div>
   )

@@ -138,15 +138,26 @@ export default function BracketsPage() {
   }
 
   async function handleDeleteContest(contestId: string, contestName: string) {
-    if (!confirm(`Delete "${contestName}"? This cannot be undone.`)) return
-    const { error } = await supabase
-      .from('bracket_contests')
-      .delete()
-      .eq('id', contestId)
-    if (!error) {
+    if (!confirm(`Delete "${contestName}"? All paid entries will be refunded.`)) return
+    const res = await fetch(`/api/brackets/${contestId}/delete`, { method: 'POST' })
+    const data = await res.json()
+    if (res.ok) {
       setContests(prev => prev.filter(c => c.id !== contestId))
+      if (data.refunded > 0) alert(`Contest deleted. ${data.refunded} refund(s) issued.`)
     } else {
-      alert('Error deleting: ' + error.message)
+      alert('Error: ' + (data.error ?? 'Delete failed'))
+    }
+  }
+
+  async function handleCompleteContest(contestId: string, contestName: string) {
+    if (!confirm(`Complete "${contestName}" and distribute payouts?`)) return
+    const res = await fetch(`/api/brackets/${contestId}/complete`, { method: 'POST' })
+    const data = await res.json()
+    if (res.ok) {
+      setContests(prev => prev.filter(c => c.id !== contestId))
+      alert(`Completed! ${data.totalEntries} entries · $${(data.netPoolCents / 100).toFixed(2)} net pool · ${data.payouts.length} payout(s).`)
+    } else {
+      alert('Error: ' + (data.error ?? 'Complete failed'))
     }
   }
 
@@ -243,11 +254,11 @@ export default function BracketsPage() {
           </div>
         ) : (
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '8px 16px', borderBottom: `1px solid ${C.surf3}`, marginBottom: 4 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '8px 16px', borderBottom: `1px solid ${C.surf3}`, marginBottom: 4 }}>
               {['Contest', 'Your Entries', 'Entry Fee', 'Total Prizes', 'Entries', 'Live/Start', ''].map((h, i) => (
                 <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{h}</div>
               ))}
-              {isAdmin && <div />}
+              {isAdmin && <><div /><div /></>}
             </div>
             {contests.map(contest => {
               const myCount      = myEntryCounts[contest.id] ?? 0
@@ -259,7 +270,7 @@ export default function BracketsPage() {
               return (
                 <div key={contest.id}
                   onClick={() => { setSelectedContest(contest); setShowDetailModal(true); setEnterError(''); setTeamName('') }}
-                  style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '14px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 6, alignItems: 'center', cursor: 'pointer', transition: 'border-color .12s' }}
+                  style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '14px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 6, alignItems: 'center', cursor: 'pointer', transition: 'border-color .12s' }}
                   onMouseEnter={e => (e.currentTarget.style.borderColor = C.gold)}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = C.surf3)}
                 >
@@ -295,12 +306,20 @@ export default function BracketsPage() {
                     Enter
                   </button>
                   {isAdmin && (
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDeleteContest(contest.id, contest.name) }}
-                      style={{ padding: '8px 10px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.red, transition: 'all .15s' }}
-                      title="Delete contest">
-                      🗑️
-                    </button>
+                    <>
+                      <button
+                        onClick={e => { e.stopPropagation(); handleCompleteContest(contest.id, contest.name) }}
+                        style={{ padding: '8px 10px', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.green }}
+                        title="Complete & pay out">
+                        ✓
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); handleDeleteContest(contest.id, contest.name) }}
+                        style={{ padding: '8px 10px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.red }}
+                        title="Delete contest">
+                        🗑️
+                      </button>
+                    </>
                   )}
                 </div>
               )

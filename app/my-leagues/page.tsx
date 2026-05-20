@@ -197,7 +197,7 @@ function MyLeaguesContent() {
           .in('league_id', leagueIds);
         payouts = txData ?? [];
       }
-      const entries: HistoryEntry[] = completed
+      const leagueEntries: HistoryEntry[] = completed
         .filter((m: any) => m.leagues !== null)
         .map((m: any) => {
           const lg = m.leagues;
@@ -212,7 +212,56 @@ function MyLeaguesContent() {
           else result = 'lost';
           return { league: lg, entryFee, payout: payoutAmount, net, result };
         });
-      setHistory(entries);
+
+      // Also fetch completed bracket entries
+      const { data: bracketEntries } = await supabase
+        .from('user_bracket_entries')
+        .select('contest_id, rank, total_score, contest:bracket_contests(id, name, entry_fee_cents, entry_count, status, settings)')
+        .eq('user_id', user.id);
+
+      const bracketHistoryEntries: HistoryEntry[] = (bracketEntries ?? [])
+        .filter(e => (e.contest as any)?.status === 'completed')
+        .map(e => {
+          const c = e.contest as any;
+          const feeCents = c?.entry_fee_cents ?? 0;
+          const totalEntries = c?.entry_count ?? 0;
+          const netPool = Math.floor(feeCents * totalEntries * 0.95);
+          const ps: string = c?.settings?.payout_structure ?? 'winner_take_all';
+          const rank = e.rank ?? 999;
+
+          let payoutCents = 0;
+          if (feeCents > 0 && netPool > 0) {
+            if (ps === 'winner_take_all' && rank === 1) {
+              payoutCents = netPool;
+            } else if (ps === 'top2') {
+              if (rank === 1) payoutCents = Math.floor(netPool * 0.70);
+              else if (rank === 2) payoutCents = netPool - Math.floor(netPool * 0.70);
+            } else if (ps === 'top3') {
+              if (rank === 1) payoutCents = Math.floor(netPool * 0.60);
+              else if (rank === 2) payoutCents = Math.floor(netPool * 0.25);
+              else if (rank === 3) payoutCents = netPool - Math.floor(netPool * 0.60) - Math.floor(netPool * 0.25);
+            } else if (ps === 'double_up') {
+              const numWinners = Math.floor(totalEntries / 2);
+              if (rank <= numWinners) payoutCents = Math.floor(feeCents * 1.95);
+            }
+          }
+
+          const net = payoutCents - feeCents;
+          let result: HistoryEntry['result'];
+          if (feeCents === 0) result = 'free';
+          else if (payoutCents > 0) result = 'won';
+          else result = 'lost';
+
+          return {
+            league: { id: c?.id ?? e.contest_id, name: c?.name ?? 'Bracket Contest', league_type: 'bracket', status: 'completed', is_public: true },
+            entryFee: feeCents,
+            payout: payoutCents,
+            net,
+            result,
+          };
+        });
+
+      setHistory([...leagueEntries, ...bracketHistoryEntries]);
       setHistoryLoading(false);
     }
     fetchHistory();
