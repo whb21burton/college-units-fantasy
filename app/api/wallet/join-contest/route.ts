@@ -48,27 +48,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'League is not accepting members' }, { status: 400 });
     }
 
-    // Count this user's existing entries in the league
-    const { count: userEntryCount } = await admin
-      .from('league_members')
-      .select('*', { count: 'exact', head: true })
-      .eq('league_id', league_id)
-      .eq('user_id', user.id);
-
-    const currentUserEntries = userEntryCount ?? 0;
-
-    if (!league.is_public) {
-      // Private leagues: only 1 entry per user
-      if (currentUserEntries >= 1) {
-        return NextResponse.json({ error: 'Already a member' }, { status: 409 });
+    if (league.league_type === 'bracket') {
+      // Bracket leagues: user is already a member — only block duplicate payments
+      const { data: existingPayment } = await admin
+        .from('transactions')
+        .select('id')
+        .eq('league_id', league_id)
+        .eq('user_id', user.id)
+        .eq('type', 'contest_entry')
+        .eq('status', 'completed')
+        .single();
+      if (existingPayment) {
+        return NextResponse.json({ error: 'Entry fee already paid for this contest' }, { status: 400 });
       }
-    } else if (league.max_entries_per_user && league.max_entries_per_user > 0) {
-      // Public capped leagues: enforce per-user limit
-      if (currentUserEntries >= league.max_entries_per_user) {
-        return NextResponse.json(
-          { error: `Maximum ${league.max_entries_per_user} entries per account reached` },
-          { status: 400 }
-        );
+    } else {
+      // Non-bracket leagues: block duplicate membership
+      const { count: userEntryCount } = await admin
+        .from('league_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('league_id', league_id)
+        .eq('user_id', user.id);
+      const currentUserEntries = userEntryCount ?? 0;
+      if (!league.is_public) {
+        if (currentUserEntries >= 1) {
+          return NextResponse.json({ error: 'Already a member' }, { status: 409 });
+        }
+      } else if (league.max_entries_per_user && league.max_entries_per_user > 0) {
+        if (currentUserEntries >= league.max_entries_per_user) {
+          return NextResponse.json(
+            { error: `Maximum ${league.max_entries_per_user} entries per account reached` },
+            { status: 400 }
+          );
+        }
       }
     }
     // Public no-cap (max_entries_per_user is null): no per-user limit
@@ -92,13 +103,15 @@ export async function POST(req: NextRequest) {
 
     // ── Free league ──────────────────────────────────────────────────────────
     if (buyInCents === 0) {
-      await admin.from('league_members').insert({
-        league_id,
-        user_id:    user.id,
-        team_name:  team_name.trim(),
-        draft_slot: (memberCount ?? 0) + 1,
-        paid:       true,
-      });
+      if (league.league_type !== 'bracket') {
+        await admin.from('league_members').insert({
+          league_id,
+          user_id:    user.id,
+          team_name:  team_name.trim(),
+          draft_slot: (memberCount ?? 0) + 1,
+          paid:       true,
+        });
+      }
     } else {
       // ── Paid league — deduct from wallet atomically ────────────────────────
       const { data: wallet } = await admin
@@ -167,13 +180,15 @@ export async function POST(req: NextRequest) {
         { transaction_id: tx!.id, ledger_account_id: pendingAcctId, amount_cents: +buyInCents },
       ]);
 
-      await admin.from('league_members').insert({
-        league_id,
-        user_id:    user.id,
-        team_name:  team_name.trim(),
-        draft_slot: (memberCount ?? 0) + 1,
-        paid:       true,
-      });
+      if (league.league_type !== 'bracket') {
+        await admin.from('league_members').insert({
+          league_id,
+          user_id:    user.id,
+          team_name:  team_name.trim(),
+          draft_slot: (memberCount ?? 0) + 1,
+          paid:       true,
+        });
+      }
     }
 
     // ── For public leagues: trigger instant draft start ──────────────────────
