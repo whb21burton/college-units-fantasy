@@ -358,6 +358,7 @@ export default function BracketPage() {
   const [submitting,     setSubmitting]     = useState(false)
   const [hasSubmitted,   setHasSubmitted]   = useState(false)
   const [isLocked,       setIsLocked]       = useState(false)
+  const [leagueId,       setLeagueId]       = useState<string | null>(null)
   const [walletBalance,  setWalletBalance]  = useState<number>(0)
   const [showWalletModal,setShowWalletModal]= useState(false)
   const [showNameModal,  setShowNameModal]  = useState(false)
@@ -391,7 +392,7 @@ export default function BracketPage() {
     loadData()
   }, [loadData])
 
-  // Check submission status, restore picks, and check lock
+  // Check submission status, restore picks, check lock, and fetch owning league
   useEffect(() => {
     if (!userId || !contestId) return
     supabase
@@ -416,6 +417,13 @@ export default function BracketPage() {
         if (data?.status === 'locked' || data?.status === 'active') setIsLocked(true)
         if (data?.locks_at && new Date(data.locks_at) < new Date()) setIsLocked(true)
       })
+    supabase
+      .from('leagues')
+      .select('id, buy_in')
+      .eq('league_type', 'bracket')
+      .contains('settings', { bracket_contest_id: contestId })
+      .single()
+      .then(({ data }) => { if (data) setLeagueId(data.id) })
   }, [userId, contestId])
 
   // Fetch leaderboard when tab switches to leaderboard
@@ -546,6 +554,11 @@ export default function BracketPage() {
     try {
       // Step 1: deduct entry fee on first submission
       if (!hasSubmitted && entryFeeCents > 0) {
+        if (!leagueId) {
+          setSubmitError('Unable to process payment — league not found. Please try again.')
+          setSubmitting(false)
+          return
+        }
         if (walletBalance < entryFeeCents) {
           setSubmitError(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
           setSubmitting(false)
@@ -554,7 +567,7 @@ export default function BracketPage() {
         const payRes = await fetch('/api/wallet/join-contest', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ league_id: contestId, team_name: bracketName.trim() }),
+          body: JSON.stringify({ league_id: leagueId, team_name: bracketName.trim() }),
         })
         if (!payRes.ok) {
           const d = await payRes.json()
