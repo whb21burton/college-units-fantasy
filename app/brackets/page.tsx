@@ -16,17 +16,21 @@ const SPORTS = [
 ]
 
 export default function BracketsPage() {
-  const router  = useRouter()
+  const router   = useRouter()
   const supabase = createClientComponentClient()
-  const [sport,          setSport]          = useState('football')
-  const [contests,       setContests]       = useState<any[]>([])
-  const [loading,        setLoading]        = useState(true)
-  const [userId,         setUserId]         = useState<string | null>(null)
-  const [balance,        setBalance]        = useState(0)
-  const [myEntryCounts,  setMyEntryCounts]  = useState<Record<string, number>>({})
-  const [isAdmin,        setIsAdmin]        = useState(false)
-  const [entering,       setEntering]       = useState<string | null>(null)
-  const [enterError,     setEnterError]     = useState<string | null>(null)
+
+  const [sport,           setSport]           = useState('football')
+  const [contests,        setContests]        = useState<any[]>([])
+  const [loading,         setLoading]         = useState(true)
+  const [userId,          setUserId]          = useState<string | null>(null)
+  const [userBalance,     setUserBalance]     = useState(0)
+  const [myEntryCounts,   setMyEntryCounts]   = useState<Record<string, number>>({})
+  const [isAdmin,         setIsAdmin]         = useState(false)
+  const [selectedContest, setSelectedContest] = useState<any>(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [teamName,        setTeamName]        = useState('')
+  const [entering,        setEntering]        = useState(false)
+  const [enterError,      setEnterError]      = useState('')
 
   useEffect(() => {
     supabase
@@ -43,7 +47,7 @@ export default function BracketsPage() {
       if (!user) { router.push('/'); return }
       setUserId(user.id)
       if (user.email === 'whb21burton@gmail.com') setIsAdmin(true)
-      fetch('/api/wallet').then(r => r.json()).then(d => setBalance(d.wallet?.available ?? 0))
+      fetch('/api/wallet').then(r => r.json()).then(d => setUserBalance(d.wallet?.available ?? 0))
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -83,13 +87,10 @@ export default function BracketsPage() {
 
   async function handleEnterContest(contest: any) {
     const feeCents = contest.entry_fee_cents ?? 0
+    setEntering(true)
+    setEnterError('')
 
-    if (feeCents === 0) {
-      router.push(`/brackets/${contest.id}`)
-      return
-    }
-
-    // Already entered — skip payment and go straight to bracket
+    // Already entered — skip payment and go to My Leagues
     const { data: existing } = await supabase
       .from('user_bracket_entries')
       .select('id')
@@ -98,41 +99,41 @@ export default function BracketsPage() {
       .maybeSingle()
 
     if (existing) {
-      router.push(`/brackets/${contest.id}`)
+      setShowDetailModal(false)
+      router.push('/my-leagues?contest=' + contest.id)
       return
     }
 
-    if (balance < feeCents) {
-      setEnterError(`Not enough funds. Need $${(feeCents / 100).toFixed(2)}, you have $${(balance / 100).toFixed(2)}.`)
-      return
-    }
-
-    setEntering(contest.id)
-    setEnterError(null)
-
-    const res = await fetch('/api/wallet/bracket-entry', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contestId: contest.id, buyInCents: feeCents }),
-    })
-
-    if (!res.ok) {
-      const d = await res.json()
-      setEnterError(d.error ?? 'Failed to enter')
-      setEntering(null)
-      return
+    if (feeCents > 0) {
+      if (userBalance < feeCents) {
+        setEnterError(`Not enough funds. Need $${(feeCents / 100).toFixed(2)}, you have $${(userBalance / 100).toFixed(2)}.`)
+        setEntering(false)
+        return
+      }
+      const res = await fetch('/api/wallet/bracket-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contestId: contest.id, buyInCents: feeCents }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setEnterError(d.error ?? 'Payment failed')
+        setEntering(false)
+        return
+      }
+      setUserBalance(prev => prev - feeCents)
     }
 
     // Create entry row so My Leagues can find this contest
     await supabase.from('user_bracket_entries').upsert({
       contest_id:   contest.id,
       user_id:      userId!,
-      entry_name:   'My Bracket',
+      entry_name:   teamName.trim() || 'My Bracket',
       is_submitted: false,
     }, { onConflict: 'contest_id,user_id' })
 
-    setBalance(prev => prev - feeCents)
-    setEntering(null)
+    setEntering(false)
+    setShowDetailModal(false)
     router.push('/my-leagues?contest=' + contest.id)
   }
 
@@ -160,7 +161,6 @@ export default function BracketsPage() {
         borderRight: `1px solid ${C.surf3}`, padding: '24px 0',
         display: 'flex', flexDirection: 'column',
       }}>
-        {/* Header */}
         <div style={{ padding: '0 20px 20px', borderBottom: `1px solid ${C.surf3}`, marginBottom: 16 }}>
           <button
             onClick={() => router.push('/')}
@@ -173,7 +173,6 @@ export default function BracketsPage() {
           </div>
         </div>
 
-        {/* Sport tabs */}
         <div style={{ padding: '0 12px', flex: 1 }}>
           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10, paddingLeft: 8 }}>
             Sport
@@ -203,13 +202,12 @@ export default function BracketsPage() {
           ))}
         </div>
 
-        {/* Balance */}
         <div style={{ padding: '16px 20px', borderTop: `1px solid ${C.surf3}`, marginTop: 'auto' }}>
           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>
             Your Balance
           </div>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.gold }}>
-            ${(balance / 100).toFixed(2)}
+            ${(userBalance / 100).toFixed(2)}
           </div>
         </div>
       </div>
@@ -245,7 +243,6 @@ export default function BracketsPage() {
           </div>
         ) : (
           <div>
-            {/* Header row */}
             <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '8px 16px', borderBottom: `1px solid ${C.surf3}`, marginBottom: 4 }}>
               {['Contest', 'Your Entries', 'Entry Fee', 'Total Prizes', 'Entries', 'Live/Start', ''].map((h, i) => (
                 <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{h}</div>
@@ -253,15 +250,19 @@ export default function BracketsPage() {
               {isAdmin && <div />}
             </div>
             {contests.map(contest => {
-              const myCount    = myEntryCounts[contest.id] ?? 0
-              const maxPerAcct = contest.settings?.max_per_account ?? 1
-              const entryFee   = contest.entry_fee_cents / 100
+              const myCount      = myEntryCounts[contest.id] ?? 0
+              const maxPerAcct   = contest.settings?.max_per_account ?? 1
+              const entryFee     = contest.entry_fee_cents / 100
               const totalEntries = contest.entry_count ?? 0
-              const totalPrize = (entryFee * totalEntries * 0.95).toFixed(2)
-              const sportIcon  = contest.sport === 'football' ? '🏈' : contest.sport === 'basketball' ? '🏀' : '⚾'
+              const totalPrize   = (entryFee * totalEntries * 0.95).toFixed(2)
+              const sportIcon    = contest.sport === 'football' ? '🏈' : contest.sport === 'basketball' ? '🏀' : '⚾'
               return (
                 <div key={contest.id}
-                  style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '14px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 6, alignItems: 'center' }}>
+                  onClick={() => { setSelectedContest(contest); setShowDetailModal(true); setEnterError(''); setTeamName('') }}
+                  style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '14px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 6, alignItems: 'center', cursor: 'pointer', transition: 'border-color .12s' }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = C.gold)}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = C.surf3)}
+                >
                   <div>
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600 }}>{contest.name}</div>
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
@@ -288,19 +289,11 @@ export default function BracketsPage() {
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, lineHeight: 1.3 }}>
                     When first<br />game starts
                   </div>
-                  <div>
-                    <button
-                      onClick={() => handleEnterContest(contest)}
-                      disabled={entering === contest.id}
-                      style={{ padding: '8px 16px', background: entering === contest.id ? C.muted : C.gold, border: 'none', borderRadius: 8, cursor: entering === contest.id ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: C.bg, whiteSpace: 'nowrap' as const }}>
-                      {entering === contest.id ? 'Entering...' : 'Enter'}
-                    </button>
-                    {enterError && (
-                      <div style={{ color: C.red, fontFamily: 'Oswald,sans-serif', fontSize: 10, marginTop: 4, whiteSpace: 'nowrap' as const }}>
-                        {enterError}
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    onClick={e => { e.stopPropagation(); setSelectedContest(contest); setShowDetailModal(true); setEnterError(''); setTeamName('') }}
+                    style={{ padding: '8px 16px', background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: C.bg, whiteSpace: 'nowrap' as const }}>
+                    Enter
+                  </button>
                   {isAdmin && (
                     <button
                       onClick={e => { e.stopPropagation(); handleDeleteContest(contest.id, contest.name) }}
@@ -315,6 +308,123 @@ export default function BracketsPage() {
           </div>
         )}
       </div>
+
+      {/* ── Contest detail / enter modal ── */}
+      {showDetailModal && selectedContest && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => setShowDetailModal(false)}
+        >
+          <div
+            style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 14, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.surf3}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 4 }}>
+                  {selectedContest.sport === 'baseball' ? '⚾' : selectedContest.sport === 'football' ? '🏈' : '🏀'} {selectedContest.sport} · Bracket Contest
+                </div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
+                  {selectedContest.name}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDetailModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 20, padding: 4 }}
+              >✕</button>
+            </div>
+
+            {/* Stats grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, borderBottom: `1px solid ${C.surf3}` }}>
+              {[
+                ['Entry',   selectedContest.entry_fee_cents === 0 ? 'FREE' : `$${(selectedContest.entry_fee_cents / 100).toFixed(2)}`],
+                ['Entries', `${selectedContest.entry_count ?? 0}${selectedContest.max_entries ? ` / ${selectedContest.max_entries}` : ''}`],
+                ['Prizes',  selectedContest.prize_pool_cents > 0 ? `$${(selectedContest.prize_pool_cents / 100).toFixed(2)}` : '—'],
+              ].map(([label, value]) => (
+                <div key={label} style={{ padding: '14px 16px', background: C.surf2, textAlign: 'center' as const }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold }}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 24px' }}>
+              {selectedContest.max_entries && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
+                  <span>Spots Left</span>
+                  <span style={{ color: C.text }}>{(selectedContest.max_entries ?? 0) - (selectedContest.entry_count ?? 0)}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
+                <span>Max Entries Per Person</span>
+                <span style={{ color: C.text }}>{selectedContest.settings?.max_per_account ?? 1}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
+                <span>Scoring</span>
+                <span style={{ color: C.text }}>1 pt per correct pick</span>
+              </div>
+
+              {selectedContest.settings?.payout_structure && (
+                <div style={{ marginBottom: 20, padding: '12px 14px', background: C.surf2, borderRadius: 8 }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>Payout Structure</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
+                    {selectedContest.settings.payout_structure === 'winner_take_all' && '🥇 Winner takes 100% of net pool'}
+                    {selectedContest.settings.payout_structure === 'top2'            && '🥇 1st: 70% · 🥈 2nd: 30%'}
+                    {selectedContest.settings.payout_structure === 'top3'            && '🥇 1st: 60% · 🥈 2nd: 25% · 🥉 3rd: 15%'}
+                    {selectedContest.settings.payout_structure === 'double_up'       && '🔁 Top 50% wins 1.95× entry fee'}
+                  </div>
+                </div>
+              )}
+
+              <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                Your Entry Name
+              </label>
+              <input
+                value={teamName}
+                onChange={e => setTeamName(e.target.value)}
+                placeholder="e.g. My Bracket"
+                maxLength={40}
+                autoFocus
+                onKeyDown={e => { if (e.key === 'Enter' && teamName.trim() && !entering) handleEnterContest(selectedContest) }}
+                style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, marginBottom: 12 }}
+              />
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, padding: '10px 12px', background: C.surf2, borderRadius: 8 }}>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>Wallet Balance</span>
+                <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: userBalance >= (selectedContest.entry_fee_cents ?? 0) ? C.green : C.red }}>
+                  ${(userBalance / 100).toFixed(2)}
+                </span>
+              </div>
+
+              {enterError && (
+                <div style={{ padding: '8px 12px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, marginBottom: 12 }}>
+                  ⚠️ {enterError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => setShowDetailModal(false)}
+                  style={{ flex: 1, padding: '12px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.sub }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleEnterContest(selectedContest)}
+                  disabled={entering || !teamName.trim()}
+                  style={{ flex: 2, padding: '12px', background: !entering && teamName.trim() ? C.gold : C.surf3, border: 'none', borderRadius: 8, cursor: !entering && teamName.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: !entering && teamName.trim() ? C.bg : C.muted, textTransform: 'uppercase' as const }}
+                >
+                  {entering ? 'Entering...' :
+                   selectedContest.entry_fee_cents === 0 ? 'Enter Free' :
+                   `Pay $${(selectedContest.entry_fee_cents / 100).toFixed(2)} & Enter`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
