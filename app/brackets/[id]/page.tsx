@@ -356,20 +356,21 @@ export default function BracketPage() {
   const [mSection,       setMSection]       = useState<MSection>('left')
   const [loading,        setLoading]        = useState(true)
   const [submitting,     setSubmitting]     = useState(false)
-  const [hasSubmitted,   setHasSubmitted]   = useState(false)
   const [hasPaid,        setHasPaid]        = useState(false)
   const [isLocked,       setIsLocked]       = useState(false)
   const [leagueId,       setLeagueId]       = useState<string | null>(null)
   const [isPublicLeague, setIsPublicLeague] = useState(false)
   const [walletBalance,  setWalletBalance]  = useState<number>(0)
   const [showWalletModal,setShowWalletModal]= useState(false)
-  const [bracketName,    setBracketName]    = useState('My Bracket')
   const [originalPicks,  setOriginalPicks]  = useState<BracketPicks | null>(null)
-  const [picksChanged,   setPicksChanged]   = useState(false)
-  const [submitError,    setSubmitError]    = useState('')
   const [leaderboard,    setLeaderboard]    = useState<any[]>([])
   const [chatMessages,   setChatMessages]   = useState<any[]>([])
   const [chatInput,      setChatInput]      = useState('')
+  // Multi-entry
+  const [myEntries,      setMyEntries]      = useState<any[]>([])
+  const [activeEntryNum, setActiveEntryNum] = useState(1)
+  const [maxPerAccount,  setMaxPerAccount]  = useState(1)
+  const [entryFeeCents,  setEntryFeeCents]  = useState(0)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const loadData = useCallback(async () => {
@@ -377,7 +378,13 @@ export default function BracketPage() {
     setUserId(user?.id ?? null)
 
     const { data: c } = await supabase.from('bracket_contests').select('*').eq('id', contestId).single()
-    if (c) setContest(c)
+    if (c) {
+      setContest(c)
+      setEntryFeeCents(c.entry_fee_cents ?? 0)
+      setMaxPerAccount(c.settings?.max_per_account ?? 1)
+      if (c.status === 'locked' || c.status === 'active' || c.status === 'completed') setIsLocked(true)
+      if (c.locks_at && new Date(c.locks_at) < new Date()) setIsLocked(true)
+    }
 
     try {
       const walletRes = await fetch('/api/wallet')
@@ -395,36 +402,27 @@ export default function BracketPage() {
     loadData()
   }, [loadData])
 
-  // Check submission status, restore picks, check lock, and fetch owning league
+  // Load all user entries for this contest, check payment, fetch owning league
   useEffect(() => {
     if (!userId || !contestId) return
+
     supabase
       .from('user_bracket_entries')
-      .select('id, entry_name, is_submitted, bracket_data')
+      .select('*')
       .eq('contest_id', contestId)
       .eq('user_id', userId)
-      .single()
-      .then(({ data }) => {
-        if (data?.id) {
-          setBracketName(data.entry_name ?? 'My Bracket')
-          if (data.is_submitted && data.bracket_data) {
-            setHasSubmitted(true)
-            setPicks(data.bracket_data)
-            setOriginalPicks(data.bracket_data)
-            setPicksChanged(false)
-          }
+      .order('entry_number', { ascending: true })
+      .then(({ data: entries }) => {
+        const list = entries ?? []
+        setMyEntries(list)
+        const first = list[0]
+        if (first?.bracket_data) {
+          setPicks(first.bracket_data)
+          setOriginalPicks(first.bracket_data)
         }
+        if (first) setActiveEntryNum(first.entry_number ?? 1)
       })
-    supabase
-      .from('bracket_contests')
-      .select('status, locks_at')
-      .eq('id', contestId)
-      .single()
-      .then(({ data }) => {
-        if (data?.status === 'locked' || data?.status === 'active') setIsLocked(true)
-        if (data?.locks_at && new Date(data.locks_at) < new Date()) setIsLocked(true)
-      })
-    // Check if already paid: covers both league-based and standalone bracket payments
+
     supabase
       .from('transactions')
       .select('id')
@@ -434,6 +432,7 @@ export default function BracketPage() {
       .or(`league_id.eq.${contestId},description.ilike.%${contestId}%`)
       .maybeSingle()
       .then(({ data }) => { if (data) setHasPaid(true) })
+
     supabase
       .from('leagues')
       .select('id, buy_in, is_public')
@@ -444,7 +443,6 @@ export default function BracketPage() {
         if (data) {
           setLeagueId(data.id)
           setIsPublicLeague(data.is_public ?? false)
-          // Also treat being a paid league_member as having paid
           supabase
             .from('league_members')
             .select('id')
@@ -493,11 +491,17 @@ export default function BracketPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
 
-  // Track whether picks have changed since submission
+  // When switching entry tabs, load that entry's picks
   useEffect(() => {
-    if (!hasSubmitted || !originalPicks) return
-    setPicksChanged(JSON.stringify(picks) !== JSON.stringify(originalPicks))
-  }, [picks, hasSubmitted, originalPicks])
+    const entry = myEntries.find(e => (e.entry_number ?? 1) === activeEntryNum)
+    if (entry?.bracket_data) {
+      setPicks(entry.bracket_data)
+      setOriginalPicks(entry.bracket_data)
+    } else {
+      setPicks(empty())
+      setOriginalPicks(null)
+    }
+  }, [activeEntryNum, myEntries])
 
   /* ── Pick handlers ── */
   function pickRegional(key: string, team: Team) {
@@ -586,12 +590,10 @@ export default function BracketPage() {
   async function handleSubmitDirect() {
     if (!userId || !contestId || totalPicks < TOTAL) return
     setSubmitting(true)
-    setSubmitError('')
     try {
-      // Charge only for private leagues that haven't paid yet
       if (!hasPaid && entryFeeCents > 0 && !isPublicLeague) {
         if (walletBalance < entryFeeCents) {
-          setSubmitError(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
+          alert(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
           setSubmitting(false)
           return
         }
@@ -601,24 +603,14 @@ export default function BracketPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ league_id: leagueId, team_name: bracketName }),
           })
-          if (!payRes.ok) {
-            const d = await payRes.json()
-            setSubmitError(d.error ?? 'Payment failed')
-            setSubmitting(false)
-            return
-          }
+          if (!payRes.ok) { const d = await payRes.json(); alert(d.error ?? 'Payment failed'); setSubmitting(false); return }
         } else {
           const payRes = await fetch('/api/wallet/bracket-entry', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contestId, buyInCents: entryFeeCents }),
           })
-          if (!payRes.ok) {
-            const d = await payRes.json()
-            setSubmitError(d.error ?? 'Payment failed')
-            setSubmitting(false)
-            return
-          }
+          if (!payRes.ok) { const d = await payRes.json(); alert(d.error ?? 'Payment failed'); setSubmitting(false); return }
         }
         setWalletBalance(prev => prev - entryFeeCents)
         setHasPaid(true)
@@ -626,14 +618,10 @@ export default function BracketPage() {
 
       const { error } = await supabase
         .from('user_bracket_entries')
-        .upsert({
-          contest_id:   contestId,
-          user_id:      userId,
-          entry_name:   bracketName,
-          bracket_data: picks,
-          is_submitted: true,
-          submitted_at: new Date().toISOString(),
-        }, { onConflict: 'contest_id,user_id' })
+        .update({ bracket_data: picks, is_submitted: true, submitted_at: new Date().toISOString() })
+        .eq('contest_id', contestId)
+        .eq('user_id', userId)
+        .eq('entry_number', activeEntryNum)
 
       if (error) throw error
 
@@ -641,12 +629,13 @@ export default function BracketPage() {
         supabase.rpc('increment_entry_count', { contest_id: contestId }).then(() => {})
       }
 
-      setHasSubmitted(true)
+      setMyEntries(prev => prev.map(e =>
+        (e.entry_number ?? 1) === activeEntryNum ? { ...e, is_submitted: true, bracket_data: picks } : e
+      ))
+      setOriginalPicks(picks)
       alert(`🏆 Bracket "${bracketName}" submitted! Good luck!`)
     } catch (err: any) {
-      const msg = err?.message ?? 'Submission failed'
-      setSubmitError(msg)
-      alert('Error: ' + msg)
+      alert('Error: ' + (err?.message ?? 'Submission failed'))
     }
     setSubmitting(false)
   }
@@ -664,14 +653,59 @@ export default function BracketPage() {
         .update({ bracket_data: picks, submitted_at: new Date().toISOString() })
         .eq('contest_id', contestId)
         .eq('user_id', userId)
+        .eq('entry_number', activeEntryNum)
       if (error) throw error
+      setMyEntries(prev => prev.map(e =>
+        (e.entry_number ?? 1) === activeEntryNum ? { ...e, bracket_data: picks } : e
+      ))
       setOriginalPicks(picks)
-      setPicksChanged(false)
       alert('✅ Bracket resubmitted successfully! Your updated picks have been saved.')
     } catch (err: any) {
       alert(`Error resubmitting: ${err?.message ?? 'Unknown error'}. Your original bracket has been kept.`)
     }
     setSubmitting(false)
+  }
+
+  /* ── Add a second/third/etc entry ── */
+  async function handleAddEntry() {
+    if (myEntries.length >= maxPerAccount || isLocked) return
+    if (entryFeeCents > 0) {
+      if (walletBalance < entryFeeCents) {
+        alert(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
+        return
+      }
+      const payRes = await fetch(leagueId ? '/api/wallet/join-contest' : '/api/wallet/bracket-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(leagueId
+          ? { league_id: leagueId, team_name: `${myEntries[0]?.entry_name ?? 'My Bracket'} (${myEntries.length + 1})` }
+          : { contestId, buyInCents: entryFeeCents }
+        ),
+      })
+      if (!payRes.ok) {
+        const d = await payRes.json()
+        alert(d.error ?? 'Payment failed')
+        return
+      }
+      setWalletBalance(prev => prev - entryFeeCents)
+    }
+
+    const nextNum = myEntries.length + 1
+    const baseName = myEntries[0]?.entry_name ?? 'My Bracket'
+    const newName = nextNum === 1 ? baseName : `${baseName} (${nextNum})`
+
+    const { data: newEntry } = await supabase
+      .from('user_bracket_entries')
+      .insert({ contest_id: contestId, user_id: userId, entry_name: newName, entry_number: nextNum, is_submitted: false })
+      .select()
+      .single()
+
+    if (newEntry) {
+      setMyEntries(prev => [...prev, newEntry])
+      setActiveEntryNum(nextNum)
+      setPicks(empty())
+      setOriginalPicks(null)
+    }
   }
 
   /* ── Derived CWS teams ── */
@@ -694,8 +728,11 @@ export default function BracketPage() {
     </div>
   )
 
-  const entryFeeCents = contest.entry_fee_cents ?? 0
-  const totalPicks    = countPicks(picks)  // re-declare here so JSX can use it post-guard
+  const totalPicks   = countPicks(picks)
+  const activeEntry  = myEntries.find(e => (e.entry_number ?? 1) === activeEntryNum) ?? null
+  const hasSubmitted = activeEntry?.is_submitted ?? false
+  const bracketName  = activeEntry?.entry_name ?? 'My Bracket'
+  const picksChanged = hasSubmitted && originalPicks !== null && JSON.stringify(picks) !== JSON.stringify(originalPicks)
 
   /* ── Bracket columns (shared by desktop & mobile) ── */
   const leftRegionalsCol = (
@@ -876,27 +913,69 @@ export default function BracketPage() {
           )}
         </div>
 
-        {/* Right: wallet balance */}
-        <div onClick={() => setShowWalletModal(true)} style={{ cursor: 'pointer', textAlign: 'right' as const }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>
-            ${(walletBalance / 100).toFixed(2)}
+        {/* Right: entries counter + add entry button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
+            {myEntries.length}/{maxPerAccount} {maxPerAccount === 1 ? 'entry' : 'entries'}
           </div>
+          {!isLocked && myEntries.length < maxPerAccount && hasPaid && (
+            <button
+              onClick={handleAddEntry}
+              style={{ padding: '6px 14px', background: 'none', border: `1px solid ${C.gold}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.gold }}>
+              + Entry
+            </button>
+          )}
         </div>
       </div>
 
       {/* ── Tabs ── */}
-      <div style={{ background: C.surf, borderBottom: `1px solid ${C.surf3}`, padding: '6px 20px', display: 'flex', gap: 6 }}>
-        {(['bracket', 'leaderboard', 'chat'] as Tab[]).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding: '7px 18px',
-            background: tab === t ? C.gold : 'transparent',
-            color: tab === t ? C.bg : C.sub,
-            border: 'none', borderRadius: 5,
-            fontFamily: 'Oswald,sans-serif', fontWeight: 700, fontSize: 11, letterSpacing: 1.5,
-            cursor: 'pointer', textTransform: 'uppercase', transition: 'all .15s',
-          }}>{t}</button>
-        ))}
-      </div>
+      {myEntries.length > 1 ? (
+        /* Multi-entry: entry tabs + leaderboard + chat in one bar */
+        <div style={{ background: C.surf, borderBottom: `1px solid ${C.surf3}`, display: 'flex', overflowX: 'auto' }}>
+          {myEntries.map(entry => {
+            const num = entry.entry_number ?? 1
+            const active = activeEntryNum === num && tab === 'bracket'
+            return (
+              <button key={num}
+                onClick={() => { setActiveEntryNum(num); setTab('bracket') }}
+                style={{
+                  padding: '9px 16px', flexShrink: 0,
+                  background: 'none', border: 'none',
+                  borderBottom: `2px solid ${active ? C.gold : 'transparent'}`,
+                  cursor: 'pointer',
+                  fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1,
+                  color: active ? C.gold : C.muted,
+                  textTransform: 'uppercase' as const,
+                }}>
+                {entry.entry_name}
+                {entry.is_submitted && <span style={{ color: C.green, marginLeft: 4 }}>✓</span>}
+              </button>
+            )
+          })}
+          <button onClick={() => setTab('leaderboard')}
+            style={{ padding: '9px 16px', flexShrink: 0, background: 'none', border: 'none', borderBottom: `2px solid ${tab === 'leaderboard' ? C.gold : 'transparent'}`, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: tab === 'leaderboard' ? C.gold : C.muted }}>
+            🏅 Leaderboard
+          </button>
+          <button onClick={() => setTab('chat')}
+            style={{ padding: '9px 16px', flexShrink: 0, background: 'none', border: 'none', borderBottom: `2px solid ${tab === 'chat' ? C.gold : 'transparent'}`, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: tab === 'chat' ? C.gold : C.muted }}>
+            💬 Chat
+          </button>
+        </div>
+      ) : (
+        /* Single entry: original bracket/leaderboard/chat tabs */
+        <div style={{ background: C.surf, borderBottom: `1px solid ${C.surf3}`, padding: '6px 20px', display: 'flex', gap: 6 }}>
+          {(['bracket', 'leaderboard', 'chat'] as Tab[]).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              padding: '7px 18px',
+              background: tab === t ? C.gold : 'transparent',
+              color: tab === t ? C.bg : C.sub,
+              border: 'none', borderRadius: 5,
+              fontFamily: 'Oswald,sans-serif', fontWeight: 700, fontSize: 11, letterSpacing: 1.5,
+              cursor: 'pointer', textTransform: 'uppercase', transition: 'all .15s',
+            }}>{t}</button>
+          ))}
+        </div>
+      )}
 
       {/* ── Leaderboard ── */}
       {tab === 'leaderboard' && (

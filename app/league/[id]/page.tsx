@@ -686,9 +686,11 @@ const LINEUP_POS_COLOR: Record<string, string> = {
 
 /* ── Weekly Lineup Tab ──────────────────────────────────────── */
 function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: string; router: any; userId: string | null; league: any }) {
-  const [picks,         setPicks]         = useState<any[] | null>(null);
-  const [firstGameTime, setFirstGameTime] = useState<string | null>(null);
-  const [loading,       setLoading]       = useState(true);
+  const [picks,          setPicks]          = useState<any[] | null>(null);
+  const [firstGameTime,  setFirstGameTime]  = useState<string | null>(null);
+  const [loading,        setLoading]        = useState(true);
+  const [originalLineup, setOriginalLineup] = useState<any[] | null>(null);
+  const [lineupSubmitted, setLineupSubmitted] = useState(false);
 
   const week = league?.week ?? 1;
 
@@ -707,7 +709,10 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
         fetch(`/api/matchup-context?week=${week}&season=2025`)
           .then(r => r.json()).catch(() => ({})),
       ]);
-      setPicks(picksRes.data ?? []);
+      const p = picksRes.data ?? [];
+      setPicks(p);
+      setOriginalLineup(p);
+      setLineupSubmitted(p.length > 0);
       setFirstGameTime(ctxRes.firstGameTime ?? null);
       setLoading(false);
     }
@@ -721,6 +726,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
   );
 
   const isLocked = firstGameTime ? new Date() >= new Date(firstGameTime) : false;
+  const lineupChanged = originalLineup !== null && JSON.stringify(picks) !== JSON.stringify(originalLineup);
 
   // No lineup submitted yet
   if (!picks || picks.length === 0) {
@@ -813,14 +819,27 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
         );
       })}
 
-      {/* Edit button */}
+      {/* Submit / Resubmit */}
       {!isLocked && (
-        <button
-          onClick={() => router.push(`/league/${leagueId}/lineup`)}
-          style={{ width: '100%', marginTop: 12, padding: '12px 0', background: 'rgba(245,166,35,.1)', border: '1px solid rgba(245,166,35,.35)', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.gold, cursor: 'pointer', textTransform: 'uppercase' }}
-        >
-          ✏ Edit Lineup
-        </button>
+        lineupSubmitted && !lineupChanged ? (
+          <div style={{ width: '100%', marginTop: 12, padding: '12px 0', textAlign: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.green }}>
+            ✓ Lineup Submitted
+          </div>
+        ) : lineupSubmitted && lineupChanged ? (
+          <button
+            onClick={async () => {
+              const filled = LINEUP_SLOTS.map(s => s.key).filter(k => lineupMap[k]);
+              if (filled.length < LINEUP_SLOTS.length) { alert('Please fill all lineup slots before resubmitting.'); return; }
+              await Promise.all((picks ?? []).map(p =>
+                supabase.from('draft_picks').upsert(p, { onConflict: 'league_id,user_id,week,slot,entry_type' })
+              ));
+              setOriginalLineup(picks);
+            }}
+            style={{ width: '100%', marginTop: 12, padding: '12px 0', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.35)', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.green, cursor: 'pointer', textTransform: 'uppercase' }}
+          >
+            Resubmit Lineup
+          </button>
+        ) : null
       )}
     </div>
   );
