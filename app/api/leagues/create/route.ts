@@ -86,28 +86,36 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Auto-link bracket leagues to the latest open bracket contest
+    // Bracket leagues always get their own dedicated contest — never share with other leagues
     if (body.league_type === 'bracket') {
-      const { data: bracketContest } = await admin
+      const { data: newContest } = await admin
         .from('bracket_contests')
-        .select('id, name, sport')
-        .eq('status', 'open')
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .insert({
+          name:            data.name,
+          sport:           settings?.bracket_sport ?? 'baseball',
+          season:          new Date().getFullYear(),
+          status:          'open',
+          entry_fee_cents: Math.round(buyIn * 100),
+          max_entries:     leagueSize === 999999 ? null : leagueSize,
+          settings: {
+            max_per_account:   maxEntriesPerUser ?? 1,
+            payout_structure:  settings?.payout_structure ?? 'winner_take_all',
+            league_id:         data.id,
+          },
+          created_by: user.id,
+        })
+        .select('id, name')
         .single()
 
-      if (bracketContest) {
-        await admin
-          .from('leagues')
-          .update({
-            settings: {
-              ...settings,
-              bracket_contest_id: bracketContest.id,
-              bracket_sport: bracketContest.sport,
-              bracket_name: bracketContest.name,
-            }
-          })
-          .eq('id', data.id)
+      if (newContest) {
+        await admin.from('leagues').update({
+          settings: {
+            ...settings,
+            bracket_contest_id: newContest.id,
+            bracket_name:       data.name,
+            bracket_sport:      settings?.bracket_sport ?? 'baseball',
+          }
+        }).eq('id', data.id)
       }
     }
 
