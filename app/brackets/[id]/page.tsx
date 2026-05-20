@@ -357,6 +357,7 @@ export default function BracketPage() {
   const [loading,        setLoading]        = useState(true)
   const [submitting,     setSubmitting]     = useState(false)
   const [hasSubmitted,   setHasSubmitted]   = useState(false)
+  const [hasPaid,        setHasPaid]        = useState(false)
   const [isLocked,       setIsLocked]       = useState(false)
   const [leagueId,       setLeagueId]       = useState<string | null>(null)
   const [isPublicLeague, setIsPublicLeague] = useState(false)
@@ -418,6 +419,16 @@ export default function BracketPage() {
         if (data?.status === 'locked' || data?.status === 'active') setIsLocked(true)
         if (data?.locks_at && new Date(data.locks_at) < new Date()) setIsLocked(true)
       })
+    // Check if already paid: covers both league-based and standalone bracket payments
+    supabase
+      .from('transactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('type', 'contest_entry')
+      .eq('status', 'completed')
+      .or(`league_id.eq.${contestId},description.ilike.%${contestId}%`)
+      .maybeSingle()
+      .then(({ data }) => { if (data) setHasPaid(true) })
     supabase
       .from('leagues')
       .select('id, buy_in, is_public')
@@ -428,6 +439,14 @@ export default function BracketPage() {
         if (data) {
           setLeagueId(data.id)
           setIsPublicLeague(data.is_public ?? false)
+          // Also treat being a paid league_member as having paid
+          supabase
+            .from('league_members')
+            .select('id')
+            .eq('league_id', data.id)
+            .eq('user_id', userId)
+            .maybeSingle()
+            .then(({ data: member }) => { if (member) setHasPaid(true) })
         }
       })
   }, [userId, contestId])
@@ -558,9 +577,8 @@ export default function BracketPage() {
     setSubmitting(true)
     setSubmitError('')
     try {
-      // Step 1: deduct entry fee on first submission (private leagues only)
-      // Public leagues already charged at join time
-      const shouldCharge = !hasSubmitted && entryFeeCents > 0 && !isPublicLeague
+      // Step 1: charge only if not yet paid (covers public-join, prior sessions, etc.)
+      const shouldCharge = !hasPaid && entryFeeCents > 0
       if (shouldCharge) {
         if (walletBalance < entryFeeCents) {
           setSubmitError(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
@@ -595,6 +613,7 @@ export default function BracketPage() {
           }
         }
         setWalletBalance(prev => prev - entryFeeCents)
+        setHasPaid(true)
       }
 
       // Step 2: upsert bracket entry with picks + name
@@ -990,11 +1009,11 @@ export default function BracketPage() {
               {hasSubmitted ? '✏️ Edit Bracket' : '🏆 Name Your Bracket'}
             </div>
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 20 }}>
-              {hasSubmitted
-                ? 'Update your picks — no additional charge. Must resubmit to save changes.'
-                : !isPublicLeague && entryFeeCents > 0
-                  ? `Entry fee: $${(entryFeeCents / 100).toFixed(2)} will be deducted from your wallet.`
-                  : 'Submit your bracket. No entry fee required.'}
+              {!hasPaid && entryFeeCents > 0
+                ? `Entry fee: $${(entryFeeCents / 100).toFixed(2)} will be deducted from your wallet.`
+                : hasSubmitted
+                  ? 'Update your picks — no additional charge. Must resubmit to save changes.'
+                  : 'Submit your bracket — entry already paid.'}
             </div>
 
             <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const, display: 'block', marginBottom: 6 }}>
@@ -1009,7 +1028,7 @@ export default function BracketPage() {
               style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.gold}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, marginBottom: 16 }}
             />
 
-            {!hasSubmitted && entryFeeCents > 0 && !isPublicLeague && (
+            {!hasPaid && entryFeeCents > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, padding: '10px 12px', background: C.surf2, borderRadius: 8 }}>
                 <div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>ENTRY FEE</div>
@@ -1037,7 +1056,7 @@ export default function BracketPage() {
               </button>
               <button onClick={handleSubmit} disabled={submitting || !bracketName.trim()}
                 style={{ flex: 2, padding: '12px', background: submitting ? C.surf3 : C.gold, border: 'none', borderRadius: 8, cursor: submitting ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: submitting ? C.muted : C.bg, textTransform: 'uppercase' as const }}>
-                {submitting ? 'Submitting...' : hasSubmitted ? 'Resubmit Bracket' : (!isPublicLeague && entryFeeCents > 0) ? 'Pay & Submit' : 'Submit Bracket'}
+                {submitting ? 'Submitting...' : (!hasPaid && entryFeeCents > 0) ? 'Pay & Submit' : hasSubmitted ? 'Resubmit Bracket' : 'Submit Bracket'}
               </button>
             </div>
           </div>
