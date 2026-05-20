@@ -562,26 +562,37 @@ export default function BracketPage() {
       // Public leagues already charged at join time
       const shouldCharge = !hasSubmitted && entryFeeCents > 0 && !isPublicLeague
       if (shouldCharge) {
-        if (!leagueId) {
-          setSubmitError('Unable to process payment — league not found. Please try again.')
-          setSubmitting(false)
-          return
-        }
         if (walletBalance < entryFeeCents) {
           setSubmitError(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
           setSubmitting(false)
           return
         }
-        const payRes = await fetch('/api/wallet/join-contest', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ league_id: leagueId, team_name: bracketName.trim() }),
-        })
-        if (!payRes.ok) {
-          const d = await payRes.json()
-          setSubmitError(d.error ?? 'Payment failed')
-          setSubmitting(false)
-          return
+        if (leagueId) {
+          // Case 1: bracket owned by a league — use join-contest
+          const payRes = await fetch('/api/wallet/join-contest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ league_id: leagueId, team_name: bracketName.trim() }),
+          })
+          if (!payRes.ok) {
+            const d = await payRes.json()
+            setSubmitError(d.error ?? 'Payment failed')
+            setSubmitting(false)
+            return
+          }
+        } else {
+          // Case 2: standalone bracket contest (no owning league) — direct deduction
+          const payRes = await fetch('/api/wallet/bracket-entry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contestId, buyInCents: entryFeeCents }),
+          })
+          if (!payRes.ok) {
+            const d = await payRes.json()
+            setSubmitError(d.error ?? 'Payment failed')
+            setSubmitting(false)
+            return
+          }
         }
         setWalletBalance(prev => prev - entryFeeCents)
       }
