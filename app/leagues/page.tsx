@@ -620,6 +620,12 @@ function EnterModal({
 
   async function submit() {
     if (!teamName.trim()) { setErr('Please enter a team name.'); return; }
+    const buyCents = Math.round((league.buy_in ?? 0) * 100);
+    if (buyCents > 0 && walletBal < buyCents) {
+      setAddFunds(true);
+      setErr(`Not enough funds. Need $${league.buy_in.toFixed(2)}, wallet has $${(walletBal / 100).toFixed(2)}.`);
+      return;
+    }
     setErr('');
     const res = await fetch('/api/wallet/join-contest', {
       method: 'POST',

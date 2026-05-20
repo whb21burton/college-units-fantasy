@@ -359,6 +359,7 @@ export default function BracketPage() {
   const [hasSubmitted,   setHasSubmitted]   = useState(false)
   const [isLocked,       setIsLocked]       = useState(false)
   const [leagueId,       setLeagueId]       = useState<string | null>(null)
+  const [isPublicLeague, setIsPublicLeague] = useState(false)
   const [walletBalance,  setWalletBalance]  = useState<number>(0)
   const [showWalletModal,setShowWalletModal]= useState(false)
   const [showNameModal,  setShowNameModal]  = useState(false)
@@ -419,11 +420,16 @@ export default function BracketPage() {
       })
     supabase
       .from('leagues')
-      .select('id, buy_in')
+      .select('id, buy_in, is_public')
       .eq('league_type', 'bracket')
       .contains('settings', { bracket_contest_id: contestId })
       .single()
-      .then(({ data }) => { if (data) setLeagueId(data.id) })
+      .then(({ data }) => {
+        if (data) {
+          setLeagueId(data.id)
+          setIsPublicLeague(data.is_public ?? false)
+        }
+      })
   }, [userId, contestId])
 
   // Fetch leaderboard when tab switches to leaderboard
@@ -552,8 +558,10 @@ export default function BracketPage() {
     setSubmitting(true)
     setSubmitError('')
     try {
-      // Step 1: deduct entry fee on first submission
-      if (!hasSubmitted && entryFeeCents > 0) {
+      // Step 1: deduct entry fee on first submission (private leagues only)
+      // Public leagues already charged at join time
+      const shouldCharge = !hasSubmitted && entryFeeCents > 0 && !isPublicLeague
+      if (shouldCharge) {
         if (!leagueId) {
           setSubmitError('Unable to process payment — league not found. Please try again.')
           setSubmitting(false)
@@ -973,7 +981,9 @@ export default function BracketPage() {
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 20 }}>
               {hasSubmitted
                 ? 'Update your picks — no additional charge. Must resubmit to save changes.'
-                : `Entry fee: $${(entryFeeCents / 100).toFixed(2)} will be deducted from your wallet.`}
+                : !isPublicLeague && entryFeeCents > 0
+                  ? `Entry fee: $${(entryFeeCents / 100).toFixed(2)} will be deducted from your wallet.`
+                  : 'Submit your bracket. No entry fee required.'}
             </div>
 
             <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const, display: 'block', marginBottom: 6 }}>
@@ -988,7 +998,7 @@ export default function BracketPage() {
               style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.gold}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, marginBottom: 16 }}
             />
 
-            {!hasSubmitted && entryFeeCents > 0 && (
+            {!hasSubmitted && entryFeeCents > 0 && !isPublicLeague && (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, padding: '10px 12px', background: C.surf2, borderRadius: 8 }}>
                 <div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>ENTRY FEE</div>
@@ -1016,7 +1026,7 @@ export default function BracketPage() {
               </button>
               <button onClick={handleSubmit} disabled={submitting || !bracketName.trim()}
                 style={{ flex: 2, padding: '12px', background: submitting ? C.surf3 : C.gold, border: 'none', borderRadius: 8, cursor: submitting ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: submitting ? C.muted : C.bg, textTransform: 'uppercase' as const }}>
-                {submitting ? 'Submitting...' : hasSubmitted ? 'Resubmit Bracket' : 'Pay & Submit'}
+                {submitting ? 'Submitting...' : hasSubmitted ? 'Resubmit Bracket' : (!isPublicLeague && entryFeeCents > 0) ? 'Pay & Submit' : 'Submit Bracket'}
               </button>
             </div>
           </div>
