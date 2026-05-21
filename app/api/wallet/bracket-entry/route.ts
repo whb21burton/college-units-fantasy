@@ -15,13 +15,10 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient()
 
-  // Block duplicate payments per entry number
+  // Block duplicate payments — idempotency_key already encodes contestId + userId + entryNumber
   const { data: existing } = await admin
     .from('transactions')
     .select('id')
-    .eq('user_id', user.id)
-    .eq('type', 'contest_entry')
-    .eq('status', 'completed')
     .eq('idempotency_key', `bracket_entry_${contestId}_${user.id}_${entryNumber}`)
     .maybeSingle()
 
