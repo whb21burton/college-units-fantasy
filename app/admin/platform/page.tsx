@@ -83,6 +83,65 @@ function PayoutPreview({
   )
 }
 
+function PageControls() {
+  const supabase = createClientComponentClient()
+  const [locks, setLocks] = useState<Record<string, boolean>>({})
+  const [saving, setSaving] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.from('platform_settings').select('key, value')
+      .in('key', ['public_leagues_locked', 'bracket_contests_locked', 'bracket_sport_football_locked', 'bracket_sport_basketball_locked', 'bracket_sport_baseball_locked'])
+      .then(({ data }) => {
+        setLocks(Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value === 'true'])))
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function toggle(key: string) {
+    setSaving(key)
+    const newVal = !locks[key]
+    await supabase.from('platform_settings')
+      .upsert({ key, value: newVal.toString(), updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    setLocks(prev => ({ ...prev, [key]: newVal }))
+    setSaving(null)
+  }
+
+  const controls = [
+    { key: 'public_leagues_locked',           label: 'Browse Public Leagues',  icon: '🏟️' },
+    { key: 'bracket_contests_locked',          label: 'Bracket Contests Page',  icon: '🏆' },
+    { key: 'bracket_sport_football_locked',    label: 'Football Brackets',      icon: '🏈' },
+    { key: 'bracket_sport_basketball_locked',  label: 'Basketball Brackets',    icon: '🏀' },
+    { key: 'bracket_sport_baseball_locked',    label: 'Baseball Brackets',      icon: '⚾' },
+  ]
+
+  return (
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
+        🔒 Page Controls
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {controls.map(c => {
+          const locked = locks[c.key] ?? false
+          return (
+            <div key={c.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: C.surf2, borderRadius: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 18 }}>{c.icon}</span>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text }}>{c.label}</span>
+              </div>
+              <button
+                onClick={() => toggle(c.key)}
+                disabled={saving === c.key}
+                style={{ padding: '8px 20px', background: locked ? 'rgba(240,58,90,.15)' : 'rgba(21,198,120,.1)', border: `1px solid ${locked ? '#f03a5a' : '#15c678'}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: locked ? '#f03a5a' : '#15c678' }}>
+                {saving === c.key ? '...' : locked ? '🔒 Locked' : '🔓 Unlocked'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function WeeklyPickemCreator() {
   const [name, setName] = useState('')
   const [week, setWeek] = useState(1)
@@ -762,6 +821,7 @@ export default function PlatformManagerPage() {
           </div>
         </div>
 
+        <PageControls />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 20 }}>
           <WeeklyPickemCreator />
           <PublicBracketCreator />

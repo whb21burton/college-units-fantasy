@@ -33,6 +33,7 @@ export default function HomePage() {
   const [leagues, setLeagues] = useState<any[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
   const [showWallet, setShowWallet] = useState(false);
+  const [locks, setLocks] = useState({ public_leagues: false, bracket_contests: false });
   const [showIntro, setShowIntro] = useState(false);
   const [introChecked, setIntroChecked] = useState(false);
   const [showAgeModal, setShowAgeModal] = useState(false);
@@ -78,6 +79,32 @@ export default function HomePage() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  const isAdmin = user?.email === 'whb21burton@gmail.com';
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    supabase
+      .from('platform_settings')
+      .select('key, value')
+      .in('key', ['public_leagues_locked', 'bracket_contests_locked'])
+      .then(({ data }) => {
+        const map = Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value === 'true']));
+        setLocks({
+          public_leagues: map['public_leagues_locked'] ?? false,
+          bracket_contests: map['bracket_contests_locked'] ?? false,
+        });
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
+  async function toggleLock(key: string, current: boolean) {
+    await supabase
+      .from('platform_settings')
+      .upsert({ key, value: (!current).toString(), updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    const field = key === 'public_leagues_locked' ? 'public_leagues' : 'bracket_contests';
+    setLocks(prev => ({ ...prev, [field]: !current }));
+  }
 
   async function checkCompliance(userId: string) {
     const { data: verification } = await supabase
@@ -298,37 +325,32 @@ export default function HomePage() {
             <button onClick={() => router.push('/create-league')} style={btnStyle}>+ Create League</button>
             <button onClick={() => setView('join')} style={{ ...ghostStyle, marginTop: 0 }}>Join League</button>
           </div>
-          <button
-            onClick={() => router.push('/leagues')}
-            style={{
-              width: '100%', padding: '14px',
-              background: 'rgba(212,168,40,.12)',
-              border: `1px solid ${C.gold}`,
-              borderRadius: 8, cursor: 'pointer',
-              fontFamily: "'Anton', sans-serif", fontSize: 14,
-              letterSpacing: 2, textTransform: 'uppercase',
-              color: C.gold,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            }}
-          >
-            🏟️ Browse Public Leagues
-          </button>
-          <button
-            onClick={() => router.push('/brackets')}
-            style={{
-              width: '100%', padding: '14px',
-              background: 'rgba(21,198,120,.12)',
-              border: `1px solid ${C.green}`,
-              borderRadius: 8, cursor: 'pointer',
-              fontFamily: "'Anton', sans-serif", fontSize: 14,
-              letterSpacing: 2, textTransform: 'uppercase',
-              color: C.green,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              marginTop: 10,
-            }}
-          >
-            🏆 Bracket Contests
-          </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button onClick={() => router.push('/leagues')}
+              style={{ flex: 1, padding: '14px', background: 'rgba(212,168,40,.12)', border: `1px solid ${C.gold}`, borderRadius: 8, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 14, letterSpacing: 2, textTransform: 'uppercase' as const, color: C.gold }}>
+              🏟️ Browse Public Leagues
+            </button>
+            {isAdmin && (
+              <button onClick={() => toggleLock('public_leagues_locked', locks.public_leagues)}
+                style={{ padding: '14px 16px', background: locks.public_leagues ? 'rgba(240,58,90,.15)' : 'rgba(21,198,120,.1)', border: `1px solid ${locks.public_leagues ? '#f03a5a' : '#15c678'}`, borderRadius: 8, cursor: 'pointer', fontSize: 16 }}
+                title={locks.public_leagues ? 'Unlock Public Leagues' : 'Lock Public Leagues'}>
+                {locks.public_leagues ? '🔒' : '🔓'}
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button onClick={() => router.push('/brackets')}
+              style={{ flex: 1, padding: '14px', background: 'rgba(21,198,120,.12)', border: '1px solid #15c678', borderRadius: 8, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 14, letterSpacing: 2, textTransform: 'uppercase' as const, color: '#15c678' }}>
+              🏆 Bracket Contests
+            </button>
+            {isAdmin && (
+              <button onClick={() => toggleLock('bracket_contests_locked', locks.bracket_contests)}
+                style={{ padding: '14px 16px', background: locks.bracket_contests ? 'rgba(240,58,90,.15)' : 'rgba(21,198,120,.1)', border: `1px solid ${locks.bracket_contests ? '#f03a5a' : '#15c678'}`, borderRadius: 8, cursor: 'pointer', fontSize: 16 }}
+                title={locks.bracket_contests ? 'Unlock Bracket Contests' : 'Lock Bracket Contests'}>
+                {locks.bracket_contests ? '🔒' : '🔓'}
+              </button>
+            )}
+          </div>
           {user?.email === 'whb21burton@gmail.com' && (
             <button
               onClick={() => router.push('/admin/platform')}

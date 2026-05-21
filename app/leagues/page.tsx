@@ -730,6 +730,7 @@ function PublicLeaguesContent() {
   const searchParams = useSearchParams();
   const cacheBust = searchParams.get('t');
 
+  const [isLocked,     setIsLocked]     = useState<boolean | null>(null);
   const [leagues,      setLeagues]      = useState<League[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [user,         setUser]         = useState<any>(null);
@@ -761,6 +762,12 @@ function PublicLeaguesContent() {
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    supabase.from('platform_settings').select('value').eq('key', 'public_leagues_locked').single()
+      .then(({ data }) => setIsLocked(data?.value === 'true'));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -872,6 +879,19 @@ function PublicLeaguesContent() {
       </button>
     );
   }
+
+  if (isLocked === null) return null;
+  if (isLocked && !isAdmin) return (
+    <div style={{ minHeight: '100vh', background: '#070a12', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+      <div style={{ fontSize: 64 }}>🔒</div>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 24, color: '#e4edf7', letterSpacing: 2, textTransform: 'uppercase' }}>Public Leagues Unavailable</div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: '#7a90aa' }}>This section is temporarily unavailable. Check back soon.</div>
+      <button onClick={() => router.push('/')}
+        style={{ padding: '12px 24px', background: 'none', border: '1px solid #1e2d47', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, color: '#7a90aa', marginTop: 8 }}>
+        ← Back to Home
+      </button>
+    </div>
+  );
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column' }}>

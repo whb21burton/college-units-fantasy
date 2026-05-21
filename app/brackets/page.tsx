@@ -19,6 +19,8 @@ export default function BracketsPage() {
   const router   = useRouter()
   const supabase = createClientComponentClient()
 
+  const [pageLocked,      setPageLocked]      = useState<boolean | null>(null)
+  const [sportLocks,      setSportLocks]      = useState({ football: false, basketball: false, baseball: false })
   const [sport,           setSport]           = useState('football')
   const [contests,        setContests]        = useState<any[]>([])
   const [loading,         setLoading]         = useState(true)
@@ -35,10 +37,18 @@ export default function BracketsPage() {
   useEffect(() => {
     supabase
       .from('platform_settings')
-      .select('value')
-      .eq('key', 'active_bracket_sport')
-      .single()
-      .then(({ data }) => { if (data?.value) setSport(data.value as any) })
+      .select('key, value')
+      .in('key', ['active_bracket_sport', 'bracket_contests_locked', 'bracket_sport_football_locked', 'bracket_sport_basketball_locked', 'bracket_sport_baseball_locked'])
+      .then(({ data }) => {
+        const map = Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value]))
+        if (map['active_bracket_sport']) setSport(map['active_bracket_sport'] as any)
+        setPageLocked(map['bracket_contests_locked'] === 'true')
+        setSportLocks({
+          football:   map['bracket_sport_football_locked']   === 'true',
+          basketball: map['bracket_sport_basketball_locked'] === 'true',
+          baseball:   map['bracket_sport_baseball_locked']   === 'true',
+        })
+      })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -162,6 +172,16 @@ export default function BracketsPage() {
     }
   }
 
+  if (pageLocked === null) return null
+  if (pageLocked && !isAdmin) return (
+    <div style={{ minHeight: '100vh', background: '#070a12', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+      <div style={{ fontSize: 64 }}>🔒</div>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 24, color: '#e4edf7', letterSpacing: 2, textTransform: 'uppercase' }}>Bracket Contests Unavailable</div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: '#7a90aa' }}>This section is temporarily unavailable. Check back soon.</div>
+      <button onClick={() => router.push('/')} style={{ padding: '12px 24px', background: 'none', border: '1px solid #1e2d47', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, color: '#7a90aa', marginTop: 8 }}>← Back to Home</button>
+    </div>
+  )
+
   const activeSport = SPORTS.find(s => s.key === sport)!
 
   return (
@@ -189,29 +209,34 @@ export default function BracketsPage() {
           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10, paddingLeft: 8 }}>
             Sport
           </div>
-          {SPORTS.map(s => (
-            <button
-              key={s.key}
-              onClick={() => setSport(s.key)}
-              style={{
-                width: '100%', padding: '12px 14px', marginBottom: 4,
-                background: sport === s.key ? 'rgba(245,166,35,.1)' : 'none',
-                border: `1px solid ${sport === s.key ? C.gold : 'transparent'}`,
-                borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-                display: 'flex', alignItems: 'center', gap: 10,
-              }}
-            >
-              <span style={{ fontSize: 18 }}>{s.icon}</span>
-              <div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: sport === s.key ? C.gold : C.text, letterSpacing: 0.5 }}>
-                  {s.label}
+          {SPORTS.map(s => {
+            const sportLocked = !isAdmin && sportLocks[s.key as keyof typeof sportLocks]
+            return (
+              <button
+                key={s.key}
+                onClick={() => !sportLocked && setSport(s.key)}
+                disabled={sportLocked}
+                style={{
+                  width: '100%', padding: '12px 14px', marginBottom: 4,
+                  background: sport === s.key ? 'rgba(245,166,35,.1)' : 'none',
+                  border: `1px solid ${sport === s.key ? C.gold : 'transparent'}`,
+                  borderRadius: 8, cursor: sportLocked ? 'not-allowed' : 'pointer', textAlign: 'left',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  opacity: sportLocked ? 0.4 : 1,
+                }}
+              >
+                <span style={{ fontSize: 18 }}>{s.icon}</span>
+                <div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: sport === s.key ? C.gold : sportLocked ? C.muted : C.text, letterSpacing: 0.5 }}>
+                    {s.label}{sportLocked ? ' 🔒' : ''}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 1 }}>
+                    {s.desc}
+                  </div>
                 </div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 1 }}>
-                  {s.desc}
-                </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            )
+          })}
         </div>
 
         <div style={{ padding: '16px 20px', borderTop: `1px solid ${C.surf3}`, marginTop: 'auto' }}>
