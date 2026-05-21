@@ -318,7 +318,7 @@ function WalletInner() {
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '40px 20px' }}>
 
         {/* Back */}
-        <button onClick={() => router.back()} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, marginBottom: 24, padding: 0 }}>
+        <button onClick={() => { if (window.history.length > 1) router.back(); else router.push('/'); }} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, marginBottom: 24, padding: 0 }}>
           ← Back
         </button>
 

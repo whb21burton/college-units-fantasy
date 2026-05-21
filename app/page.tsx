@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase-browser';
 import AgeVerificationModal from '@/components/compliance/AgeVerificationModal';
 import TermsAcceptanceModal from '@/components/compliance/TermsAcceptanceModal';
+import WalletDrawer from '@/components/wallet/WalletDrawer';
 
 const IntroAnimation = dynamic(() => import('@/components/IntroAnimation'), { ssr: false });
 
@@ -31,6 +32,7 @@ export default function HomePage() {
   const [user, setUser] = useState<any>(null);
   const [leagues, setLeagues] = useState<any[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [showWallet, setShowWallet] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [introChecked, setIntroChecked] = useState(false);
   const [showAgeModal, setShowAgeModal] = useState(false);
@@ -267,7 +269,7 @@ export default function HomePage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => window.open('/wallet', '_blank')} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>
+              <button onClick={() => setShowWallet(true)} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>
                 {walletBalance > 0 ? `$${(walletBalance / 100).toFixed(2)}` : '💰 Wallet'}
               </button>
               <button onClick={signOut} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>Sign Out</button>
@@ -350,6 +352,8 @@ export default function HomePage() {
 
 
     </div>
+
+    <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} />
 
     {/* COMPLIANCE MODALS */}
     {showTermsModal && (

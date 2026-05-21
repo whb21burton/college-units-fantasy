@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, Suspense } from 'react';
+import WalletDrawer from '@/components/wallet/WalletDrawer';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 
@@ -91,6 +92,7 @@ function MyLeaguesContent() {
   const [newDisplayName,  setNewDisplayName]  = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [walletBalance,      setWalletBalance]      = useState<number | null>(null);
+  const [showWallet,         setShowWallet]         = useState(false);
   const [standaloneBrackets, setStandaloneBrackets] = useState<LeagueData[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -404,6 +406,7 @@ function MyLeaguesContent() {
   }
 
   return (
+    <>
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: 'sans-serif' }}>
 
       {/* LEFT SIDEBAR — always visible */}
@@ -450,7 +453,7 @@ function MyLeaguesContent() {
                 </div>
                 {walletBalance !== null ? (
                   <div
-                    onClick={() => window.open('/wallet', '_blank')}
+                    onClick={() => setShowWallet(true)}
                     title="Open wallet"
                     style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, cursor: 'pointer' }}
                   >
@@ -622,6 +625,8 @@ function MyLeaguesContent() {
         )}
       </div>
     </div>
+    <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} />
+    </>
   );
 }
 
