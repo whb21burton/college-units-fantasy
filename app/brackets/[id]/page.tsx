@@ -361,7 +361,8 @@ export default function BracketPage() {
   const [leagueId,       setLeagueId]       = useState<string | null>(null)
   const [isPublicLeague, setIsPublicLeague] = useState(false)
   const [walletBalance,  setWalletBalance]  = useState<number>(0)
-  const [showWalletModal,setShowWalletModal]= useState(false)
+  const [showWalletModal,   setShowWalletModal]   = useState(false)
+  const [showAddEntryModal, setShowAddEntryModal] = useState(false)
   const [originalPicks,  setOriginalPicks]  = useState<BracketPicks | null>(null)
   const [leaderboard,    setLeaderboard]    = useState<any[]>([])
   const [chatMessages,   setChatMessages]   = useState<any[]>([])
@@ -920,7 +921,7 @@ export default function BracketPage() {
           </div>
           {!isLocked && myEntries.length < maxPerAccount && hasPaid && (
             <button
-              onClick={handleAddEntry}
+              onClick={() => setShowAddEntryModal(true)}
               style={{ padding: '6px 14px', background: 'none', border: `1px solid ${C.gold}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.gold }}>
               + Entry
             </button>
@@ -1117,6 +1118,42 @@ export default function BracketPage() {
           .bracket-mobile  { display: block !important; }
         }
       `}</style>
+
+      {/* ── Add Entry confirmation modal ── */}
+      {showAddEntryModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#0c1422', border: '1px solid #1e2d47', borderRadius: 14, padding: 28, maxWidth: 380, width: '100%' }}>
+            <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>🏆</div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: '#e4edf7', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center', marginBottom: 8 }}>
+              Add Another Entry?
+            </div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: '#7a90aa', textAlign: 'center', marginBottom: 20, lineHeight: 1.6 }}>
+              You will be charged another entry fee of{' '}
+              <strong style={{ color: '#f5a623' }}>${(entryFeeCents/100).toFixed(2)}</strong>{' '}
+              to submit a second bracket.
+              <br/>
+              Your wallet balance: <strong style={{ color: walletBalance >= entryFeeCents ? '#15c678' : '#f03a5a' }}>${(walletBalance/100).toFixed(2)}</strong>
+            </div>
+            {walletBalance < entryFeeCents && (
+              <div style={{ padding: '8px 12px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: '#f03a5a', marginBottom: 12, textAlign: 'center' }}>
+                ⚠️ Not enough funds
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowAddEntryModal(false)}
+                style={{ flex: 1, padding: '12px', background: 'none', border: '1px solid #1e2d47', borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: '#7a90aa' }}>
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowAddEntryModal(false); handleAddEntry() }}
+                disabled={walletBalance < entryFeeCents}
+                style={{ flex: 2, padding: '12px', background: walletBalance >= entryFeeCents ? '#f5a623' : '#1e2d47', border: 'none', borderRadius: 8, cursor: walletBalance >= entryFeeCents ? 'pointer' : 'not-allowed', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: walletBalance >= entryFeeCents ? '#070a12' : '#3e5470', textTransform: 'uppercase' as const }}>
+                Pay ${(entryFeeCents/100).toFixed(2)} & Add Entry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Wallet modal ── */}
       {showWalletModal && (
