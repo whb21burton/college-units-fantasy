@@ -134,6 +134,7 @@ export default function BracketsPage() {
 
     setEntering(false)
     setShowDetailModal(false)
+    setMyEntryCounts(prev => ({ ...prev, [contest.id]: (prev[contest.id] ?? 0) + 1 }))
     router.push('/my-leagues?contest=' + contest.id)
   }
 
@@ -262,6 +263,7 @@ export default function BracketsPage() {
             </div>
             {contests.map(contest => {
               const myCount      = myEntryCounts[contest.id] ?? 0
+              const alreadyEntered = myCount > 0
               const maxPerAcct   = contest.settings?.max_per_account ?? 1
               const entryFee     = contest.entry_fee_cents / 100
               const totalEntries = contest.entry_count ?? 0
@@ -269,9 +271,12 @@ export default function BracketsPage() {
               const sportIcon    = contest.sport === 'football' ? '🏈' : contest.sport === 'basketball' ? '🏀' : '⚾'
               return (
                 <div key={contest.id}
-                  onClick={() => { setSelectedContest(contest); setShowDetailModal(true); setEnterError(''); setTeamName('') }}
-                  style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '14px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 6, alignItems: 'center', cursor: 'pointer', transition: 'border-color .12s' }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = C.gold)}
+                  onClick={() => {
+                    if (alreadyEntered) { router.push('/my-leagues?contest=' + contest.id); return }
+                    setSelectedContest(contest); setShowDetailModal(true); setEnterError(''); setTeamName('')
+                  }}
+                  style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '14px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 6, alignItems: 'center', cursor: 'pointer', transition: 'border-color .12s', opacity: alreadyEntered ? 0.75 : 1 }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = alreadyEntered ? C.green : C.gold)}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = C.surf3)}
                 >
                   <div>
@@ -301,9 +306,9 @@ export default function BracketsPage() {
                     When first<br />game starts
                   </div>
                   <button
-                    onClick={e => { e.stopPropagation(); setSelectedContest(contest); setShowDetailModal(true); setEnterError(''); setTeamName('') }}
-                    style={{ padding: '8px 16px', background: C.gold, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: C.bg, whiteSpace: 'nowrap' as const }}>
-                    Enter
+                    onClick={e => { e.stopPropagation(); if (alreadyEntered) { router.push('/my-leagues?contest=' + contest.id); return } setSelectedContest(contest); setShowDetailModal(true); setEnterError(''); setTeamName('') }}
+                    style={{ padding: '8px 16px', background: alreadyEntered ? 'rgba(21,198,120,.1)' : C.gold, border: alreadyEntered ? '1px solid rgba(21,198,120,.3)' : 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: alreadyEntered ? C.green : C.bg, whiteSpace: 'nowrap' as const }}>
+                    {alreadyEntered ? '✓ Entered' : 'Enter'}
                   </button>
                   {isAdmin && (
                     <>

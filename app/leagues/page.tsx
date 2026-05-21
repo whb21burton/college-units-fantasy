@@ -242,13 +242,14 @@ const SCORING_RULES = [
 
 // ── ContestDetailModal ────────────────────────────────────────────────────────
 function ContestDetailModal({
-  league, user, walletBal, tick,
+  league, user, walletBal, tick, alreadyEntered,
   onClose, onEnter,
 }: {
   league: League;
   user: any;
   walletBal: number;
   tick: number;
+  alreadyEntered: boolean;
   onClose: () => void;
   onEnter: (l: League) => void;
 }) {
@@ -281,6 +282,7 @@ function ContestDetailModal({
       });
   }, [league.id]);
 
+  const router = useRouter();
   const prize = totalPrize(league);
   const po    = payouts(league);
   const isFull = league.member_count >= league.league_size;
@@ -579,21 +581,28 @@ function ContestDetailModal({
               Responsible Gaming
             </button>
           </div>
-          <button
-            onClick={() => { onClose(); onEnter(league); }}
-            disabled={isFull}
-            style={{
-              padding: '13px 40px',
-              background: isFull ? C.surf3 : 'linear-gradient(135deg,#27ae60,#2ecc71)',
-              border: 'none', borderRadius: 6, cursor: isFull ? 'not-allowed' : 'pointer',
-              fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 2,
-              color: isFull ? C.muted : '#fff', textTransform: 'uppercase',
-              boxShadow: isFull ? 'none' : '0 0 20px rgba(46,204,113,.25)',
-              transition: 'all .15s',
-            }}
-          >
-            {isFull ? 'Contest Full' : enterLabel}
-          </button>
+          {alreadyEntered ? (
+            <button onClick={() => { onClose(); router.push('/my-leagues?league=' + league.id); }}
+              style={{ padding: '13px 40px', background: C.green, border: 'none', borderRadius: 6, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' as const }}>
+              ✓ Go to My League →
+            </button>
+          ) : (
+            <button
+              onClick={() => { onClose(); onEnter(league); }}
+              disabled={isFull}
+              style={{
+                padding: '13px 40px',
+                background: isFull ? C.surf3 : 'linear-gradient(135deg,#27ae60,#2ecc71)',
+                border: 'none', borderRadius: 6, cursor: isFull ? 'not-allowed' : 'pointer',
+                fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 2,
+                color: isFull ? C.muted : '#fff', textTransform: 'uppercase',
+                boxShadow: isFull ? 'none' : '0 0 20px rgba(46,204,113,.25)',
+                transition: 'all .15s',
+              }}
+            >
+              {isFull ? 'Contest Full' : enterLabel}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -982,6 +991,7 @@ function PublicLeaguesContent() {
                 const pct      = Math.min(1, league.member_count / league.league_size);
                 const nearFull = pct >= 0.8;
                 const isFull   = league.member_count >= league.league_size;
+                const alreadyEntered = (entryCountMap[league.id] ?? 0) > 0;
                 const prize    = totalPrize(league);
                 const gpp      = isGPP(league);
                 const entColor = isFull ? C.red : nearFull ? C.orange : C.green;
@@ -1068,13 +1078,13 @@ function PublicLeaguesContent() {
 
                     <div style={{ padding: '10px 8px 10px 4px', textAlign: 'right' }}>
                       <button
-                        onClick={e => { e.stopPropagation(); openEnter(league); }}
-                        disabled={isFull || joining === league.id}
-                        style={{ padding: '7px 14px', background: C.surf3, border: `1px solid ${isFull ? '#263040' : '#2e4060'}`, borderRadius: 5, cursor: isFull ? 'not-allowed' : 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1.5, color: isFull ? C.muted : C.text, textTransform: 'uppercase', transition: 'all .12s', whiteSpace: 'nowrap' }}
-                        onMouseEnter={e => { if (!isFull) { e.currentTarget.style.background = '#2a3f60'; e.currentTarget.style.borderColor = '#3a5070'; } }}
-                        onMouseLeave={e => { e.currentTarget.style.background = C.surf3; e.currentTarget.style.borderColor = isFull ? '#263040' : '#2e4060'; }}
+                        onClick={e => { e.stopPropagation(); if (alreadyEntered) { router.push('/my-leagues?league=' + league.id); return; } openEnter(league); }}
+                        disabled={(!alreadyEntered && isFull) || joining === league.id}
+                        style={{ padding: '7px 14px', background: alreadyEntered ? 'rgba(21,198,120,.1)' : C.surf3, border: `1px solid ${alreadyEntered ? 'rgba(21,198,120,.3)' : isFull ? '#263040' : '#2e4060'}`, borderRadius: 5, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1.5, color: alreadyEntered ? C.green : isFull ? C.muted : C.text, textTransform: 'uppercase', transition: 'all .12s', whiteSpace: 'nowrap' }}
+                        onMouseEnter={e => { if (!isFull && !alreadyEntered) { e.currentTarget.style.background = '#2a3f60'; e.currentTarget.style.borderColor = '#3a5070'; } }}
+                        onMouseLeave={e => { e.currentTarget.style.background = alreadyEntered ? 'rgba(21,198,120,.1)' : C.surf3; e.currentTarget.style.borderColor = alreadyEntered ? 'rgba(21,198,120,.3)' : isFull ? '#263040' : '#2e4060'; }}
                       >
-                        {joining === league.id ? '…' : isFull ? 'Full' : 'Enter'}
+                        {joining === league.id ? '…' : alreadyEntered ? '✓ Entered' : isFull ? 'Full' : 'Enter'}
                       </button>
                     </div>
                     <div style={{ padding: '10px 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1106,6 +1116,7 @@ function PublicLeaguesContent() {
           user={user}
           walletBal={walletBal}
           tick={tick}
+          alreadyEntered={(entryCountMap[detailLeague.id] ?? 0) > 0}
           onClose={() => setDetailLeague(null)}
           onEnter={l => { setDetailLeague(null); openEnter(l); }}
         />
@@ -1119,7 +1130,7 @@ function PublicLeaguesContent() {
           walletBal={walletBal}
           joining={joining === enterLeague.id}
           onClose={() => setEnterLeague(null)}
-          onConfirm={() => setEnterLeague(null)}
+          onConfirm={() => { setEntryCountMap(prev => ({ ...prev, [enterLeague.id]: (prev[enterLeague.id] ?? 0) + 1 })); setEnterLeague(null); }}
         />
       )}
     </div>
