@@ -33,7 +33,7 @@ export default function HomePage() {
   const [leagues, setLeagues] = useState<any[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
   const [showWallet, setShowWallet] = useState(false);
-  const [locks, setLocks] = useState({ public_leagues: false, bracket_contests: false });
+  const [locks, setLocks] = useState({ public_leagues: false, bracket_contests: false, create_season_league: false, create_bracket: false });
   const [showIntro, setShowIntro] = useState(false);
   const [introChecked, setIntroChecked] = useState(false);
   const [showAgeModal, setShowAgeModal] = useState(false);
@@ -87,12 +87,14 @@ export default function HomePage() {
     supabase
       .from('platform_settings')
       .select('key, value')
-      .in('key', ['public_leagues_locked', 'bracket_contests_locked'])
+      .in('key', ['public_leagues_locked', 'bracket_contests_locked', 'create_season_league_locked', 'create_bracket_locked'])
       .then(({ data }) => {
         const map = Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value === 'true']));
         setLocks({
-          public_leagues: map['public_leagues_locked'] ?? false,
-          bracket_contests: map['bracket_contests_locked'] ?? false,
+          public_leagues:       map['public_leagues_locked'] ?? false,
+          bracket_contests:     map['bracket_contests_locked'] ?? false,
+          create_season_league: map['create_season_league_locked'] ?? false,
+          create_bracket:       map['create_bracket_locked'] ?? false,
         });
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,8 +104,14 @@ export default function HomePage() {
     await supabase
       .from('platform_settings')
       .upsert({ key, value: (!current).toString(), updated_at: new Date().toISOString() }, { onConflict: 'key' });
-    const field = key === 'public_leagues_locked' ? 'public_leagues' : 'bracket_contests';
-    setLocks(prev => ({ ...prev, [field]: !current }));
+    const keyToField: Record<string, keyof typeof locks> = {
+      public_leagues_locked:       'public_leagues',
+      bracket_contests_locked:     'bracket_contests',
+      create_season_league_locked: 'create_season_league',
+      create_bracket_locked:       'create_bracket',
+    };
+    const field = keyToField[key];
+    if (field) setLocks(prev => ({ ...prev, [field]: !current }));
   }
 
   async function checkCompliance(userId: string) {
@@ -321,6 +329,20 @@ export default function HomePage() {
             <div style={{ color: C.gold, fontSize: 22 }}>→</div>
           </button>
 
+          {isAdmin && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <button onClick={() => toggleLock('create_season_league_locked', locks.create_season_league)}
+                style={{ flex: 1, padding: '9px 12px', background: locks.create_season_league ? 'rgba(240,58,90,.15)' : 'rgba(21,198,120,.1)', border: `1px solid ${locks.create_season_league ? '#f03a5a' : '#15c678'}`, borderRadius: 8, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1, color: locks.create_season_league ? '#f03a5a' : '#15c678' }}
+                title={locks.create_season_league ? 'Unlock Season League Creation' : 'Lock Season League Creation'}>
+                {locks.create_season_league ? '🔒' : '🔓'} Season League
+              </button>
+              <button onClick={() => toggleLock('create_bracket_locked', locks.create_bracket)}
+                style={{ flex: 1, padding: '9px 12px', background: locks.create_bracket ? 'rgba(240,58,90,.15)' : 'rgba(21,198,120,.1)', border: `1px solid ${locks.create_bracket ? '#f03a5a' : '#15c678'}`, borderRadius: 8, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1, color: locks.create_bracket ? '#f03a5a' : '#15c678' }}
+                title={locks.create_bracket ? 'Unlock Bracket Creation' : 'Lock Bracket Creation'}>
+                {locks.create_bracket ? '🔒' : '🔓'} Bracket
+              </button>
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <button onClick={() => router.push('/create-league')} style={btnStyle}>+ Create League</button>
             <button onClick={() => setView('join')} style={{ ...ghostStyle, marginTop: 0 }}>Join League</button>

@@ -90,7 +90,7 @@ function PageControls() {
 
   useEffect(() => {
     supabase.from('platform_settings').select('key, value')
-      .in('key', ['public_leagues_locked', 'bracket_contests_locked', 'bracket_sport_football_locked', 'bracket_sport_basketball_locked', 'bracket_sport_baseball_locked'])
+      .in('key', ['public_leagues_locked', 'bracket_contests_locked', 'bracket_sport_football_locked', 'bracket_sport_basketball_locked', 'bracket_sport_baseball_locked', 'create_season_league_locked', 'create_bracket_locked'])
       .then(({ data }) => {
         setLocks(Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value === 'true'])))
       })
@@ -112,6 +112,8 @@ function PageControls() {
     { key: 'bracket_sport_football_locked',    label: 'Football Brackets',      icon: '🏈' },
     { key: 'bracket_sport_basketball_locked',  label: 'Basketball Brackets',    icon: '🏀' },
     { key: 'bracket_sport_baseball_locked',    label: 'Baseball Brackets',      icon: '⚾' },
+    { key: 'create_season_league_locked',      label: 'Create Season League',   icon: '🏈' },
+    { key: 'create_bracket_locked',            label: 'Create Bracket League',  icon: '🏆' },
   ]
 
   return (

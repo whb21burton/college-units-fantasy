@@ -290,12 +290,22 @@ export default function CreateLeaguePage() {
   const [teamName, setTeamName] = useState('');
   const [teamLogo, setTeamLogo] = useState<string | null>(null);
 
+  const [seasonLocked, setSeasonLocked] = useState(false);
+  const [bracketLocked, setBracketLocked] = useState(false);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) { router.push('/'); return; }
       setUserId(user.id);
       setUserEmail(user.email ?? null);
     });
+    supabase.from('platform_settings').select('key, value')
+      .in('key', ['create_season_league_locked', 'create_bracket_locked'])
+      .then(({ data }) => {
+        const map = Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value === 'true']));
+        setSeasonLocked(map['create_season_league_locked'] ?? false);
+        setBracketLocked(map['create_bracket_locked'] ?? false);
+      });
   }, [router]);
 
   const isAdmin = userEmail === 'whb21burton@gmail.com';
@@ -314,7 +324,8 @@ export default function CreateLeaguePage() {
     .filter(pos => rosterConfig[pos].enabled)
     .reduce((sum, pos) => sum + rosterConfig[pos].count, 0);
 
-  const step1Valid = leagueName.trim().length >= 3 && (leagueType === 'bracket' || entries >= 4);
+  const selectedTypeLocked = (!isAdmin && leagueType === 'season' && seasonLocked) || (!isAdmin && leagueType === 'bracket' && bracketLocked);
+  const step1Valid = leagueName.trim().length >= 3 && (leagueType === 'bracket' || entries >= 4) && !selectedTypeLocked;
   const step3Valid = teamName.trim().length >= 2;
 
   const startingPositions = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'] as const;
@@ -435,12 +446,12 @@ export default function CreateLeaguePage() {
               <Label>League Type</Label>
               <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
                 <div
-                  onClick={() => setLeagueType('season')}
-                  style={{ padding: '14px 16px', border: `2px solid ${leagueType === 'season' ? C.gold : C.surf3}`, borderRadius: 10, cursor: 'pointer', background: leagueType === 'season' ? 'rgba(245,166,35,.08)' : C.surf2, transition: 'all .15s' }}
+                  onClick={() => !(!isAdmin && seasonLocked) && setLeagueType('season')}
+                  style={{ padding: '14px 16px', border: `2px solid ${leagueType === 'season' ? C.gold : (!isAdmin && seasonLocked) ? C.muted : C.surf3}`, borderRadius: 10, cursor: (!isAdmin && seasonLocked) ? 'not-allowed' : 'pointer', background: leagueType === 'season' ? 'rgba(245,166,35,.08)' : C.surf2, opacity: (!isAdmin && seasonLocked) ? 0.45 : 1, transition: 'all .15s' }}
                 >
                   <div style={{ fontSize: 20, marginBottom: 4 }}>🏈</div>
-                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 13, color: leagueType === 'season' ? C.gold : C.text, letterSpacing: 1 }}>Season Long</div>
-                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>Draft once, compete all season</div>
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 13, color: leagueType === 'season' ? C.gold : C.text, letterSpacing: 1 }}>Season Long {!isAdmin && seasonLocked && '🔒'}</div>
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>{!isAdmin && seasonLocked ? 'Currently unavailable' : 'Draft once, compete all season'}</div>
                 </div>
                 {isAdmin && (
                   <div
@@ -454,12 +465,12 @@ export default function CreateLeaguePage() {
                   </div>
                 )}
                 <div
-                  onClick={() => setLeagueType('bracket')}
-                  style={{ padding: '14px 16px', border: `2px solid ${leagueType === 'bracket' ? C.green : C.surf3}`, borderRadius: 10, cursor: 'pointer', background: leagueType === 'bracket' ? 'rgba(21,198,120,.08)' : C.surf2, transition: 'all .15s' }}
+                  onClick={() => !(!isAdmin && bracketLocked) && setLeagueType('bracket')}
+                  style={{ padding: '14px 16px', border: `2px solid ${leagueType === 'bracket' ? C.green : (!isAdmin && bracketLocked) ? C.muted : C.surf3}`, borderRadius: 10, cursor: (!isAdmin && bracketLocked) ? 'not-allowed' : 'pointer', background: leagueType === 'bracket' ? 'rgba(21,198,120,.08)' : C.surf2, opacity: (!isAdmin && bracketLocked) ? 0.45 : 1, transition: 'all .15s' }}
                 >
                   <div style={{ fontSize: 20, marginBottom: 4 }}>🏆</div>
-                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 13, color: leagueType === 'bracket' ? C.green : C.text, letterSpacing: 1 }}>Bracket</div>
-                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>Pick your bracket, win prizes</div>
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 13, color: leagueType === 'bracket' ? C.green : C.text, letterSpacing: 1 }}>Bracket {!isAdmin && bracketLocked && '🔒'}</div>
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>{!isAdmin && bracketLocked ? 'Currently unavailable' : 'Pick your bracket, win prizes'}</div>
                 </div>
               </div>
               {leagueType === 'bracket' && (
