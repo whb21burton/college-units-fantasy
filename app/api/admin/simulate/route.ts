@@ -94,6 +94,7 @@ export async function POST(req: Request) {
     availAcctId: string
     pendingAcctId: string
     entryTxId: string | undefined
+    isReal?: boolean
   }[] = []
   const errors: string[] = []
 
@@ -203,11 +204,50 @@ export async function POST(req: Request) {
     })
   }
 
-  const payouts: { rank: number; botEmail: string; payoutCents: number; payoutDollars: string }[] = []
+  // Build allEntrants: bots + real users already in the contest
+  let allEntrants = [...botUsers]
 
-  if (simulateResults && botUsers.length > 0) {
+  if (contestType === 'bracket') {
+    const botIds = botUsers.map(b => b.id)
+    const { data: existingEntries } = await admin
+      .from('user_bracket_entries')
+      .select('user_id, entry_name')
+      .eq('contest_id', contestId)
+      .not('user_id', 'in', `(${botIds.map(id => `'${id}'`).join(',')})`)
+
+    for (const entry of existingEntries ?? []) {
+      const { data: wallet } = await admin.from('wallets').select('id').eq('user_id', entry.user_id).single()
+      if (!wallet) continue
+      const { data: accounts } = await admin.from('ledger_accounts').select('id, type').eq('wallet_id', wallet.id)
+      const availAcct   = accounts?.find((a: any) => a.type === 'user_available')
+      const pendingAcct = accounts?.find((a: any) => a.type === 'user_pending')
+      if (!availAcct || !pendingAcct) continue
+      allEntrants.push({ id: entry.user_id, email: entry.entry_name ?? entry.user_id, walletId: wallet.id, availAcctId: availAcct.id, pendingAcctId: pendingAcct.id, entryTxId: undefined, isReal: true })
+    }
+  } else if (contestType === 'weekly') {
+    const { data: existingMembers } = await admin
+      .from('league_members')
+      .select('user_id, team_name')
+      .eq('league_id', contestId)
+      .eq('is_bot', false)
+
+    for (const member of existingMembers ?? []) {
+      if (botUsers.find(b => b.id === member.user_id)) continue
+      const { data: wallet } = await admin.from('wallets').select('id').eq('user_id', member.user_id).single()
+      if (!wallet) continue
+      const { data: accounts } = await admin.from('ledger_accounts').select('id, type').eq('wallet_id', wallet.id)
+      const availAcct   = accounts?.find((a: any) => a.type === 'user_available')
+      const pendingAcct = accounts?.find((a: any) => a.type === 'user_pending')
+      if (!availAcct || !pendingAcct) continue
+      allEntrants.push({ id: member.user_id, email: member.team_name ?? member.user_id, walletId: wallet.id, availAcctId: availAcct.id, pendingAcctId: pendingAcct.id, entryTxId: undefined, isReal: true })
+    }
+  }
+
+  const payouts: { rank: number; botEmail: string; isReal: boolean; payoutCents: number; payoutDollars: string }[] = []
+
+  if (simulateResults && allEntrants.length > 0) {
     // Shuffle for random rankings
-    const ranked = [...botUsers].sort(() => Math.random() - 0.5)
+    const ranked = [...allEntrants].sort(() => Math.random() - 0.5)
 
     const totalPool = entryFeeCents * ranked.length
     const netPool   = Math.floor(totalPool * 0.95)
@@ -258,7 +298,7 @@ export async function POST(req: Request) {
         ])
       }
 
-      payouts.push({ rank, botEmail: winner.email, payoutCents, payoutDollars: (payoutCents / 100).toFixed(2) })
+      payouts.push({ rank, botEmail: winner.email, isReal: winner.isReal ?? false, payoutCents, payoutDollars: (payoutCents / 100).toFixed(2) })
     }
 
     const winnerIds = new Set(Array.from(winnerMap.values()).map(w => w.id))
@@ -308,14 +348,17 @@ export async function POST(req: Request) {
     }
   }
 
+  const realUsersIncluded = allEntrants.length - botUsers.length
   return NextResponse.json({
     success: true,
     contestName,
     botsCreated: botUsers.length,
+    realUsersIncluded,
+    totalEntrants: allEntrants.length,
     entriesCreated: botUsers.length,
-    totalPoolCents: entryFeeCents * botUsers.length,
-    netPoolCents: Math.floor(entryFeeCents * botUsers.length * 0.95),
-    rakeCents: Math.floor(entryFeeCents * botUsers.length * 0.05),
+    totalPoolCents: entryFeeCents * allEntrants.length,
+    netPoolCents: Math.floor(entryFeeCents * allEntrants.length * 0.95),
+    rakeCents: Math.floor(entryFeeCents * allEntrants.length * 0.05),
     payouts,
     errors,
   })

@@ -679,10 +679,16 @@ function SimulationRunner() {
               ⚠️ Only {result.botsCreated} bots entered — contest was capped at {result.botsCreated} remaining spots
             </div>
           )}
+          {result.realUsersIncluded > 0 && (
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.gold, marginBottom: 8 }}>
+              ℹ️ {result.realUsersIncluded} real user{result.realUsersIncluded > 1 ? 's' : ''} included in simulation
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
             {([
+              ['Total Entrants',  result.totalEntrants ?? result.botsCreated],
               ['Bots Created',    result.botsCreated],
-              ['Entries',        result.entriesCreated],
+              ['Real Users',      result.realUsersIncluded ?? 0],
               ['Total Pool',     `$${(result.totalPoolCents / 100).toFixed(2)}`],
               ['Net Prize Pool', `$${(result.netPoolCents / 100).toFixed(2)}`],
               ['Platform Rake',  `$${(result.rakeCents / 100).toFixed(2)}`],
@@ -698,7 +704,7 @@ function SimulationRunner() {
               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' as const, marginBottom: 6 }}>Payouts</div>
               {result.payouts.map((p: any) => (
                 <div key={p.rank} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 4 }}>
-                  <span>🏆 Rank #{p.rank} — {p.botEmail}</span>
+                  <span>🏆 Rank #{p.rank} — {p.botEmail}{p.isReal ? ' 👤' : ' 🤖'}</span>
                   <span style={{ color: C.gold }}>${p.payoutDollars}</span>
                 </div>
               ))}
