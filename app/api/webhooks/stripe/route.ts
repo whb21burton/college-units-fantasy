@@ -106,6 +106,11 @@ export async function POST(req: Request) {
       }
     }
 
+    if (event.type === 'payout.paid') {
+      const payout = event.data.object as Stripe.Payout
+      console.log('[webhook] payout.paid:', payout.id, payout.amount)
+    }
+
     // Mark processed
     await admin.from('stripe_webhook_events')
       .update({ processed: true, processed_at: new Date().toISOString() })

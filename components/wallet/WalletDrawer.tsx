@@ -54,7 +54,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     if (res.ok && data.clientSecret) setClientSecret(data.clientSecret)
   }
 
-  const AMOUNTS = [1000, 2500, 5000, 10000]
+  const AMOUNTS = [1000, 2500, 5000, 10000] // $10, $25, $50, $100
 
   if (!isOpen) return null
 
@@ -152,7 +152,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                 </button>
               </div>
             ) : clientSecret ? (
-              <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'night', variables: { colorPrimary: C.gold } } }}>
+              <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'night', variables: { colorPrimary: '#f5a623', colorBackground: '#131d30', colorText: '#e4edf7', colorDanger: '#f03a5a', fontFamily: 'Oswald, sans-serif', borderRadius: '8px' } } }}>
                 <StripePaymentForm
                   clientSecret={clientSecret}
                   onSuccess={() => { setDepositSuccess(true); fetchWallet() }}
@@ -186,6 +186,9 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                   style={{ width: '100%', padding: '14px', background: C.gold, border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 2, color: C.bg, fontWeight: 700, textTransform: 'uppercase' as const }}>
                   DEPOSIT ${customAmount ? parseFloat(customAmount || '0').toFixed(2) : (depositAmount / 100).toFixed(2)}
                 </button>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center', marginTop: 10, letterSpacing: 0.5 }}>
+                  Accepts: Visa · Mastercard · Amex · Discover · Apple Pay · Google Pay · Venmo · Link
+                </div>
               </div>
             )
           )}

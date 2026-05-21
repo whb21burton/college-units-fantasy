@@ -56,12 +56,28 @@ export async function POST(req: Request) {
       await admin.from('wallets').update({ stripe_customer_id: stripeCustomerId }).eq('id', wallet.id);
     }
 
+    // Non-blocking fraud log
+    admin.from('compliance_logs').insert({
+      user_id:    user.id,
+      event_type: 'deposit_initiated',
+      event_data: {
+        amount_cents: amountCents,
+        ip:           req.headers.get('x-forwarded-for') ?? 'unknown',
+      },
+      ip_address: req.headers.get('x-forwarded-for') ?? 'unknown',
+      user_agent: req.headers.get('user-agent') ?? 'unknown',
+    }).then(() => {})
+
     // Create Stripe PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
       amount:   amountCents,
       currency: 'usd',
       customer: stripeCustomerId,
       metadata: { wallet_id: wallet.id, user_id: user.id },
+      payment_method_types: ['card', 'link', 'us_bank_account'],
+      payment_method_options: {
+        card: { request_three_d_secure: 'automatic' },
+      },
     });
 
     // Insert deposit row
