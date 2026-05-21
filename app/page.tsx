@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase-browser';
-import { WalletPanel } from '@/components/wallet/WalletPanel';
 import AgeVerificationModal from '@/components/compliance/AgeVerificationModal';
 import TermsAcceptanceModal from '@/components/compliance/TermsAcceptanceModal';
 
@@ -31,7 +30,6 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [leagues, setLeagues] = useState<any[]>([]);
-  const [walletOpen, setWalletOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [showIntro, setShowIntro] = useState(false);
   const [introChecked, setIntroChecked] = useState(false);
@@ -269,7 +267,7 @@ export default function HomePage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setWalletOpen(true)} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>
+              <button onClick={() => window.open('/wallet', '_blank')} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>
                 {walletBalance > 0 ? `$${(walletBalance / 100).toFixed(2)}` : '💰 Wallet'}
               </button>
               <button onClick={signOut} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>Sign Out</button>
@@ -350,8 +348,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* WALLET */}
-      {walletOpen && <WalletPanel onClose={() => setWalletOpen(false)} />}
+
     </div>
 
     {/* COMPLIANCE MODALS */}
