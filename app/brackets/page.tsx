@@ -100,20 +100,49 @@ export default function BracketsPage() {
     setEntering(true)
     setEnterError('')
 
-    // Already entered — skip payment and go to My Leagues
+    // Check if already has entry row
     const { data: existing } = await supabase
       .from('user_bracket_entries')
-      .select('id')
+      .select('id, entry_number')
       .eq('contest_id', contest.id)
       .eq('user_id', userId!)
-      .maybeSingle()
+      .order('entry_number', { ascending: true })
 
-    if (existing) {
+    if (existing && existing.length > 0) {
+      setEntering(false)
       setShowDetailModal(false)
       router.push('/my-leagues?contest=' + contest.id)
       return
     }
 
+    // Recovery: already paid but no entry row (broken state from previous failed insert)
+    if (feeCents > 0) {
+      const { data: paidTx } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('user_id', userId!)
+        .eq('type', 'contest_entry')
+        .eq('status', 'completed')
+        .ilike('description', `%${contest.id}%`)
+        .maybeSingle()
+
+      if (paidTx) {
+        await supabase.from('user_bracket_entries').upsert({
+          contest_id:   contest.id,
+          user_id:      userId!,
+          entry_name:   teamName.trim() || 'My Bracket',
+          entry_number: 1,
+          is_submitted: false,
+        }, { onConflict: 'contest_id,user_id,entry_number' })
+        setMyEntryCounts(prev => ({ ...prev, [contest.id]: 1 }))
+        setEntering(false)
+        setShowDetailModal(false)
+        router.push('/my-leagues?contest=' + contest.id)
+        return
+      }
+    }
+
+    // Normal flow — pay then create entry
     if (feeCents > 0) {
       if (userBalance < feeCents) {
         setEnterError(`Not enough funds. Need $${(feeCents / 100).toFixed(2)}, you have $${(userBalance / 100).toFixed(2)}.`)
@@ -123,7 +152,7 @@ export default function BracketsPage() {
       const res = await fetch('/api/wallet/bracket-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contestId: contest.id, buyInCents: feeCents }),
+        body: JSON.stringify({ contestId: contest.id, buyInCents: feeCents, entryNumber: 1 }),
       })
       if (!res.ok) {
         const d = await res.json()
@@ -134,13 +163,25 @@ export default function BracketsPage() {
       setUserBalance(prev => prev - feeCents)
     }
 
-    // Create entry row so My Leagues can find this contest
-    await supabase.from('user_bracket_entries').upsert({
+    // Create entry row
+    const { error: upsertErr } = await supabase.from('user_bracket_entries').upsert({
       contest_id:   contest.id,
       user_id:      userId!,
       entry_name:   teamName.trim() || 'My Bracket',
+      entry_number: 1,
       is_submitted: false,
-    }, { onConflict: 'contest_id,user_id' })
+    }, { onConflict: 'contest_id,user_id,entry_number' })
+
+    if (upsertErr) {
+      // Payment succeeded but entry row failed — retry once
+      await supabase.from('user_bracket_entries').upsert({
+        contest_id:   contest.id,
+        user_id:      userId!,
+        entry_name:   teamName.trim() || 'My Bracket',
+        entry_number: 1,
+        is_submitted: false,
+      }, { onConflict: 'contest_id,user_id,entry_number' })
+    }
 
     setEntering(false)
     setShowDetailModal(false)
