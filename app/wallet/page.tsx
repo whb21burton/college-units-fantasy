@@ -354,10 +354,18 @@ function WalletInner() {
           {/* Stats row */}
           {!loading && wallet && (
             <div style={{ display: 'flex', gap: 24, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.surf3}` }}>
-              {[
-                ['Total Deposited', fmt(wallet.lifetime_deposited)],
-                ['Total Withdrawn', fmt(wallet.lifetime_withdrawn)],
-              ].map(([label, val]) => (
+              {(() => {
+                const totalDeposited = transactions
+                  .filter(t => t.type === 'deposit' && t.status === 'completed')
+                  .reduce((sum, t) => sum + Number(t.amount_cents ?? 0), 0);
+                const totalWithdrawn = transactions
+                  .filter(t => t.type === 'withdrawal' && t.status === 'completed')
+                  .reduce((sum, t) => sum + Number(t.amount_cents ?? 0), 0);
+                return [
+                  ['Total Deposited', fmt(totalDeposited)],
+                  ['Total Withdrawn', fmt(totalWithdrawn)],
+                ];
+              })().map(([label, val]) => (
                 <div key={label}>
                   <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
                   <div style={{ fontFamily: "'Anton',sans-serif", fontSize: 16, color: C.sub }}>{val}</div>
