@@ -417,7 +417,29 @@ function PublicBracketCreator() {
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+  const [sportLocks, setSportLocks] = useState({ football: false, basketball: false, baseball: false })
   const supabase = createClientComponentClient()
+
+  useEffect(() => {
+    supabase.from('platform_settings').select('key, value')
+      .in('key', ['bracket_sport_football_locked', 'bracket_sport_basketball_locked', 'bracket_sport_baseball_locked'])
+      .then(({ data }) => {
+        const map = Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value === 'true']))
+        setSportLocks({
+          football:   map['bracket_sport_football_locked']   ?? false,
+          basketball: map['bracket_sport_basketball_locked'] ?? false,
+          baseball:   map['bracket_sport_baseball_locked']   ?? false,
+        })
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (sportLocks[sport]) {
+      const available = (['baseball', 'basketball', 'football'] as const).find(s => !sportLocks[s])
+      if (available) setSport(available)
+    }
+  }, [sportLocks])
 
   async function handleCreate() {
     setSubmitting(true)
@@ -472,21 +494,28 @@ function PublicBracketCreator() {
       </label>
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         {([['football', '🏈'], ['basketball', '🏀'], ['baseball', '⚾']] as const).map(([s, icon]) => {
+          const isLocked = sportLocks[s]
           const isActive = activeSport === s
+          const isSelected = sport === s
           return (
-            <button key={s} onClick={() => setSport(s)}
+            <button key={s}
+              onClick={() => !isLocked && setSport(s)}
+              disabled={isLocked}
               style={{
                 flex: 1, padding: '12px 4px',
-                border: `2px solid ${isActive ? C.green : sport === s ? C.gold : C.surf3}`,
-                borderRadius: 8, cursor: 'pointer',
-                background: isActive ? 'rgba(21,198,120,.12)' : sport === s ? 'rgba(245,166,35,.1)' : C.surf2,
-                color: isActive ? C.green : sport === s ? C.gold : C.sub,
-                fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center' as const,
+                border: `2px solid ${isActive ? C.green : isSelected && !isLocked ? C.gold : C.surf3}`,
+                borderRadius: 8,
+                cursor: isLocked ? 'not-allowed' : 'pointer',
+                background: isActive ? 'rgba(21,198,120,.12)' : isSelected && !isLocked ? 'rgba(245,166,35,.1)' : C.surf2,
+                opacity: isLocked ? 0.35 : 1,
+                textAlign: 'center' as const,
                 transition: 'all .15s',
               }}>
               <div style={{ fontSize: 20, marginBottom: 2 }}>{icon}</div>
-              <div style={{ textTransform: 'capitalize' as const }}>{s}</div>
-              {isActive && <div style={{ fontSize: 8, letterSpacing: 1, marginTop: 2 }}>● ACTIVE</div>}
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isActive ? C.green : isSelected ? C.gold : isLocked ? C.muted : C.sub, textTransform: 'capitalize' as const }}>
+                {s} {isLocked ? '🔒' : isActive ? '● ACTIVE' : ''}
+              </div>
+              {isLocked && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted }}>Locked</div>}
             </button>
           )
         })}
