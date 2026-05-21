@@ -292,6 +292,8 @@ export default function CreateLeaguePage() {
 
   const [seasonLocked, setSeasonLocked] = useState(false);
   const [bracketLocked, setBracketLocked] = useState(false);
+  const [sportLocks, setSportLocks] = useState({ football: false, basketball: false, baseball: false });
+  const [bracketSport, setBracketSport] = useState<'football' | 'basketball' | 'baseball'>('baseball');
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -300,11 +302,16 @@ export default function CreateLeaguePage() {
       setUserEmail(user.email ?? null);
     });
     supabase.from('platform_settings').select('key, value')
-      .in('key', ['create_season_league_locked', 'create_bracket_locked'])
+      .in('key', ['create_season_league_locked', 'create_bracket_locked', 'bracket_sport_football_locked', 'bracket_sport_basketball_locked', 'bracket_sport_baseball_locked'])
       .then(({ data }) => {
         const map = Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value === 'true']));
         setSeasonLocked(map['create_season_league_locked'] ?? false);
         setBracketLocked(map['create_bracket_locked'] ?? false);
+        setSportLocks({
+          football:   map['bracket_sport_football_locked']   ?? false,
+          basketball: map['bracket_sport_basketball_locked'] ?? false,
+          baseball:   map['bracket_sport_baseball_locked']   ?? false,
+        });
       });
   }, [router]);
 
@@ -324,7 +331,9 @@ export default function CreateLeaguePage() {
     .filter(pos => rosterConfig[pos].enabled)
     .reduce((sum, pos) => sum + rosterConfig[pos].count, 0);
 
-  const selectedTypeLocked = (!isAdmin && leagueType === 'season' && seasonLocked) || (!isAdmin && leagueType === 'bracket' && bracketLocked);
+  const selectedTypeLocked = (!isAdmin && leagueType === 'season' && seasonLocked) ||
+                             (!isAdmin && leagueType === 'bracket' && bracketLocked) ||
+                             (!isAdmin && leagueType === 'bracket' && sportLocks[bracketSport]);
   const step1Valid = leagueName.trim().length >= 3 && (leagueType === 'bracket' || entries >= 4) && !selectedTypeLocked;
   const step3Valid = teamName.trim().length >= 2;
 
@@ -381,6 +390,7 @@ export default function CreateLeaguePage() {
             payout_structure: payoutStructure,
             payout_splits:    splits,
             roster_config:    rosterConfig,
+            ...(leagueType === 'bracket' ? { bracket_sport: bracketSport } : {}),
             ...(agreementAccepted ? {
               commissioner_agreement_accepted:    true,
               commissioner_agreement_accepted_at: new Date().toISOString(),
@@ -476,6 +486,48 @@ export default function CreateLeaguePage() {
               {leagueType === 'bracket' && (
                 <div style={{ padding: '8px 12px', background: 'rgba(21,198,120,.06)', border: '1px solid rgba(21,198,120,.2)', borderRadius: 6, marginTop: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
                   🏆 Bracket contests are open to unlimited participants. No team limit required.
+                </div>
+              )}
+              {leagueType === 'bracket' && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>
+                    Bracket Sport
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {([
+                      ['baseball',    '⚾', 'Baseball'],
+                      ['basketball',  '🏀', 'Basketball'],
+                      ['football',    '🏈', 'Football'],
+                    ] as const).map(([sport, icon, label]) => {
+                      const sportLocked = !isAdmin && sportLocks[sport];
+                      return (
+                        <button key={sport}
+                          onClick={() => !sportLocked && setBracketSport(sport)}
+                          disabled={sportLocked}
+                          style={{
+                            flex: 1, padding: '12px 8px',
+                            border: `2px solid ${bracketSport === sport && !sportLocked ? C.gold : sportLocked ? C.muted : C.surf3}`,
+                            borderRadius: 8, cursor: sportLocked ? 'not-allowed' : 'pointer',
+                            background: bracketSport === sport && !sportLocked ? 'rgba(245,166,35,.08)' : C.surf2,
+                            opacity: sportLocked ? 0.4 : 1,
+                            textAlign: 'center' as const,
+                          }}>
+                          <div style={{ fontSize: 20, marginBottom: 4 }}>{icon}</div>
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: bracketSport === sport && !sportLocked ? C.gold : sportLocked ? C.muted : C.text }}>
+                            {label} {sportLocked && '🔒'}
+                          </div>
+                          {sportLocked && (
+                            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, marginTop: 2 }}>Unavailable</div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(bracketSport === 'football' || bracketSport === 'basketball') && !sportLocks[bracketSport] && (
+                    <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(245,166,35,.06)', border: '1px solid rgba(245,166,35,.15)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                      ⚠️ {bracketSport === 'football' ? 'Football' : 'Basketball'} bracket settings coming soon. Baseball is fully configured.
+                    </div>
+                  )}
                 </div>
               )}
               {leagueType === 'bracket' && (

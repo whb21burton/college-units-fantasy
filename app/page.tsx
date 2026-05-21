@@ -329,20 +329,6 @@ export default function HomePage() {
             <div style={{ color: C.gold, fontSize: 22 }}>→</div>
           </button>
 
-          {isAdmin && (
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <button onClick={() => toggleLock('create_season_league_locked', locks.create_season_league)}
-                style={{ flex: 1, padding: '9px 12px', background: locks.create_season_league ? 'rgba(240,58,90,.15)' : 'rgba(21,198,120,.1)', border: `1px solid ${locks.create_season_league ? '#f03a5a' : '#15c678'}`, borderRadius: 8, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1, color: locks.create_season_league ? '#f03a5a' : '#15c678' }}
-                title={locks.create_season_league ? 'Unlock Season League Creation' : 'Lock Season League Creation'}>
-                {locks.create_season_league ? '🔒' : '🔓'} Season League
-              </button>
-              <button onClick={() => toggleLock('create_bracket_locked', locks.create_bracket)}
-                style={{ flex: 1, padding: '9px 12px', background: locks.create_bracket ? 'rgba(240,58,90,.15)' : 'rgba(21,198,120,.1)', border: `1px solid ${locks.create_bracket ? '#f03a5a' : '#15c678'}`, borderRadius: 8, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 1, color: locks.create_bracket ? '#f03a5a' : '#15c678' }}
-                title={locks.create_bracket ? 'Unlock Bracket Creation' : 'Lock Bracket Creation'}>
-                {locks.create_bracket ? '🔒' : '🔓'} Bracket
-              </button>
-            </div>
-          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <button onClick={() => router.push('/create-league')} style={btnStyle}>+ Create League</button>
             <button onClick={() => setView('join')} style={{ ...ghostStyle, marginTop: 0 }}>Join League</button>

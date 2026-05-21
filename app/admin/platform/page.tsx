@@ -88,9 +88,19 @@ function PageControls() {
   const [locks, setLocks] = useState<Record<string, boolean>>({})
   const [saving, setSaving] = useState<string | null>(null)
 
+  const LOCK_KEYS = [
+    'public_leagues_locked',
+    'create_season_league_locked',
+    'bracket_contests_locked',
+    'create_bracket_locked',
+    'bracket_sport_football_locked',
+    'bracket_sport_basketball_locked',
+    'bracket_sport_baseball_locked',
+  ]
+
   useEffect(() => {
     supabase.from('platform_settings').select('key, value')
-      .in('key', ['public_leagues_locked', 'bracket_contests_locked', 'bracket_sport_football_locked', 'bracket_sport_basketball_locked', 'bracket_sport_baseball_locked', 'create_season_league_locked', 'create_bracket_locked'])
+      .in('key', LOCK_KEYS)
       .then(({ data }) => {
         setLocks(Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value === 'true'])))
       })
@@ -100,45 +110,92 @@ function PageControls() {
   async function toggle(key: string) {
     setSaving(key)
     const newVal = !locks[key]
-    await supabase.from('platform_settings')
-      .upsert({ key, value: newVal.toString(), updated_at: new Date().toISOString() }, { onConflict: 'key' })
-    setLocks(prev => ({ ...prev, [key]: newVal }))
+    const keysToUpdate: Record<string, boolean> = { [key]: newVal }
+
+    if (newVal === true) {
+      if (key === 'public_leagues_locked') {
+        keysToUpdate['create_season_league_locked'] = true
+      }
+      if (key === 'bracket_contests_locked') {
+        keysToUpdate['create_bracket_locked'] = true
+        keysToUpdate['bracket_sport_football_locked'] = true
+        keysToUpdate['bracket_sport_basketball_locked'] = true
+        keysToUpdate['bracket_sport_baseball_locked'] = true
+      }
+    }
+
+    for (const [k, v] of Object.entries(keysToUpdate)) {
+      await supabase.from('platform_settings')
+        .upsert({ key: k, value: v.toString(), updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    }
+    setLocks(prev => ({ ...prev, ...keysToUpdate }))
     setSaving(null)
   }
 
-  const controls = [
-    { key: 'public_leagues_locked',           label: 'Browse Public Leagues',  icon: '🏟️' },
-    { key: 'bracket_contests_locked',          label: 'Bracket Contests Page',  icon: '🏆' },
-    { key: 'bracket_sport_football_locked',    label: 'Football Brackets',      icon: '🏈' },
-    { key: 'bracket_sport_basketball_locked',  label: 'Basketball Brackets',    icon: '🏀' },
-    { key: 'bracket_sport_baseball_locked',    label: 'Baseball Brackets',      icon: '⚾' },
-    { key: 'create_season_league_locked',      label: 'Create Season League',   icon: '🏈' },
-    { key: 'create_bracket_locked',            label: 'Create Bracket League',  icon: '🏆' },
-  ]
+  function LockRow({ lockKey, label, icon, indent = false, parentLocked = false }: {
+    lockKey: string; label: string; icon: string; indent?: boolean; parentLocked?: boolean
+  }) {
+    const locked = locks[lockKey] ?? false
+    const effectiveLocked = locked || parentLocked
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px',
+        marginLeft: indent ? 24 : 0,
+        background: indent ? C.bg : C.surf2,
+        borderRadius: 8,
+        border: `1px solid ${effectiveLocked ? 'rgba(240,58,90,.2)' : C.surf3}`,
+        opacity: parentLocked ? 0.6 : 1,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {indent && <div style={{ width: 2, height: 20, background: C.surf3, marginRight: 4 }} />}
+          <span style={{ fontSize: 16 }}>{icon}</span>
+          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: effectiveLocked ? C.muted : C.text }}>
+            {label}
+            {parentLocked && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginLeft: 8 }}>(parent locked)</span>}
+          </span>
+        </div>
+        <button
+          onClick={() => !parentLocked && toggle(lockKey)}
+          disabled={saving === lockKey || parentLocked}
+          style={{
+            padding: '6px 16px',
+            background: effectiveLocked ? 'rgba(240,58,90,.15)' : 'rgba(21,198,120,.1)',
+            border: `1px solid ${effectiveLocked ? '#f03a5a' : '#15c678'}`,
+            borderRadius: 6, cursor: parentLocked ? 'not-allowed' : 'pointer',
+            fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1,
+            color: effectiveLocked ? '#f03a5a' : '#15c678',
+            opacity: parentLocked ? 0.5 : 1,
+          }}>
+          {saving === lockKey ? '...' : effectiveLocked ? '🔒 Locked' : '🔓 Unlocked'}
+        </button>
+      </div>
+    )
+  }
+
+  const publicLeaguesLocked = locks['public_leagues_locked'] ?? false
+  const bracketContestsLocked = locks['bracket_contests_locked'] ?? false
 
   return (
     <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
-      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
         🔒 Page Controls
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {controls.map(c => {
-          const locked = locks[c.key] ?? false
-          return (
-            <div key={c.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: C.surf2, borderRadius: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 18 }}>{c.icon}</span>
-                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text }}>{c.label}</span>
-              </div>
-              <button
-                onClick={() => toggle(c.key)}
-                disabled={saving === c.key}
-                style={{ padding: '8px 20px', background: locked ? 'rgba(240,58,90,.15)' : 'rgba(21,198,120,.1)', border: `1px solid ${locked ? '#f03a5a' : '#15c678'}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: locked ? '#f03a5a' : '#15c678' }}>
-                {saving === c.key ? '...' : locked ? '🔒 Locked' : '🔓 Unlocked'}
-              </button>
-            </div>
-          )
-        })}
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 16, letterSpacing: 0.5 }}>
+        Locking a parent automatically locks all subcategories. Subcategories can be locked independently when parent is unlocked.
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <LockRow lockKey="public_leagues_locked" label="Browse Public Leagues" icon="🏟️" />
+        <LockRow lockKey="create_season_league_locked" label="Create Season League" icon="🏈" indent parentLocked={publicLeaguesLocked} />
+
+        <div style={{ height: 1, background: C.surf3, margin: '8px 0' }} />
+
+        <LockRow lockKey="bracket_contests_locked" label="Bracket Contest Page" icon="🏆" />
+        <LockRow lockKey="create_bracket_locked" label="Create Bracket League" icon="➕" indent parentLocked={bracketContestsLocked} />
+        <LockRow lockKey="bracket_sport_football_locked" label="Football Bracket" icon="🏈" indent parentLocked={bracketContestsLocked} />
+        <LockRow lockKey="bracket_sport_basketball_locked" label="Basketball Bracket" icon="🏀" indent parentLocked={bracketContestsLocked} />
+        <LockRow lockKey="bracket_sport_baseball_locked" label="Baseball Bracket" icon="⚾" indent parentLocked={bracketContestsLocked} />
       </div>
     </div>
   )
