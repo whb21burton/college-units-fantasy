@@ -81,8 +81,9 @@ function MyLeaguesContent() {
   const [loading,         setLoading]         = useState(true);
   const [leagues,         setLeagues]         = useState<LeagueData[]>([]);
   const [selected,        setSelected]        = useState<Selection>(null);
-  const [history,         setHistory]         = useState<HistoryEntry[]>([]);
-  const [historyLoading,  setHistoryLoading]  = useState(false);
+  const [archivedLeagues, setArchivedLeagues] = useState<any[]>([]);
+  const [historyFilter,   setHistoryFilter]   = useState<'all' | 'season' | 'weekly' | 'bracket'>('all');
+  const [loadingHistory,  setLoadingHistory]  = useState(false);
   const [collapsed,       setCollapsed]       = useState<Record<string, boolean>>({
     season: false, weekly: false, bracket: false,
   });
@@ -120,13 +121,16 @@ function MyLeaguesContent() {
           .from('league_members')
           .select(`
             team_name,
+            league_id,
             leagues (
               id, name, league_type, status, buy_in,
               league_size, is_public, week, settings,
               commissioner_id, draft_type, conference_filter
             )
           `)
-          .eq('user_id', u.id),
+          .eq('user_id', u.id)
+          .eq('is_archived', false)
+          .eq('is_deleted', false),
         fetch('/api/wallet'),
       ]);
       const validLeagues = (memberships ?? [])
@@ -175,101 +179,95 @@ function MyLeaguesContent() {
     });
   }, [router]);
 
+  const userId = user?.id ?? '';
+
   useEffect(() => {
-    if (selected?.type !== 'history' || !user) return;
-    setHistoryLoading(true);
-    async function fetchHistory() {
-      const { data: memberships } = await supabase
-        .from('league_members')
-        .select('league_id, team_name, leagues(id, name, status, buy_in, league_type, is_public, settings)')
-        .eq('user_id', user.id);
-      const completed = (memberships ?? []).filter((m: any) => {
-        const s = m.leagues?.status;
-        return s === 'completed' || s === 'cancelled';
-      });
-      const leagueIds = completed.map((m: any) => m.league_id).filter(Boolean);
-      let payouts: any[] = [];
-      if (leagueIds.length > 0) {
-        const { data: txData } = await supabase
-          .from('transactions')
-          .select('league_id, type, amount_cents, status')
-          .eq('user_id', user.id)
-          .in('type', ['contest_settlement', 'winnings', 'refund'])
-          .eq('status', 'completed')
-          .in('league_id', leagueIds);
-        payouts = txData ?? [];
+    if (selected?.type !== 'history' || !userId) return;
+    setLoadingHistory(true);
+
+    Promise.all([
+      supabase.from('league_members')
+        .select('team_name, league_id, archived_at, leagues(id, name, league_type, buy_in, status, is_public, settings)')
+        .eq('user_id', userId)
+        .eq('is_archived', true)
+        .eq('is_deleted', false),
+
+      supabase.from('transactions')
+        .select('league_id, type, amount_cents, status')
+        .eq('user_id', userId)
+        .in('type', ['contest_entry', 'contest_settlement', 'refund', 'winnings'])
+        .eq('status', 'completed'),
+
+      supabase.from('user_bracket_entries')
+        .select('contest_id, entry_name, total_score, rank, submitted_at, bracket_contests(id, name, sport, entry_fee_cents, status)')
+        .eq('user_id', userId)
+        .eq('is_submitted', true),
+    ]).then(([{ data: archived }, { data: txs }, { data: bracketEntries }]) => {
+      const txMap: Record<string, { paid: number; won: number }> = {};
+      for (const tx of txs ?? []) {
+        if (!tx.league_id) continue;
+        if (!txMap[tx.league_id]) txMap[tx.league_id] = { paid: 0, won: 0 };
+        if (tx.type === 'contest_entry') txMap[tx.league_id].paid += Number(tx.amount_cents);
+        if (['contest_settlement', 'winnings', 'refund'].includes(tx.type)) txMap[tx.league_id].won += Number(tx.amount_cents);
       }
-      const leagueEntries: HistoryEntry[] = completed
-        .filter((m: any) => m.leagues !== null)
-        .map((m: any) => {
-          const lg = m.leagues;
-          const entryFee = Math.round((lg?.buy_in ?? 0) * 100);
-          const payoutTx = payouts.find((p: any) => p.league_id === m.league_id);
-          const payoutAmount = payoutTx?.amount_cents ?? 0;
-          const net = payoutAmount - entryFee;
-          let result: HistoryEntry['result'];
-          if (entryFee === 0) result = 'free';
-          else if (lg?.status === 'cancelled') result = 'refunded';
-          else if (payoutAmount > 0) result = 'won';
-          else result = 'lost';
-          return { league: lg, entryFee, payout: payoutAmount, net, result };
-        });
 
-      // Also fetch completed bracket entries
-      const { data: bracketEntries } = await supabase
-        .from('user_bracket_entries')
-        .select('contest_id, rank, total_score, contest:bracket_contests(id, name, entry_fee_cents, entry_count, status, settings)')
-        .eq('user_id', user.id);
+      const historyItems = (archived ?? []).map((m: any) => {
+        const league = m.leagues as any;
+        if (!league) return null;
+        const tx = txMap[league.id] ?? { paid: 0, won: 0 };
+        const net = tx.won - tx.paid;
+        const result = tx.paid === 0 ? 'free' : net > 0 ? 'won' : net < 0 ? 'lost' : 'even';
+        return {
+          id: league.id,
+          name: league.name,
+          type: league.league_type,
+          is_public: league.is_public,
+          buy_in: league.buy_in,
+          status: league.status,
+          team_name: m.team_name,
+          archived_at: m.archived_at,
+          paid: tx.paid,
+          won: tx.won,
+          net,
+          result,
+        };
+      }).filter(Boolean);
 
-      const bracketHistoryEntries: HistoryEntry[] = (bracketEntries ?? [])
-        .filter(e => (e.contest as any)?.status === 'completed')
-        .map(e => {
-          const c = e.contest as any;
-          const feeCents = c?.entry_fee_cents ?? 0;
-          const totalEntries = c?.entry_count ?? 0;
-          const netPool = Math.floor(feeCents * totalEntries * 0.95);
-          const ps: string = c?.settings?.payout_structure ?? 'winner_take_all';
-          const rank = e.rank ?? 999;
-
-          let payoutCents = 0;
-          if (feeCents > 0 && netPool > 0) {
-            if (ps === 'winner_take_all' && rank === 1) {
-              payoutCents = netPool;
-            } else if (ps === 'top2') {
-              if (rank === 1) payoutCents = Math.floor(netPool * 0.70);
-              else if (rank === 2) payoutCents = netPool - Math.floor(netPool * 0.70);
-            } else if (ps === 'top3') {
-              if (rank === 1) payoutCents = Math.floor(netPool * 0.60);
-              else if (rank === 2) payoutCents = Math.floor(netPool * 0.25);
-              else if (rank === 3) payoutCents = netPool - Math.floor(netPool * 0.60) - Math.floor(netPool * 0.25);
-            } else if (ps === 'double_up') {
-              const numWinners = Math.floor(totalEntries / 2);
-              if (rank <= numWinners) payoutCents = Math.floor(feeCents * 1.95);
-            }
-          }
-
-          const net = payoutCents - feeCents;
-          let result: HistoryEntry['result'];
-          if (feeCents === 0) result = 'free';
-          else if (payoutCents > 0) result = 'won';
-          else result = 'lost';
-
+      const completedBrackets = (bracketEntries ?? [])
+        .filter((e: any) => (e.bracket_contests as any)?.status === 'completed')
+        .map((e: any) => {
+          const contest = e.bracket_contests as any;
           return {
-            league: { id: c?.id ?? e.contest_id, name: c?.name ?? 'Bracket Contest', league_type: 'bracket', status: 'completed', is_public: true },
-            entryFee: feeCents,
-            payout: payoutCents,
-            net,
-            result,
+            id: contest?.id,
+            name: contest?.name,
+            type: 'bracket',
+            is_public: true,
+            buy_in: (contest?.entry_fee_cents ?? 0) / 100,
+            status: 'completed',
+            team_name: e.entry_name,
+            archived_at: e.submitted_at,
+            net: 0,
+            result: 'completed',
           };
         });
 
-      setHistory([...leagueEntries, ...bracketHistoryEntries]);
-      setHistoryLoading(false);
-    }
-    fetchHistory();
-  }, [selected?.type, user?.id]);
+      setArchivedLeagues([...historyItems, ...completedBrackets]);
+      setLoadingHistory(false);
+    });
+  }, [selected?.type, userId]);
 
-  const userId = user?.id ?? '';
+  useEffect(() => {
+    if (!userId || leagues.length === 0) return;
+    const completedLeagues = leagues.filter(l => l.status === 'completed' || l.status === 'cancelled');
+    if (completedLeagues.length === 0) return;
+    supabase.from('league_members')
+      .update({ is_archived: true, archived_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .in('league_id', completedLeagues.map(l => l.id))
+      .eq('is_archived', false)
+      .then(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, leagues.length]);
 
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -369,35 +367,59 @@ function MyLeaguesContent() {
               (selected?.type === 'league'  && selected.id        === league.id) ||
               (selected?.type === 'bracket' && selected.data?.id  === league.id);
             return (
-              <button
+              <div
                 key={league.id}
-                onClick={() => selectLeague(league)}
                 style={{
-                  width: '100%', padding: '9px 16px',
-                  background: isActive ? 'rgba(245,166,35,.1)' : 'none',
-                  border: 'none',
+                  display: 'flex', alignItems: 'center', width: '100%',
                   borderLeft: `3px solid ${isActive ? C.gold : 'transparent'}`,
-                  cursor: 'pointer', textAlign: 'left',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  background: isActive ? 'rgba(245,166,35,.1)' : 'none',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-                  {league.buy_in > 0 && (
-                    <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.green, flexShrink: 0 }}>$</span>
-                  )}
-                  <span style={{
-                    fontFamily: 'Oswald,sans-serif', fontSize: 12,
-                    color: league.is_public ? C.gold : C.text,
-                    letterSpacing: 0.5,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
-                  }}>
-                    {league.name}
+                <button
+                  onClick={() => selectLeague(league)}
+                  style={{
+                    flex: 1, padding: '9px 16px',
+                    background: 'none', border: 'none',
+                    cursor: 'pointer', textAlign: 'left',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                    {league.buy_in > 0 && (
+                      <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.green, flexShrink: 0 }}>$</span>
+                    )}
+                    <span style={{
+                      fontFamily: 'Oswald,sans-serif', fontSize: 12,
+                      color: league.is_public ? C.gold : C.text,
+                      letterSpacing: 0.5,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+                    }}>
+                      {league.name}
+                    </span>
+                  </div>
+                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, flexShrink: 0 }}>
+                    {league.status === 'active' ? '🟢' : league.status === 'completed' ? '✓' : '○'}
                   </span>
-                </div>
-                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, flexShrink: 0 }}>
-                  {league.status === 'active' ? '🟢' : league.status === 'completed' ? '✓' : '○'}
-                </span>
-              </button>
+                </button>
+                {!league.isStandalone && (
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm(`Move "${league.name}" to League History?`)) return;
+                      await supabase.from('league_members')
+                        .update({ is_archived: true, archived_at: new Date().toISOString() })
+                        .eq('league_id', league.id)
+                        .eq('user_id', userId);
+                      setLeagues(prev => prev.filter(l => l.id !== league.id));
+                    }}
+                    style={{ padding: '3px 6px', paddingRight: 12, background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 11, flexShrink: 0 }}
+                    title="Move to history"
+                  >
+                    →
+                  </button>
+                )}
+              </div>
             );
           })
         )}
@@ -579,46 +601,97 @@ function MyLeaguesContent() {
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
               📜 League History
             </div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginBottom: 24 }}>
-              All leagues you've participated in
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginBottom: 20 }}>
+              All past leagues and contests
             </div>
 
-            {historyLoading ? (
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, letterSpacing: 1 }}>Loading history…</div>
-            ) : history.length === 0 ? (
+            {/* Category filter tabs */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' as const }}>
+              {([
+                { key: 'all',     label: 'All' },
+                { key: 'season',  label: '🏈 Season' },
+                { key: 'weekly',  label: '⚡ Weekly' },
+                { key: 'bracket', label: '🏆 Bracket' },
+              ] as const).map(f => (
+                <button key={f.key} onClick={() => setHistoryFilter(f.key)}
+                  style={{ padding: '6px 14px', background: historyFilter === f.key ? 'rgba(245,166,35,.1)' : C.surf2, border: `1px solid ${historyFilter === f.key ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: historyFilter === f.key ? C.gold : C.muted, textTransform: 'uppercase' as const }}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {loadingHistory ? (
+              <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>Loading history…</div>
+            ) : archivedLeagues.filter(l => historyFilter === 'all' || l.type === historyFilter).length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 40px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12 }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.muted }}>No completed leagues yet</div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.muted }}>No history yet</div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 4 }}>
+                  Move leagues here using the → button in the sidebar
+                </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {history.map((entry, i) => (
-                  <div key={entry.league?.id ?? i} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: entry.league?.is_public ? C.gold : C.text, marginBottom: 2 }}>
-                        {entry.league?.name}
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                {archivedLeagues
+                  .filter(l => historyFilter === 'all' || l.type === historyFilter)
+                  .map(league => (
+                    <div key={`${league.id}-${league.team_name}`} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: league.is_public ? C.gold : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                            {league.name}
+                          </span>
+                          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, background: C.surf2, padding: '1px 6px', borderRadius: 4, flexShrink: 0 }}>
+                            {league.type}
+                          </span>
+                        </div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                          {league.team_name} · {league.buy_in === 0 ? 'Free' : `$${league.buy_in} entry`}
+                        </div>
                       </div>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
-                        {entry.league?.league_type} · {entry.league?.status}
+
+                      {/* Win/Loss indicator */}
+                      <div style={{ textAlign: 'right' as const, flexShrink: 0 }}>
+                        {league.result === 'free' || league.buy_in === 0 ? (
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>Free</div>
+                        ) : league.result === 'won' ? (
+                          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.green }}>
+                            +${(league.net / 100).toFixed(2)}
+                          </div>
+                        ) : league.result === 'lost' ? (
+                          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.red }}>
+                            -${(league.paid / 100).toFixed(2)}
+                          </div>
+                        ) : (
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>—</div>
+                        )}
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, marginTop: 1 }}>
+                          {league.result === 'won' ? '🏆 Won' : league.result === 'lost' ? '❌ Lost' : league.result === 'free' ? '✓ Free' : ''}
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button
+                          onClick={() => setSelected({ type: 'league', id: league.id, data: league })}
+                          style={{ padding: '6px 10px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.sub }}>
+                          View
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Remove "${league.name}" from your history? This cannot be undone.`)) return;
+                            await supabase.from('league_members')
+                              .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+                              .eq('league_id', league.id)
+                              .eq('user_id', userId);
+                            setArchivedLeagues(prev => prev.filter(l => !(l.id === league.id && l.team_name === league.team_name)));
+                          }}
+                          style={{ padding: '6px 8px', background: 'rgba(240,58,90,.08)', border: '1px solid rgba(240,58,90,.2)', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: C.red }}>
+                          🗑️
+                        </button>
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{
-                        fontFamily: 'Anton,sans-serif', fontSize: 16,
-                        color: entry.result === 'won' ? C.green : entry.result === 'refunded' ? C.gold : entry.result === 'free' ? C.sub : C.red,
-                      }}>
-                        {entry.result === 'won'      ? `+$${(entry.net / 100).toFixed(2)}` :
-                         entry.result === 'lost'     ? `-$${(entry.entryFee / 100).toFixed(2)}` :
-                         entry.result === 'refunded' ? 'Refunded' : 'Free'}
-                      </div>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 2 }}>
-                        {entry.result === 'won'      ? '🏆 Won' :
-                         entry.result === 'lost'     ? '❌ Lost' :
-                         entry.result === 'refunded' ? '↩️ Refunded' : '✓ Free'}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>
