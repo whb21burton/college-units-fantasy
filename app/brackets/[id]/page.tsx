@@ -679,7 +679,7 @@ export default function BracketPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(leagueId
           ? { league_id: leagueId, team_name: `${myEntries[0]?.entry_name ?? 'My Bracket'} (${myEntries.length + 1})` }
-          : { contestId, buyInCents: entryFeeCents }
+          : { contestId, buyInCents: entryFeeCents, entryNumber: myEntries.length + 1 }
         ),
       })
       if (!payRes.ok) {

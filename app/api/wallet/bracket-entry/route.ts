@@ -10,22 +10,22 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { contestId, buyInCents } = await req.json()
+  const { contestId, buyInCents, entryNumber = 1 } = await req.json()
   if (!contestId || !buyInCents) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
   const admin = createAdminClient()
 
-  // Block duplicate payments for this contest
+  // Block duplicate payments per entry number
   const { data: existing } = await admin
     .from('transactions')
     .select('id')
     .eq('user_id', user.id)
     .eq('type', 'contest_entry')
     .eq('status', 'completed')
-    .ilike('description', `%${contestId}%`)
+    .eq('idempotency_key', `bracket_entry_${contestId}_${user.id}_${entryNumber}`)
     .maybeSingle()
 
-  if (existing) return NextResponse.json({ error: 'Already paid for this contest' }, { status: 400 })
+  if (existing) return NextResponse.json({ error: 'Already paid for this entry' }, { status: 400 })
 
   // Get wallet and ledger accounts
   const { data: wallet } = await admin.from('wallets').select('id').eq('user_id', user.id).single()
@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
     type:            'contest_entry',
     status:          'completed',
     amount_cents:    buyInCents,
-    idempotency_key: `bracket_entry_${contestId}_${user.id}`,
-    description:     `Bracket entry: ${contestId}`,
+    idempotency_key: `bracket_entry_${contestId}_${user.id}_${entryNumber}`,
+    description:     `Bracket entry #${entryNumber}: ${contestId}`,
     completed_at:    new Date().toISOString(),
   }).select('id').single()
 
