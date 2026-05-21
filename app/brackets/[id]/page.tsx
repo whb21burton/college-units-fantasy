@@ -857,7 +857,7 @@ export default function BracketPage() {
   )
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.text }}>
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, display: 'flex', flexDirection: 'column' as const, overflowY: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
 
       {/* ── Sticky header ── */}
       <div style={{
@@ -1061,7 +1061,7 @@ export default function BracketPage() {
       {tab === 'bracket' && (
         <>
           {/* Desktop (≥ 900px): 5-column grid, horizontally scrollable */}
-          <div className="bracket-desktop" style={{ overflowX: 'auto', padding: '16px 16px 32px' }}>
+          <div className="bracket-desktop" style={{ overflowX: 'auto', padding: '16px 16px 120px' }}>
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 200px 260px 200px 1fr',
@@ -1101,7 +1101,7 @@ export default function BracketPage() {
                 }}>{label}</button>
               ))}
             </div>
-            <div style={{ padding: 16 }}>
+            <div style={{ padding: '16px 16px 100px' }}>
               {mSection === 'left'        && leftRegionalsCol}
               {mSection === 'super-left'  && leftSRCol}
               {mSection === 'cws'         && cwsCol}
@@ -1116,6 +1116,24 @@ export default function BracketPage() {
         @media (max-width: 900px) {
           .bracket-desktop { display: none !important; }
           .bracket-mobile  { display: block !important; }
+        }
+        @media (max-width: 900px) {
+          .bracket-mobile .bracket-grid {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 6px !important;
+          }
+          .bracket-mobile .team-card {
+            padding: 7px 6px !important;
+            font-size: 9px !important;
+          }
+          .bracket-mobile .bracket-content {
+            -webkit-overflow-scrolling: touch;
+          }
+          .tab-bar {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+          }
         }
       `}</style>
 

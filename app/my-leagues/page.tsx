@@ -471,10 +471,13 @@ function MyLeaguesContent() {
           ...(isMobile ? {
             position: 'fixed' as const,
             top: 0, left: 0, bottom: 0,
+            width: '100vw',
+            maxWidth: '100vw',
             zIndex: 1000,
             transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
             transition: 'transform 0.3s ease',
             boxShadow: sidebarOpen ? '4px 0 20px rgba(0,0,0,0.5)' : 'none',
+            overflowY: 'auto' as const,
           } : {
             position: 'sticky' as const,
             top: 0,
@@ -625,7 +628,12 @@ function MyLeaguesContent() {
         style={{
           flex: 1,
           overflowY: 'auto' as const,
-          ...(isMobile ? { width: '100%' } : {}),
+          ...(isMobile ? {
+            width: '100%',
+            minHeight: '100vh',
+            overflowY: 'auto' as const,
+            paddingBottom: 80,
+          } : {}),
         }}>
 
         {/* Mobile header */}
