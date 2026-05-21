@@ -95,7 +95,34 @@ function MyLeaguesContent() {
   const [walletBalance,      setWalletBalance]      = useState<number | null>(null);
   const [showWallet,         setShowWallet]         = useState(false);
   const [standaloneBrackets, setStandaloneBrackets] = useState<LeagueData[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef    = useRef<HTMLInputElement>(null);
+  const touchStartX     = useRef<number>(0);
+  const touchStartY     = useRef<number>(0);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobile,    setIsMobile]    = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile && selected) setSidebarOpen(false);
+  }, [selected, isMobile]);
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
+    if (deltaX < -60 && deltaY < 80) setSidebarOpen(false);
+    if (deltaX >  60 && deltaY < 80) setSidebarOpen(true);
+  }
 
   function toggleSection(key: string) {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -429,16 +456,30 @@ function MyLeaguesContent() {
 
   return (
     <>
-    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: 'sans-serif' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: 'sans-serif', position: 'relative' as const }}>
 
-      {/* LEFT SIDEBAR — always visible */}
-      <div style={{
-        width: 260, flexShrink: 0,
-        background: C.surf,
-        borderRight: `1px solid ${C.surf3}`,
-        display: 'flex', flexDirection: 'column',
-        height: '100vh', position: 'sticky', top: 0, overflowY: 'auto',
-      }}>
+      {/* LEFT SIDEBAR */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          width: 260, flexShrink: 0,
+          background: C.surf,
+          borderRight: `1px solid ${C.surf3}`,
+          display: 'flex', flexDirection: 'column',
+          height: '100vh', overflowY: 'auto' as const,
+          ...(isMobile ? {
+            position: 'fixed' as const,
+            top: 0, left: 0, bottom: 0,
+            zIndex: 1000,
+            transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+            transition: 'transform 0.3s ease',
+            boxShadow: sidebarOpen ? '4px 0 20px rgba(0,0,0,0.5)' : 'none',
+          } : {
+            position: 'sticky' as const,
+            top: 0,
+          }),
+        }}>
         {/* Editable profile */}
         <div style={{ padding: '16px', borderBottom: `1px solid ${C.surf3}`, flexShrink: 0 }}>
           {!editingProfile ? (
@@ -569,8 +610,40 @@ function MyLeaguesContent() {
         </div>
       </div>
 
+      {/* Mobile backdrop — tap to close sidebar */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{ position: 'fixed' as const, inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.5)' }}
+        />
+      )}
+
       {/* RIGHT PANEL — inline content */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          flex: 1,
+          overflowY: 'auto' as const,
+          ...(isMobile ? { width: '100%' } : {}),
+        }}>
+
+        {/* Mobile header */}
+        {isMobile && (
+          <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.surf3}`, display: 'flex', alignItems: 'center', gap: 12, background: C.surf }}>
+            <button
+              onClick={() => setSidebarOpen(true)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gold, fontSize: 20, padding: 4, lineHeight: 1 }}>
+              ☰
+            </button>
+            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, textTransform: 'uppercase' as const }}>
+              {selected?.type === 'history' ? '📜 League History' :
+               selected?.type === 'league'  ? (selected.data?.name ?? 'League') :
+               selected?.type === 'bracket' ? (selected.data?.name ?? 'Bracket') :
+               'My Leagues'}
+            </span>
+          </div>
+        )}
 
         {/* Welcome screen */}
         {selected === null && (
