@@ -21,7 +21,7 @@ export default function BracketsPage() {
 
   const [pageLocked,      setPageLocked]      = useState<boolean | null>(null)
   const [sportLocks,      setSportLocks]      = useState({ football: false, basketball: false, baseball: false })
-  const [sport,           setSport]           = useState('football')
+  const [sport,           setSport]           = useState<'football' | 'basketball' | 'baseball'>('baseball')
   const [contests,        setContests]        = useState<any[]>([])
   const [loading,         setLoading]         = useState(true)
   const [userId,          setUserId]          = useState<string | null>(null)
@@ -303,7 +303,7 @@ export default function BracketsPage() {
             return (
               <button
                 key={s.key}
-                onClick={() => !sportLocked && setSport(s.key)}
+                onClick={() => !sportLocked && setSport(s.key as 'football' | 'basketball' | 'baseball')}
                 disabled={sportLocked}
                 style={{
                   width: '100%', padding: '12px 14px', marginBottom: 4,
