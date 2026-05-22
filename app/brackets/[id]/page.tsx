@@ -343,6 +343,181 @@ function ProgressBar({ n, total }: { n: number; total: number }) {
   )
 }
 
+/* ── Leaderboard Tab ────────────────────────────────────── */
+function LeaderboardTab({ contestId, userId, contest, isLocked }: {
+  contestId: string; userId: string | null; contest: any; isLocked: boolean
+}) {
+  const supabase = createClientComponentClient()
+  const [entries, setEntries] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const POINTS = { regional: 3, super_regional: 5, cws_semifinal: 10, championship: 15, series_bonus: 5 }
+  const MAX_SCORE = (8 * POINTS.regional) + (4 * POINTS.super_regional) + (2 * POINTS.cws_semifinal) + POINTS.championship + POINTS.series_bonus
+
+  useEffect(() => {
+    supabase
+      .from('user_bracket_entries')
+      .select('id, entry_name, user_id, total_score, correct_picks, submitted_at, is_submitted')
+      .eq('contest_id', contestId)
+      .eq('is_submitted', true)
+      .order('total_score', { ascending: false })
+      .order('submitted_at', { ascending: true })
+      .then(({ data }) => { setEntries(data ?? []); setLoading(false) })
+  }, [contestId])
+
+  const entryFeeCents   = contest?.entry_fee_cents ?? 0
+  const payoutStructure = contest?.settings?.payout_structure ?? 'winner_take_all'
+  const totalEntries    = entries.length
+  const netPool         = Math.floor(entryFeeCents * totalEntries * 0.95)
+
+  function getPayoutForRank(rank: number): number {
+    if (netPool === 0) return 0
+    if (payoutStructure === 'double_up') {
+      return rank <= Math.floor(totalEntries / 2) ? Math.floor(entryFeeCents * 1.95) : 0
+    }
+    if (payoutStructure === 'top3') {
+      if (rank === 1) return Math.floor(netPool * 0.60)
+      if (rank === 2) return Math.floor(netPool * 0.25)
+      if (rank === 3) return Math.floor(netPool * 0.15)
+      return 0
+    }
+    if (payoutStructure === 'top2') {
+      if (rank === 1) return Math.floor(netPool * 0.70)
+      if (rank === 2) return Math.floor(netPool * 0.30)
+      return 0
+    }
+    return rank === 1 ? netPool : 0
+  }
+
+  function isInMoney(rank: number): boolean {
+    if (payoutStructure === 'double_up') return rank <= Math.floor(totalEntries / 2)
+    if (payoutStructure === 'top3') return rank <= 3
+    if (payoutStructure === 'top2') return rank <= 2
+    return rank === 1
+  }
+
+  if (loading) return (
+    <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
+      Loading leaderboard…
+    </div>
+  )
+  if (entries.length === 0) return (
+    <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+      <div style={{ fontSize: 36, marginBottom: 12 }}>🏅</div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.muted }}>
+        No entries yet — be the first to submit!
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ padding: '16px 20px' }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+          🏅 Leaderboard
+        </div>
+        <div style={{ display: 'flex', gap: 16, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+          <span>{entries.length} entries</span>
+          <span>Max score: {MAX_SCORE} pts</span>
+          {netPool > 0 && <span>Prize pool: ${(netPool / 100).toFixed(2)}</span>}
+        </div>
+      </div>
+
+      {/* Column headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 80px 90px', gap: 8, padding: '6px 10px', marginBottom: 4 }}>
+        {['#', 'BRACKET', 'SCORE', 'PRIZE'].map((h, i) => (
+          <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textAlign: i >= 2 ? (i === 3 ? 'right' : 'center') : 'left' }}>{h}</div>
+        ))}
+      </div>
+
+      {entries.map((entry, i) => {
+        const rank    = i + 1
+        const isMe    = entry.user_id === userId
+        const inMoney = isInMoney(rank)
+        const prize   = getPayoutForRank(rank)
+        const score   = entry.total_score ?? 0
+        const pct     = MAX_SCORE > 0 ? Math.round((score / MAX_SCORE) * 100) : 0
+
+        return (
+          <div key={entry.id} style={{
+            display: 'grid', gridTemplateColumns: '32px 1fr 80px 90px', gap: 8,
+            padding: '12px 10px', marginBottom: 4,
+            background: isMe ? 'rgba(245,166,35,.08)' : C.surf,
+            border: `1px solid ${isMe ? C.gold : inMoney ? 'rgba(21,198,120,.2)' : C.surf3}`,
+            borderRadius: 8, alignItems: 'center',
+          }}>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, textAlign: 'center', color: rank === 1 ? C.gold : rank === 2 ? '#aaaaaa' : rank === 3 ? '#cd7f32' : C.muted }}>
+              {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
+            </div>
+
+            <div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: isMe ? C.gold : C.text, marginBottom: 4 }}>
+                {entry.entry_name} {isMe && <span style={{ fontSize: 9, color: C.gold }}>(You)</span>}
+              </div>
+              <div style={{ height: 4, background: C.surf3, borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', width: `${pct}%`,
+                  background: isLocked ? `linear-gradient(90deg, ${C.gold}, ${C.green})` : C.surf3,
+                  borderRadius: 2, transition: 'width 0.5s ease',
+                }} />
+              </div>
+              {isLocked && (
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 2 }}>
+                  {score}/{MAX_SCORE} pts ({pct}%)
+                </div>
+              )}
+            </div>
+
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: isLocked ? C.text : C.muted }}>
+                {isLocked ? score : '—'}
+              </div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted }}>
+                {isLocked ? 'pts' : 'pending'}
+              </div>
+            </div>
+
+            <div style={{ textAlign: 'right' }}>
+              {netPool === 0 ? (
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Free</div>
+              ) : inMoney ? (
+                <>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.green }}>${(prize / 100).toFixed(2)}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.green, letterSpacing: 1 }}>✓ IN MONEY</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.red }}>—</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.red, letterSpacing: 1 }}>✗ OUT</div>
+                </>
+              )}
+            </div>
+          </div>
+        )
+      })}
+
+      <div style={{ marginTop: 20, padding: '12px 14px', background: C.surf2, borderRadius: 8 }}>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>Scoring</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+          {([
+            ['Regional', '3 pts'],
+            ['Super Regional', '5 pts'],
+            ['CWS Semifinal', '10 pts'],
+            ['Champion', '15 pts'],
+            ['Series Result', '+5 bonus'],
+            ['Max Score', `${MAX_SCORE} pts`],
+          ] as [string, string][]).map(([label, val]) => (
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, padding: '2px 0' }}>
+              <span>{label}</span>
+              <span style={{ color: C.gold }}>{val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── Main Page ──────────────────────────────────────────── */
 export default function BracketPage() {
   const params    = useParams()
@@ -364,7 +539,6 @@ export default function BracketPage() {
   const [showWalletModal,   setShowWalletModal]   = useState(false)
   const [showAddEntryModal, setShowAddEntryModal] = useState(false)
   const [originalPicks,  setOriginalPicks]  = useState<BracketPicks | null>(null)
-  const [leaderboard,    setLeaderboard]    = useState<any[]>([])
   const [chatMessages,   setChatMessages]   = useState<any[]>([])
   const [chatInput,      setChatInput]      = useState('')
   // Multi-entry
@@ -481,18 +655,6 @@ export default function BracketPage() {
         }
       })
   }, [userId, contestId])
-
-  // Fetch leaderboard when tab switches to leaderboard
-  useEffect(() => {
-    if (tab !== 'leaderboard') return
-    supabase
-      .from('user_bracket_entries')
-      .select('id, entry_name, user_id, total_score, correct_picks, submitted_at, is_submitted')
-      .eq('contest_id', contestId)
-      .eq('is_submitted', true)
-      .order('submitted_at', { ascending: true })
-      .then(({ data }) => setLeaderboard(data ?? []))
-  }, [tab, contestId])
 
   // Chat: subscribe to bracket_messages
   useEffect(() => {
@@ -1025,31 +1187,12 @@ export default function BracketPage() {
 
       {/* ── Leaderboard ── */}
       {tab === 'leaderboard' && (
-        <div style={{ padding: '20px 24px' }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
-            🏅 Leaderboard — {leaderboard.length} entries
-          </div>
-          {leaderboard.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
-              No entries yet — be the first to submit!
-            </div>
-          ) : leaderboard.map((e, i) => (
-            <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.surf, border: `1px solid ${e.user_id === userId ? C.gold : C.surf3}`, borderRadius: 8, marginBottom: 6 }}>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.muted, width: 28 }}>{i + 1}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: e.user_id === userId ? C.gold : C.text }}>
-                  {e.entry_name} {e.user_id === userId && '(You)'}
-                </div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 2 }}>
-                  Submitted {new Date(e.submitted_at).toLocaleDateString()}
-                </div>
-              </div>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold }}>
-                {e.total_score ?? 0} pts
-              </div>
-            </div>
-          ))}
-        </div>
+        <LeaderboardTab
+          contestId={contestId}
+          userId={userId}
+          contest={contest}
+          isLocked={isLocked}
+        />
       )}
 
       {/* ── Chat ── */}
