@@ -640,6 +640,165 @@ function PublicBracketCreator() {
   )
 }
 
+function ESPNSyncPanel() {
+  const [contests, setContests] = useState<any[]>([])
+  const [contestId, setContestId] = useState('')
+  const [status, setStatus] = useState<any>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    fetch('/api/admin/espn-status?contestId=__probe__')
+      .then(() => {})
+      .catch(() => {})
+    const supabase = createClientComponentClient()
+    supabase.from('bracket_contests')
+      .select('id, name, sport, status')
+      .eq('sport', 'baseball')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setContests(data ?? [])
+        if (data?.[0]) setContestId(data[0].id)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function loadStatus(id?: string) {
+    const cid = id ?? contestId
+    if (!cid) return
+    const res = await fetch(`/api/admin/espn-status?contestId=${cid}`)
+    setStatus(await res.json())
+  }
+
+  async function runSync(fullScan = false) {
+    if (!contestId) return
+    setSyncing(true)
+    setMsg('')
+    const res = await fetch('/api/admin/espn-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contestId, fullScan }),
+    })
+    const data = await res.json()
+    setMsg(data.error ?? `✓ ${data.gamesUpdated} games updated, ${data.advancementsSuggested} advancements suggested`)
+    await loadStatus()
+    setSyncing(false)
+  }
+
+  async function advance(advancementId: string, action: 'confirm' | 'dismiss') {
+    setConfirming(advancementId)
+    await fetch('/api/admin/espn-advance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ advancementId, action }),
+    })
+    await loadStatus()
+    setConfirming(null)
+  }
+
+  const pending = status?.pendingAdvancements ?? []
+  const syncs   = status?.recentSyncs ?? []
+
+  return (
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginTop: 20 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
+        ⚾ ESPN CWS Sync
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' as const }}>
+        <select
+          value={contestId}
+          onChange={e => { setContestId(e.target.value); loadStatus(e.target.value) }}
+          style={{ flex: 1, minWidth: 200, padding: '8px 10px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none' }}>
+          {contests.map(c => (
+            <option key={c.id} value={c.id}>{c.name} ({c.status})</option>
+          ))}
+        </select>
+        <button onClick={() => loadStatus()}
+          style={{ padding: '8px 14px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, cursor: 'pointer', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>
+          Refresh
+        </button>
+        <button onClick={() => runSync(false)} disabled={syncing}
+          style={{ padding: '8px 14px', background: 'rgba(245,166,35,.1)', border: `1px solid ${C.gold}`, borderRadius: 6, cursor: 'pointer', color: C.gold, fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>
+          {syncing ? 'Syncing...' : 'Sync Today'}
+        </button>
+        <button onClick={() => runSync(true)} disabled={syncing}
+          style={{ padding: '8px 14px', background: 'rgba(245,166,35,.05)', border: `1px solid ${C.surf3}`, borderRadius: 6, cursor: 'pointer', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>
+          Full Scan
+        </button>
+      </div>
+
+      {msg && (
+        <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: msg.startsWith('✓') ? C.green : C.red }}>
+          {msg}
+        </div>
+      )}
+
+      {pending.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>
+            Pending Advancements ({pending.length})
+          </div>
+          {pending.map((p: any) => {
+            const team = p.advancing_team
+            return (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.surf2, borderRadius: 8, padding: '10px 12px', marginBottom: 6, gap: 10, flexWrap: 'wrap' as const }}>
+                <div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
+                    {team?.displayName ?? team?.name ?? 'Unknown'} — {p.round_type?.replace(/_/g, ' ')}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                    {p.from_region ?? 'CWS'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => advance(p.id, 'confirm')}
+                    disabled={confirming === p.id}
+                    style={{ padding: '6px 12px', background: 'rgba(21,198,120,.1)', border: `1px solid ${C.green}`, borderRadius: 6, cursor: 'pointer', color: C.green, fontFamily: 'Oswald,sans-serif', fontSize: 10 }}>
+                    {confirming === p.id ? '...' : 'Confirm'}
+                  </button>
+                  <button
+                    onClick={() => advance(p.id, 'dismiss')}
+                    disabled={confirming === p.id}
+                    style={{ padding: '6px 12px', background: 'rgba(240,58,90,.1)', border: `1px solid ${C.red}`, borderRadius: 6, cursor: 'pointer', color: C.red, fontFamily: 'Oswald,sans-serif', fontSize: 10 }}>
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {syncs.length > 0 && (
+        <div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>
+            Recent Syncs
+          </div>
+          {syncs.map((s: any) => (
+            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', background: C.surf2, borderRadius: 6, padding: '8px 12px', marginBottom: 4 }}>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
+                {new Date(s.synced_at).toLocaleString()}
+              </span>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.text }}>
+                {s.games_updated} updated · {s.advancements_suggested} suggested · {s.duration_ms}ms
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!status && (
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, textAlign: 'center', padding: '20px 0' }}>
+          Select a contest and click Refresh to load sync status
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AdminStats() {
   const supabase = createClientComponentClient()
   const [completedStats, setCompletedStats] = useState<any[]>([])
@@ -986,6 +1145,7 @@ export default function PlatformManagerPage() {
         </div>
         <SimulationRunner />
         <AdminStats />
+        <ESPNSyncPanel />
       </div>
     </div>
   )
