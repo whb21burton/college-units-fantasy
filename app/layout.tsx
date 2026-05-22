@@ -15,7 +15,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
@@ -24,8 +27,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <style>{`
           * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+          html { height: -webkit-fill-available; }
           html, body { overscroll-behavior: none; -webkit-overflow-scrolling: touch; }
-          body { padding-bottom: env(safe-area-inset-bottom); }
+          body {
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            overscroll-behavior-y: none;
+            padding-bottom: env(safe-area-inset-bottom);
+          }
         `}</style>
       </head>
       <body style={{ margin: 0, background: '#070a12', color: '#e4edf7', fontFamily: "'Space Grotesk', Inter, sans-serif", display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>

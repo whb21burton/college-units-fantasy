@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 
@@ -764,6 +764,24 @@ function PublicLeaguesContent() {
     return () => clearInterval(id);
   }, []);
 
+  const [isMobile,    setIsMobile]    = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const touchStartX = useRef<number>(0);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  function handleTouchStart(e: React.TouchEvent) { touchStartX.current = e.touches[0].clientX; }
+  function handleTouchEnd(e: React.TouchEvent) {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (dx > 60) setSidebarOpen(true);
+    if (dx < -60) setSidebarOpen(false);
+  }
+
   useEffect(() => {
     supabase.from('platform_settings').select('value').eq('key', 'public_leagues_locked').single()
       .then(({ data }) => setIsLocked(data?.value === 'true'));
@@ -917,11 +935,42 @@ function PublicLeaguesContent() {
         </div>
       </div>
 
+      {/* Mobile header */}
+      {isMobile && (
+        <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, background: C.surf, borderBottom: '1px solid ' + C.surf3 }}>
+          <button onClick={() => setSidebarOpen(true)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gold, fontSize: 20, padding: 0 }}>☰</button>
+          <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
+            Public Leagues
+          </span>
+        </div>
+      )}
+
+      {/* Backdrop */}
+      {isMobile && sidebarOpen && (
+        <div onClick={() => setSidebarOpen(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.5)' }} />
+      )}
+
       {/* 3-col layout */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* ── LEFT SIDEBAR ──────────────────────────────────────────── */}
-        <div style={{ width: 200, flexShrink: 0, background: C.surf, borderRight: '1px solid ' + C.surf3, overflowY: 'auto', padding: '16px 0' }}>
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          style={{
+            width: 200, flexShrink: 0, background: C.surf,
+            borderRight: '1px solid ' + C.surf3, overflowY: 'auto', padding: '16px 0',
+            ...(isMobile ? {
+              position: 'fixed' as const, top: 0, left: 0, bottom: 0,
+              width: '80vw', maxWidth: 300, zIndex: 1000,
+              transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+              transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
+              boxShadow: sidebarOpen ? '4px 0 24px rgba(0,0,0,0.6)' : 'none',
+            } : {}),
+          }}
+        >
 
           {/* League type filter */}
           <div style={{ padding: '0 12px', marginBottom: 16 }}>

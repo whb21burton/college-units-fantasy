@@ -373,6 +373,8 @@ export default function BracketPage() {
   const [maxPerAccount,  setMaxPerAccount]  = useState(1)
   const [entryFeeCents,  setEntryFeeCents]  = useState(0)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const [isMobile,  setIsMobile]  = useState(false)
+  const swipeTouchStart = useRef<number>(0)
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -402,6 +404,31 @@ export default function BracketPage() {
     console.log('[bracket] contestId:', contestId)
     loadData()
   }, [loadData])
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 900)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  const BRACKET_MSECTIONS: MSection[] = ['left', 'super-left', 'cws', 'super-right', 'right']
+
+  function handleBracketTouchStart(e: React.TouchEvent) {
+    swipeTouchStart.current = e.touches[0].clientX
+  }
+
+  function handleBracketTouchEnd(e: React.TouchEvent) {
+    const dx = e.changedTouches[0].clientX - swipeTouchStart.current
+    if (Math.abs(dx) < 50) return
+    const currentIdx = BRACKET_MSECTIONS.indexOf(mSection)
+    if (dx < -50 && currentIdx < BRACKET_MSECTIONS.length - 1) {
+      setMSection(BRACKET_MSECTIONS[currentIdx + 1])
+    }
+    if (dx > 50 && currentIdx > 0) {
+      setMSection(BRACKET_MSECTIONS[currentIdx - 1])
+    }
+  }
 
   // Load all user entries for this contest, check payment, fetch owning league
   useEffect(() => {
@@ -1101,7 +1128,11 @@ export default function BracketPage() {
                 }}>{label}</button>
               ))}
             </div>
-            <div style={{ padding: '16px 16px 100px' }}>
+            <div
+              onTouchStart={handleBracketTouchStart}
+              onTouchEnd={handleBracketTouchEnd}
+              style={{ padding: '16px 16px 100px' }}
+            >
               {mSection === 'left'        && leftRegionalsCol}
               {mSection === 'super-left'  && leftSRCol}
               {mSection === 'cws'         && cwsCol}

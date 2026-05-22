@@ -471,12 +471,12 @@ function MyLeaguesContent() {
           ...(isMobile ? {
             position: 'fixed' as const,
             top: 0, left: 0, bottom: 0,
-            width: '100vw',
-            maxWidth: '100vw',
+            width: '80vw',
+            maxWidth: 320,
             zIndex: 1000,
             transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
-            transition: 'transform 0.3s ease',
-            boxShadow: sidebarOpen ? '4px 0 20px rgba(0,0,0,0.5)' : 'none',
+            transition: 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
+            boxShadow: sidebarOpen ? '4px 0 24px rgba(0,0,0,0.6)' : 'none',
             overflowY: 'auto' as const,
           } : {
             position: 'sticky' as const,
