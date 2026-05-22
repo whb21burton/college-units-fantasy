@@ -642,63 +642,133 @@ function PublicBracketCreator() {
 
 function AdminStats() {
   const supabase = createClientComponentClient()
-  const [stats,   setStats]   = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [completedStats, setCompletedStats] = useState<any[]>([])
+  const [activeContests, setActiveContests] = useState<any[]>([])
+  const [loading,        setLoading]        = useState(true)
+  const [tab,            setTab]            = useState<'active' | 'completed'>('active')
 
   useEffect(() => {
-    supabase
-      .from('admin_contest_stats')
-      .select('*')
-      .order('completed_at', { ascending: false })
-      .then(({ data }) => { setStats(data ?? []); setLoading(false) })
+    Promise.all([
+      supabase.from('admin_contest_stats').select('*').order('completed_at', { ascending: false }),
+      supabase.from('leagues').select('id, name, league_type, buy_in, status, created_at')
+        .gt('buy_in', 0)
+        .not('status', 'in', '("completed","cancelled")')
+        .order('created_at', { ascending: false }),
+      supabase.from('bracket_contests').select('id, name, sport, entry_fee_cents, entry_count, max_entries, status, settings, created_at')
+        .gt('entry_fee_cents', 0)
+        .not('status', 'in', '("completed","cancelled")')
+        .order('created_at', { ascending: false }),
+    ]).then(async ([{ data: stats }, { data: leagues }, { data: brackets }]) => {
+      setCompletedStats(stats ?? [])
+
+      const leagueItems = await Promise.all((leagues ?? []).map(async l => {
+        const { count } = await supabase.from('league_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('league_id', l.id)
+          .eq('is_bot', false)
+        const members = count ?? 0
+        const gross = l.buy_in * members * 100
+        const rake  = Math.floor(gross * 0.05)
+        return { ...l, members, gross, rake, type: 'league' }
+      }))
+
+      const bracketItems = (brackets ?? []).map(b => {
+        const entries = b.entry_count ?? 0
+        const gross   = b.entry_fee_cents * entries
+        const rake    = Math.floor(gross * 0.05)
+        return { ...b, members: entries, gross, rake, buy_in: b.entry_fee_cents / 100, type: 'bracket' }
+      })
+
+      setActiveContests([...leagueItems, ...bracketItems].sort((a, b) => b.gross - a.gross))
+      setLoading(false)
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const totalRake     = stats.reduce((s, r) => s + (r.rake_cents     ?? 0), 0)
-  const totalEntries  = stats.reduce((s, r) => s + (r.total_entries  ?? 0), 0)
-  const totalContests = stats.length
+  const totalActiveGross    = activeContests.reduce((s, c) => s + (c.gross ?? 0), 0)
+  const totalActiveRake     = activeContests.reduce((s, c) => s + (c.rake  ?? 0), 0)
+  const totalCompletedRake  = completedStats.reduce((s, c) => s + (c.rake_cents ?? 0), 0)
 
   return (
     <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginTop: 20 }}>
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.gold, textTransform: 'uppercase', marginBottom: 4 }}>Platform</div>
-      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 20 }}>📊 Contest Stats</div>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
+        📊 Contest Stats
+      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
         {([
-          ['Total Contests', totalContests],
-          ['Total Entries',  totalEntries],
-          ['Total Rake',     `$${(totalRake / 100).toFixed(2)}`],
-        ] as [string, any][]).map(([label, value]) => (
+          ['Active Pool',   `$${(totalActiveGross   / 100).toFixed(2)}`],
+          ['Pending Rake',  `$${(totalActiveRake    / 100).toFixed(2)}`],
+          ['Earned Rake',   `$${(totalCompletedRake / 100).toFixed(2)}`],
+        ] as [string, string][]).map(([label, value]) => (
           <div key={label} style={{ background: C.surf2, borderRadius: 8, padding: '12px 14px', textAlign: 'center' as const }}>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' as const, marginBottom: 6 }}>{label}</div>
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.gold }}>{value}</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' as const, marginBottom: 4 }}>{label}</div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold }}>{value}</div>
           </div>
         ))}
       </div>
 
+      <div style={{ display: 'flex', borderBottom: `1px solid ${C.surf3}`, marginBottom: 16 }}>
+        {([['active', 'Active Contests'], ['completed', 'Completed']] as [string, string][]).map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key as 'active' | 'completed')}
+            style={{ padding: '8px 16px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === key ? C.gold : 'transparent'}`, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: tab === key ? C.gold : C.muted }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>Loading…</div>
-      ) : stats.length === 0 ? (
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, textAlign: 'center' as const, padding: '20px 0' }}>
-          No completed contests yet
-        </div>
-      ) : (
-        <div>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${C.surf3}`, marginBottom: 4 }}>
-            {['Contest', 'Type', 'Entries', 'Net Pool', 'Rake'].map(h => (
-              <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const }}>{h}</div>
+        <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center' as const, padding: 20 }}>Loading…</div>
+      ) : tab === 'active' ? (
+        activeContests.length === 0 ? (
+          <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center' as const, padding: 20 }}>No active paid contests</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
+            {activeContests.map(c => (
+              <div key={c.id} style={{ background: C.surf2, borderRadius: 8, padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 12, alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 2 }}>{c.name}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>
+                    {c.type === 'bracket' ? `⚾ BRACKET · ${c.sport}` : `${c.league_type?.toUpperCase()} LEAGUE`} · {c.status} · ${c.buy_in} entry
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' as const }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text }}>{c.members}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted }}>entries</div>
+                </div>
+                <div style={{ textAlign: 'center' as const }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>${(c.gross / 100).toFixed(2)}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted }}>pool</div>
+                </div>
+                <div style={{ textAlign: 'right' as const }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.green }}>${(c.rake / 100).toFixed(2)}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted }}>rake</div>
+                </div>
+              </div>
             ))}
           </div>
-          {stats.map((row, i) => (
-            <div key={row.id ?? i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 8, padding: '10px 10px', borderBottom: `1px solid ${C.surf3}` }}>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{row.contest_name}</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, textTransform: 'capitalize' as const }}>{row.contest_type}</div>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>{row.total_entries}</div>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${((row.net_pool_cents ?? 0) / 100).toFixed(2)}</div>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.green }}>${((row.rake_cents ?? 0) / 100).toFixed(2)}</div>
-            </div>
-          ))}
-        </div>
+        )
+      ) : (
+        completedStats.length === 0 ? (
+          <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center' as const, padding: 20 }}>No completed contests yet</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
+            {completedStats.map(s => (
+              <div key={s.id} style={{ background: C.surf2, borderRadius: 8, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 2 }}>{s.contest_name}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>
+                    {s.contest_type?.toUpperCase()} · {s.total_entries} entries · {new Date(s.completed_at).toLocaleDateString()}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' as const }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold }}>${(s.rake_cents / 100).toFixed(2)}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>rake earned</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       )}
     </div>
   )
