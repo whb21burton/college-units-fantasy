@@ -855,8 +855,26 @@ export default function BracketPage() {
           <li>Pick 1 team to win each CWS Semifinal (2 total)</li>
           <li>Pick the National Champion + series result</li>
         </ol>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 8, lineHeight: 1.6 }}>
-          Scoring: Regional = 10 pts · Super Regional = 20 pts · CWS Semi = 20 pts · Champion = 40 pts · Exact series +5 pts
+        <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '14px 16px', marginTop: 12 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
+            📊 Scoring
+          </div>
+          {([
+            ['Regional Winner',        '3 pts each'],
+            ['Super Regional Winner',  '5 pts each'],
+            ['CWS Semifinal Winner',   '10 pts each'],
+            ['National Champion',      '15 pts'],
+            ['Correct Series Result',  '+5 bonus pts'],
+          ] as [string, string][]).map(([label, pts]) => (
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 6 }}>
+              <span>{label}</span>
+              <span style={{ color: C.gold, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>{pts}</span>
+            </div>
+          ))}
+          <div style={{ borderTop: `1px solid ${C.surf3}`, marginTop: 8, paddingTop: 8, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
+            Max score: {(8 * 3) + (4 * 5) + (2 * 10) + 15 + 5} pts
+            <span style={{ marginLeft: 4 }}>(8 reg + 4 super + 2 semis + champion + series)</span>
+          </div>
         </div>
       </div>
     </div>

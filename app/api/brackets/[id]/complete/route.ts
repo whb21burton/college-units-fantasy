@@ -5,6 +5,14 @@ import { cookies } from 'next/headers'
 
 const ADMIN_ID = '603b48b1-3e85-4c72-bedb-c5166bbe9c6e'
 
+const POINTS = {
+  regional:       3,
+  super_regional: 5,
+  cws_semifinal:  10,
+  championship:   15,
+  series_bonus:   5,
+}
+
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -25,15 +33,68 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!contest) return NextResponse.json({ error: 'Contest not found' }, { status: 404 })
   if (contest.status === 'completed') return NextResponse.json({ error: 'Already completed' }, { status: 400 })
 
-  // Get all submitted entries ordered by score desc
+  // Get all submitted entries with bracket_data for scoring
   const { data: rawEntries } = await admin
     .from('user_bracket_entries')
-    .select('id, user_id, total_score, entry_name')
+    .select('id, user_id, total_score, entry_name, bracket_data')
     .eq('contest_id', contestId)
     .eq('is_submitted', true)
-    .order('total_score', { ascending: false })
 
-  const entries = rawEntries ?? []
+  // Fetch matchups to score picks (may not exist yet — scoring gracefully falls back to stored total_score)
+  const { data: matchups } = await admin
+    .from('tournament_matchups')
+    .select('*')
+    .eq('contest_id', contestId)
+
+  // Score each entry using bracket_data picks vs matchup results
+  const scored = (rawEntries ?? []).map(entry => {
+    const picks = entry.bracket_data ?? {}
+    let score = 0
+
+    if (matchups && matchups.length > 0) {
+      for (const matchup of matchups) {
+        if (!matchup.winner) continue
+
+        if (['regional_winners', 'regional_losers', 'regional_final'].includes(matchup.round)) {
+          const regionPick = picks.regionals?.[matchup.region]
+          if (regionPick?.id === matchup.winner?.id) score += POINTS.regional
+        }
+
+        if (matchup.round === 'super_regional') {
+          const superPick = picks.superRegionals?.[matchup.matchup_index]
+          if (superPick?.id === matchup.winner?.id) score += POINTS.super_regional
+        }
+
+        if (matchup.round === 'championship' && matchup.matchup_index < 2) {
+          const semiPick = picks.semifinals?.[matchup.matchup_index]
+          if (semiPick?.id === matchup.winner?.id) score += POINTS.cws_semifinal
+        }
+
+        if (matchup.round === 'championship' && matchup.matchup_index === 2) {
+          if (picks.champion?.id === matchup.winner?.id) {
+            score += POINTS.championship
+            if (picks.seriesResult && picks.seriesResult === matchup.series_result) {
+              score += POINTS.series_bonus
+            }
+          }
+        }
+      }
+    } else {
+      // No matchup data yet — fall back to stored total_score
+      score = entry.total_score ?? 0
+    }
+
+    return { ...entry, computedScore: score }
+  })
+
+  // Persist computed scores, then rank
+  for (const entry of scored) {
+    await admin.from('user_bracket_entries')
+      .update({ total_score: entry.computedScore, correct_picks: entry.computedScore })
+      .eq('id', entry.id)
+  }
+
+  const entries = scored.sort((a, b) => b.computedScore - a.computedScore)
   const totalEntries = entries.length
   const feeCents = contest.entry_fee_cents ?? 0
   const totalPoolCents = feeCents * totalEntries
@@ -43,7 +104,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   // Assign ranks using standard competition ranking (ties get same rank)
   const rankedEntries = entries.map(entry => {
-    const higherCount = entries.filter(e => (e.total_score ?? 0) > (entry.total_score ?? 0)).length
+    const higherCount = entries.filter(e => e.computedScore > entry.computedScore).length
     return { ...entry, rank: higherCount + 1 }
   })
 

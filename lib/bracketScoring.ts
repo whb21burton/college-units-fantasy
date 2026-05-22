@@ -1,22 +1,20 @@
-import type { UserBracketPick, TournamentMatchup } from './bracketTypes'
+export const BRACKET_SCORING = {
+  regional:       3,   // 3 pts per correct regional winner
+  super_regional: 5,   // 5 pts per correct super regional winner
+  cws_semifinal:  10,  // 10 pts per correct CWS semifinal winner
+  championship:   15,  // 15 pts for national champion
+  series_bonus:   5,   // 5 bonus pts for correct series result (only if winner correct)
+}
 
-export function calculateBracketScore(
-  picks: UserBracketPick[],
-  matchups: TournamentMatchup[],
-): number {
-  let score = 0
-  for (const pick of picks) {
-    const matchup = matchups.find(m => m.id === pick.matchup_id)
-    if (!matchup?.winner) continue
-    if (matchup.winner.id === pick.picked_team.id) score += 1
-  }
-  return score
+export function calculateBracketScore(picks: any): number {
+  // Actual scoring happens server-side in complete/route.ts
+  return 0
 }
 
 export async function recalculateAllScores(contestId: string, admin: any): Promise<void> {
   const { data: entries } = await admin
     .from('user_bracket_entries')
-    .select('id, user_id')
+    .select('id, bracket_data')
     .eq('contest_id', contestId)
 
   if (!entries?.length) return
@@ -27,24 +25,39 @@ export async function recalculateAllScores(contestId: string, admin: any): Promi
     .eq('contest_id', contestId)
 
   for (const entry of entries) {
-    const { data: picks } = await admin
-      .from('user_bracket_picks')
-      .select('*')
-      .eq('entry_id', entry.id)
+    const picks = entry.bracket_data ?? {}
+    let score = 0
 
-    if (!picks) continue
-    const score = calculateBracketScore(picks, matchups ?? [])
+    for (const matchup of matchups ?? []) {
+      if (!matchup.winner) continue
 
-    for (const pick of picks) {
-      const matchup = (matchups ?? []).find((m: any) => m.id === pick.matchup_id)
-      if (!matchup?.winner) continue
-      const correct = matchup.winner.id === pick.picked_team.id
-      await admin.from('user_bracket_picks')
-        .update({ is_correct: correct, points_earned: correct ? 1 : 0 })
-        .eq('id', pick.id)
+      if (['regional_winners', 'regional_losers', 'regional_final'].includes(matchup.round)) {
+        const pick = picks.regionals?.[matchup.region]
+        if (pick?.id === matchup.winner?.id) score += BRACKET_SCORING.regional
+      }
+
+      if (matchup.round === 'super_regional') {
+        const pick = picks.superRegionals?.[matchup.matchup_index]
+        if (pick?.id === matchup.winner?.id) score += BRACKET_SCORING.super_regional
+      }
+
+      if (matchup.round === 'championship' && matchup.matchup_index < 2) {
+        const pick = picks.semifinals?.[matchup.matchup_index]
+        if (pick?.id === matchup.winner?.id) score += BRACKET_SCORING.cws_semifinal
+      }
+
+      if (matchup.round === 'championship' && matchup.matchup_index === 2) {
+        if (picks.champion?.id === matchup.winner?.id) {
+          score += BRACKET_SCORING.championship
+          if (picks.seriesResult && picks.seriesResult === matchup.series_result) {
+            score += BRACKET_SCORING.series_bonus
+          }
+        }
+      }
     }
 
-    await admin.from('user_bracket_entries')
+    await admin
+      .from('user_bracket_entries')
       .update({ total_score: score, correct_picks: score })
       .eq('id', entry.id)
   }
