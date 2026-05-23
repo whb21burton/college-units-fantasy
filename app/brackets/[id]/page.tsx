@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Team } from '@/lib/bracketTypes'
 
@@ -68,7 +68,7 @@ function countPicks(p: BracketPicks): number {
 
 const TOTAL = 16 // 8 reg + 4 SR + 2 semi + 1 champ + 1 series
 
-type Tab = 'bracket' | 'leaderboard' | 'chat'
+type Tab = 'bracket' | 'leaderboard' | 'chat' | 'invite'
 type MSection = 'left' | 'super-left' | 'cws' | 'super-right' | 'right'
 
 /* ── Sub-components ────────────────────────────────────── */
@@ -520,9 +520,11 @@ function LeaderboardTab({ contestId, userId, contest, isLocked }: {
 
 /* ── Main Page ──────────────────────────────────────────── */
 export default function BracketPage() {
-  const params    = useParams()
-  const contestId = params.id as string
-  const supabase  = createClientComponentClient()
+  const params        = useParams()
+  const searchParams  = useSearchParams()
+  const contestId     = params.id as string
+  const isEmbed       = searchParams.get('embed') === '1'
+  const supabase      = createClientComponentClient()
 
   const [userId,         setUserId]         = useState<string | null>(null)
   const [contest,        setContest]        = useState<any>(null)
@@ -535,6 +537,8 @@ export default function BracketPage() {
   const [isLocked,       setIsLocked]       = useState(false)
   const [leagueId,       setLeagueId]       = useState<string | null>(null)
   const [isPublicLeague, setIsPublicLeague] = useState(false)
+  const [inviteCode,     setInviteCode]     = useState<string | null>(null)
+  const [isCommissioner, setIsCommissioner] = useState(false)
   const [walletBalance,  setWalletBalance]  = useState<number>(0)
   const [showWalletModal,   setShowWalletModal]   = useState(false)
   const [showAddEntryModal, setShowAddEntryModal] = useState(false)
@@ -637,7 +641,7 @@ export default function BracketPage() {
 
     supabase
       .from('leagues')
-      .select('id, buy_in, is_public')
+      .select('id, buy_in, is_public, invite_code, commissioner_id')
       .eq('league_type', 'bracket')
       .contains('settings', { bracket_contest_id: contestId })
       .single()
@@ -645,6 +649,8 @@ export default function BracketPage() {
         if (data) {
           setLeagueId(data.id)
           setIsPublicLeague(data.is_public ?? false)
+          setInviteCode(data.invite_code ?? null)
+          setIsCommissioner(data.commissioner_id === userId)
           supabase
             .from('league_members')
             .select('id')
@@ -1168,6 +1174,12 @@ export default function BracketPage() {
             style={{ padding: '9px 16px', flexShrink: 0, background: 'none', border: 'none', borderBottom: `2px solid ${tab === 'chat' ? C.gold : 'transparent'}`, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: tab === 'chat' ? C.gold : C.muted }}>
             💬 Chat
           </button>
+          {isEmbed && isCommissioner && inviteCode && (
+            <button onClick={() => setTab('invite')}
+              style={{ padding: '9px 16px', flexShrink: 0, background: 'none', border: 'none', borderBottom: `2px solid ${tab === 'invite' ? C.gold : 'transparent'}`, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: tab === 'invite' ? C.gold : C.muted, textTransform: 'uppercase' as const }}>
+              🔑 Invite
+            </button>
+          )}
         </div>
       ) : (
         /* Single entry: original bracket/leaderboard/chat tabs */
@@ -1182,6 +1194,16 @@ export default function BracketPage() {
               cursor: 'pointer', textTransform: 'uppercase', transition: 'all .15s',
             }}>{t}</button>
           ))}
+          {isEmbed && isCommissioner && inviteCode && (
+            <button onClick={() => setTab('invite')} style={{
+              padding: '7px 18px',
+              background: tab === 'invite' ? C.gold : 'transparent',
+              color: tab === 'invite' ? C.bg : C.sub,
+              border: 'none', borderRadius: 5,
+              fontFamily: 'Oswald,sans-serif', fontWeight: 700, fontSize: 11, letterSpacing: 1.5,
+              cursor: 'pointer', textTransform: 'uppercase', transition: 'all .15s',
+            }}>🔑 Invite</button>
+          )}
         </div>
       )}
 
@@ -1241,6 +1263,56 @@ export default function BracketPage() {
               disabled={!chatInput.trim()}
               style={{ padding: '9px 13px', background: chatInput.trim() ? C.gold : C.surf3, border: 'none', borderRadius: 8, cursor: chatInput.trim() ? 'pointer' : 'default', fontFamily: 'Anton,sans-serif', fontSize: 14, color: chatInput.trim() ? C.bg : C.muted }}
             >↑</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Invite ── */}
+      {tab === 'invite' && (
+        <div style={{ padding: '32px 24px', maxWidth: 500 }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+            🔑 Invite Code
+          </div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginBottom: 24 }}>
+            Share this code or link so others can join your private bracket league.
+          </div>
+          <div style={{ background: C.surf, border: `2px solid ${C.gold}`, borderRadius: 12, padding: '24px', textAlign: 'center' as const, marginBottom: 20 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 3, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>
+              Invite Code
+            </div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 48, letterSpacing: 12, color: C.gold, marginBottom: 8 }}>
+              {inviteCode}
+            </div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+              Others enter this at collegeunitsfantasy.com/join
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
+            <button
+              onClick={() => { navigator.clipboard.writeText(inviteCode!); alert('Code copied!') }}
+              style={{ width: '100%', padding: '12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 2, color: C.sub, textTransform: 'uppercase' as const }}>
+              📋 Copy Code
+            </button>
+            <button
+              onClick={() => { const url = `${window.location.origin}/join/${inviteCode}`; navigator.clipboard.writeText(url); alert('Link copied!') }}
+              style={{ width: '100%', padding: '12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 2, color: C.sub, textTransform: 'uppercase' as const }}>
+              🔗 Copy Invite Link
+            </button>
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/join/${inviteCode}`
+                if (navigator.share) {
+                  navigator.share({ title: 'Join my bracket!', text: `Use code ${inviteCode} to join my bracket on College Units Fantasy!`, url })
+                } else {
+                  navigator.clipboard.writeText(url); alert('Link copied!')
+                }
+              }}
+              style={{ width: '100%', padding: '12px', background: 'rgba(245,166,35,.1)', border: `1px solid ${C.gold}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.gold, textTransform: 'uppercase' as const }}>
+              📤 Share Invite
+            </button>
+          </div>
+          <div style={{ marginTop: 16, padding: '10px 14px', background: C.surf2, borderRadius: 8, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, wordBreak: 'break-all' as const }}>
+            {typeof window !== 'undefined' ? `${window.location.origin}/join/${inviteCode}` : ''}
           </div>
         </div>
       )}
