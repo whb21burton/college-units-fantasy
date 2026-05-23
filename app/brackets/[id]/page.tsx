@@ -70,20 +70,33 @@ const TOTAL = 16 // 8 reg + 4 SR + 2 semi + 1 champ + 1 series
 
 type Tab = 'bracket' | 'leaderboard' | 'chat' | 'invite'
 type MSection = 'left' | 'super-left' | 'cws' | 'super-right' | 'right'
+type PickResult = 'correct' | 'incorrect' | 'pending'
+
+function getPickResult(pickedId: string | undefined, winnerId: string | undefined): PickResult {
+  if (!pickedId || !winnerId) return 'pending'
+  return pickedId === winnerId ? 'correct' : 'incorrect'
+}
 
 /* ── Sub-components ────────────────────────────────────── */
 
-function TeamCard({ team, isPicked, onPick, isLocked }: {
-  team: Team; isPicked: boolean; onPick: () => void; isLocked: boolean
+function TeamCard({ team, isPicked, onPick, isLocked, result }: {
+  team: Team; isPicked: boolean; onPick: () => void; isLocked: boolean; result?: PickResult
 }) {
   const sc = seedColor(team.seed)
+  const borderColor = isPicked
+    ? (result === 'correct' ? C.green : result === 'incorrect' ? C.red : sc)
+    : C.surf3
+  const bg = isPicked
+    ? (result === 'correct' ? 'rgba(21,198,120,.12)' : result === 'incorrect' ? 'rgba(240,58,90,.12)' : sc + '18')
+    : C.surf2
+  const labelColor = result === 'correct' ? C.green : result === 'incorrect' ? C.red : sc
   return (
     <div
       onClick={isLocked ? undefined : onPick}
       style={{
         padding: '9px 8px',
-        background: isPicked ? sc + '18' : C.surf2,
-        border: `1px solid ${isPicked ? sc : C.surf3}`,
+        background: bg,
+        border: `1px solid ${borderColor}`,
         borderRadius: 6, cursor: isLocked ? 'default' : 'pointer',
         transition: 'all .15s', textAlign: 'center',
       }}
@@ -98,18 +111,22 @@ function TeamCard({ team, isPicked, onPick, isLocked }: {
         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, marginTop: 2 }}>{team.record}</div>
       )}
       {isPicked && (
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 7, color: sc, marginTop: 3, letterSpacing: 1 }}>ADVANCES ›</div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 7, color: labelColor, marginTop: 3, letterSpacing: 1 }}>
+          {result === 'correct' ? '✓ CORRECT' : result === 'incorrect' ? '✗ WRONG' : 'ADVANCES ›'}
+        </div>
       )}
     </div>
   )
 }
 
-function RegionalPod({ regionKey, picks, onPick, isLocked, arrow }: {
+function RegionalPod({ regionKey, picks, onPick, isLocked, arrow, matchupResults, hasSubmitted }: {
   regionKey: string; picks: BracketPicks; onPick: (k: string, t: Team) => void; isLocked: boolean; arrow?: 'right' | 'left'
+  matchupResults?: Record<string, any>; hasSubmitted?: boolean
 }) {
   const r = REGIONS[regionKey]
   if (!r) return null
   const pickedId = picks.regionals[regionKey]?.id
+  const resultWinner = matchupResults?.[`regional_${regionKey}`]?.winner
   return (
     <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '10px 10px 12px' }}>
       <div style={{
@@ -122,24 +139,36 @@ function RegionalPod({ regionKey, picks, onPick, isLocked, arrow }: {
         {arrow === 'left'  && <span style={{ color: C.surf3, fontSize: 12 }}>‹</span>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-        {r.teams.map(t => (
-          <TeamCard key={t.id} team={t} isPicked={pickedId === t.id} onPick={() => onPick(regionKey, t)} isLocked={isLocked} />
-        ))}
+        {r.teams.map(t => {
+          const result: PickResult | undefined = (hasSubmitted && resultWinner && pickedId === t.id)
+            ? getPickResult(t.id, resultWinner)
+            : undefined
+          return (
+            <TeamCard key={t.id} team={t} isPicked={pickedId === t.id} onPick={() => onPick(regionKey, t)} isLocked={isLocked} result={result} />
+          )
+        })}
       </div>
     </div>
   )
 }
 
-function SRSlot({ team, label, isPicked, onPick, isLocked }: {
-  team: Team | undefined; label: string; isPicked: boolean; onPick: () => void; isLocked: boolean
+function SRSlot({ team, label, isPicked, onPick, isLocked, result }: {
+  team: Team | undefined; label: string; isPicked: boolean; onPick: () => void; isLocked: boolean; result?: PickResult
 }) {
+  const borderColor = isPicked
+    ? (result === 'correct' ? C.green : result === 'incorrect' ? C.red : C.gold)
+    : C.surf3
+  const bg = isPicked
+    ? (result === 'correct' ? 'rgba(21,198,120,.1)' : result === 'incorrect' ? 'rgba(240,58,90,.1)' : 'rgba(245,166,35,.1)')
+    : C.surf
+  const labelColor = result === 'correct' ? C.green : result === 'incorrect' ? C.red : C.gold
   return (
     <div
       onClick={team && !isLocked ? onPick : undefined}
       style={{
         padding: '9px 12px',
-        background: isPicked ? 'rgba(245,166,35,.1)' : C.surf,
-        border: `1px solid ${isPicked ? C.gold : C.surf3}`,
+        background: bg,
+        border: `1px solid ${borderColor}`,
         borderRadius: 6, cursor: team && !isLocked ? 'pointer' : 'default',
         minHeight: 44, display: 'flex', alignItems: 'center', gap: 8,
         transition: 'all .15s',
@@ -155,10 +184,14 @@ function SRSlot({ team, label, isPicked, onPick, isLocked }: {
             fontFamily: 'Anton,sans-serif', fontSize: 10, color: seedColor(team.seed),
           }}>{team.seed}</div>
           <div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isPicked ? C.gold : C.text }}>{team.name}</div>
-            {isPicked && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 7, color: C.gold, letterSpacing: 1 }}>ADVANCES</div>}
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isPicked ? labelColor : C.text }}>{team.name}</div>
+            {isPicked && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 7, color: labelColor, letterSpacing: 1 }}>
+              {result === 'correct' ? '✓ CORRECT' : result === 'incorrect' ? '✗ WRONG' : 'ADVANCES'}
+            </div>}
           </div>
-          {isPicked && <span style={{ marginLeft: 'auto', color: C.gold, fontSize: 13 }}>✓</span>}
+          {isPicked && <span style={{ marginLeft: 'auto', color: labelColor, fontSize: 13 }}>
+            {result === 'correct' ? '✓' : result === 'incorrect' ? '✗' : '✓'}
+          </span>}
         </>
       ) : (
         <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>
@@ -169,14 +202,22 @@ function SRSlot({ team, label, isPicked, onPick, isLocked }: {
   )
 }
 
-function SRBox({ sr, picks, onPick, isLocked }: {
+function SRBox({ sr, picks, onPick, isLocked, matchupResults, hasSubmitted }: {
   sr: (typeof LEFT_SR)[0]; picks: BracketPicks; onPick: (idx: number, t: Team) => void; isLocked: boolean
+  matchupResults?: Record<string, any>; hasSubmitted?: boolean
 }) {
   const topWinner = picks.regionals[sr.top]
   const botWinner = picks.regionals[sr.bot]
   const srWinner  = picks.superRegionals[sr.idx]
   const topDisplay = REGIONS[sr.top]?.display ?? sr.top
   const botDisplay = REGIONS[sr.bot]?.display ?? sr.bot
+  const srResultWinner = matchupResults?.[`super_${sr.idx}`]?.winner
+  const topIsPicked = !!(srWinner && topWinner && srWinner.id === topWinner.id)
+  const botIsPicked = !!(srWinner && botWinner && srWinner.id === botWinner.id)
+  const topResult: PickResult | undefined = (hasSubmitted && srResultWinner && topIsPicked && topWinner)
+    ? getPickResult(topWinner.id, srResultWinner) : undefined
+  const botResult: PickResult | undefined = (hasSubmitted && srResultWinner && botIsPicked && botWinner)
+    ? getPickResult(botWinner.id, srResultWinner) : undefined
 
   return (
     <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, overflow: 'hidden' }}>
@@ -194,25 +235,28 @@ function SRBox({ sr, picks, onPick, isLocked }: {
         <SRSlot
           team={topWinner}
           label={topDisplay}
-          isPicked={!!(srWinner && topWinner && srWinner.id === topWinner.id)}
+          isPicked={topIsPicked}
           onPick={() => topWinner && onPick(sr.idx, topWinner)}
           isLocked={isLocked}
+          result={topResult}
         />
         <div style={{ textAlign: 'center', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, padding: '4px 0' }}>VS</div>
         <SRSlot
           team={botWinner}
           label={botDisplay}
-          isPicked={!!(srWinner && botWinner && srWinner.id === botWinner.id)}
+          isPicked={botIsPicked}
           onPick={() => botWinner && onPick(sr.idx, botWinner)}
           isLocked={isLocked}
+          result={botResult}
         />
       </div>
     </div>
   )
 }
 
-function CWSMatchupBox({ label, t1, t2, picked, onPick, isLocked }: {
+function CWSMatchupBox({ label, t1, t2, picked, onPick, isLocked, resultWinner, hasSubmitted }: {
   label: string; t1: Team | null; t2: Team | null; picked: Team | null; onPick: (t: Team) => void; isLocked: boolean
+  resultWinner?: string; hasSubmitted?: boolean
 }) {
   return (
     <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, overflow: 'hidden' }}>
@@ -221,13 +265,23 @@ function CWSMatchupBox({ label, t1, t2, picked, onPick, isLocked }: {
       </div>
       {([t1, t2] as (Team | null)[]).map((team, i) => {
         const sel = picked?.id === team?.id
+        const result: PickResult | undefined = (hasSubmitted && resultWinner && sel && team)
+          ? getPickResult(team.id, resultWinner) : undefined
+        const rowBg = sel
+          ? (result === 'correct' ? 'rgba(21,198,120,.08)' : result === 'incorrect' ? 'rgba(240,58,90,.08)' : 'rgba(245,166,35,.08)')
+          : 'transparent'
+        const nameColor = sel
+          ? (result === 'correct' ? C.green : result === 'incorrect' ? C.red : C.gold)
+          : C.text
+        const checkIcon = result === 'correct' ? '✓' : result === 'incorrect' ? '✗' : '✓'
+        const checkColor = result === 'correct' ? C.green : result === 'incorrect' ? C.red : C.gold
         return (
           <div key={i}
             onClick={team && !isLocked ? () => onPick(team) : undefined}
             style={{
               padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 8,
               borderBottom: i === 0 ? `1px solid ${C.surf3}` : 'none',
-              background: sel ? 'rgba(245,166,35,.08)' : 'transparent',
+              background: rowBg,
               cursor: team && !isLocked ? 'pointer' : 'default',
               transition: 'background .12s',
             }}
@@ -235,8 +289,8 @@ function CWSMatchupBox({ label, t1, t2, picked, onPick, isLocked }: {
             {team ? (
               <>
                 <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.muted, width: 14 }}>{team.seed}</span>
-                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: sel ? C.gold : C.text, flex: 1 }}>{team.name}</span>
-                {sel && <span style={{ color: C.gold, fontSize: 12 }}>✓</span>}
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: nameColor, flex: 1 }}>{team.name}</span>
+                {sel && <span style={{ color: checkColor, fontSize: 12 }}>{checkIcon}</span>}
               </>
             ) : (
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>TBD</span>
@@ -248,16 +302,25 @@ function CWSMatchupBox({ label, t1, t2, picked, onPick, isLocked }: {
   )
 }
 
-function ChampSlot({ team, isPicked, onPick, isLocked }: {
-  team: Team | null; isPicked: boolean; onPick: () => void; isLocked: boolean
+function ChampSlot({ team, isPicked, onPick, isLocked, result }: {
+  team: Team | null; isPicked: boolean; onPick: () => void; isLocked: boolean; result?: PickResult
 }) {
+  const borderColor = isPicked
+    ? (result === 'correct' ? C.green : result === 'incorrect' ? C.red : C.gold)
+    : C.surf3
+  const bg = isPicked
+    ? (result === 'correct' ? 'rgba(21,198,120,.12)' : result === 'incorrect' ? 'rgba(240,58,90,.12)' : 'rgba(245,166,35,.12)')
+    : C.surf
+  const nameColor = isPicked
+    ? (result === 'correct' ? C.green : result === 'incorrect' ? C.red : C.gold)
+    : C.text
   return (
     <div
       onClick={team && !isLocked ? onPick : undefined}
       style={{
         padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10,
-        background: isPicked ? 'rgba(245,166,35,.12)' : C.surf,
-        border: `1px solid ${isPicked ? C.gold : C.surf3}`,
+        background: bg,
+        border: `1px solid ${borderColor}`,
         borderRadius: 6, cursor: team && !isLocked ? 'pointer' : 'default',
         transition: 'all .15s', minHeight: 48,
       }}
@@ -271,10 +334,14 @@ function ChampSlot({ team, isPicked, onPick, isLocked }: {
             fontFamily: 'Anton,sans-serif', fontSize: 12, color: seedColor(team.seed),
           }}>{team.seed}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: isPicked ? C.gold : C.text }}>{team.name}</div>
-            {isPicked && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.gold, letterSpacing: 1 }}>NATIONAL CHAMPION</div>}
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: nameColor }}>{team.name}</div>
+            {isPicked && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: nameColor, letterSpacing: 1 }}>
+              {result === 'correct' ? '✓ CORRECT CHAMPION' : result === 'incorrect' ? '✗ WRONG CHAMPION' : 'NATIONAL CHAMPION'}
+            </div>}
           </div>
-          {isPicked && <span style={{ color: C.gold, fontSize: 18 }}>★</span>}
+          {isPicked && <span style={{ color: nameColor, fontSize: 18 }}>
+            {result === 'correct' ? '✓' : result === 'incorrect' ? '✗' : '★'}
+          </span>}
         </>
       ) : (
         <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>TBD</span>
@@ -539,6 +606,7 @@ export default function BracketPage() {
   const [isPublicLeague, setIsPublicLeague] = useState(false)
   const [inviteCode,     setInviteCode]     = useState<string | null>(null)
   const [isCommissioner, setIsCommissioner] = useState(false)
+  const [matchupResults, setMatchupResults] = useState<Record<string, any>>({})
   const [walletBalance,  setWalletBalance]  = useState<number>(0)
   const [showWalletModal,   setShowWalletModal]   = useState(false)
   const [showAddEntryModal, setShowAddEntryModal] = useState(false)
@@ -624,7 +692,7 @@ export default function BracketPage() {
         const first = list[0]
         if (first?.bracket_data) {
           setPicks(first.bracket_data)
-          setOriginalPicks(first.bracket_data)
+          setOriginalPicks(first.is_submitted ? first.bracket_data : null)
         }
         if (first) setActiveEntryNum(first.entry_number ?? 1)
       })
@@ -698,6 +766,34 @@ export default function BracketPage() {
 
     checkPaid()
   }, [userId, contestId, leagueId])
+
+  // Fetch matchup results for highlights after lock
+  useEffect(() => {
+    if (!isLocked || !contestId) return
+    supabase
+      .from('tournament_matchups')
+      .select('round_type, regional_name, matchup_index, winner, championship_series_result')
+      .eq('contest_id', contestId)
+      .then(({ data }) => {
+        if (!data) return
+        const results: Record<string, any> = {}
+        for (const m of data) {
+          if (!m.winner) continue
+          if (m.round_type === 'regional') {
+            const key = `regional_${(m.regional_name ?? '').toLowerCase().replace(/[\s-]+/g, '_')}`
+            results[key] = { winner: m.winner }
+          } else if (m.round_type === 'super_regional') {
+            results[`super_${m.matchup_index}`] = { winner: m.winner }
+          } else if (m.round_type === 'cws_semifinal') {
+            results[`semi_${m.matchup_index}`] = { winner: m.winner }
+          } else if (m.round_type === 'championship') {
+            results['champion'] = { winner: m.winner }
+            if (m.championship_series_result) results['series_result'] = { result: m.championship_series_result }
+          }
+        }
+        setMatchupResults(results)
+      })
+  }, [contestId, isLocked])
 
   // Chat: subscribe to bracket_messages
   useEffect(() => {
@@ -972,12 +1068,12 @@ export default function BracketPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <ColHeader line1="Regionals" line2="Double Elimination" />
       <ConnectorPair>
-        <RegionalPod regionKey="nashville"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" />
-        <RegionalPod regionKey="hattiesburg" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" />
+        <RegionalPod regionKey="nashville"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
+        <RegionalPod regionKey="hattiesburg" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
       </ConnectorPair>
       <ConnectorPair>
-        <RegionalPod regionKey="tallahassee" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" />
-        <RegionalPod regionKey="corvallis"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" />
+        <RegionalPod regionKey="tallahassee" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
+        <RegionalPod regionKey="corvallis"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
       </ConnectorPair>
     </div>
   )
@@ -985,7 +1081,7 @@ export default function BracketPage() {
   const leftSRCol = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <ColHeader line1="Super Regionals" line2="Best of 3" />
-      {LEFT_SR.map(sr => <SRBox key={sr.idx} sr={sr} picks={picks} onPick={pickSR} isLocked={isLocked} />)}
+      {LEFT_SR.map(sr => <SRBox key={sr.idx} sr={sr} picks={picks} onPick={pickSR} isLocked={isLocked} matchupResults={matchupResults} hasSubmitted={hasSubmitted} />)}
     </div>
   )
 
@@ -999,6 +1095,8 @@ export default function BracketPage() {
         picked={picks.semifinals[0] ?? null}
         onPick={t => pickSemi(0, t)}
         isLocked={isLocked}
+        resultWinner={matchupResults['semi_0']?.winner}
+        hasSubmitted={hasSubmitted}
       />
 
       {/* Championship */}
@@ -1012,9 +1110,13 @@ export default function BracketPage() {
           🏆 NATIONAL CHAMPIONSHIP
         </div>
         <div style={{ padding: '10px' }}>
-          <ChampSlot team={champT1} isPicked={picks.champion?.id === champT1?.id} onPick={() => champT1 && pickChampion(champT1)} isLocked={isLocked} />
+          <ChampSlot team={champT1} isPicked={picks.champion?.id === champT1?.id} onPick={() => champT1 && pickChampion(champT1)} isLocked={isLocked}
+            result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === champT1?.id && champT1)
+              ? getPickResult(champT1.id, matchupResults['champion'].winner) : undefined} />
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.muted, textAlign: 'center', padding: '6px 0' }}>VS</div>
-          <ChampSlot team={champT2} isPicked={picks.champion?.id === champT2?.id} onPick={() => champT2 && pickChampion(champT2)} isLocked={isLocked} />
+          <ChampSlot team={champT2} isPicked={picks.champion?.id === champT2?.id} onPick={() => champT2 && pickChampion(champT2)} isLocked={isLocked}
+            result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === champT2?.id && champT2)
+              ? getPickResult(champT2.id, matchupResults['champion'].winner) : undefined} />
 
           {picks.champion && (
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.surf3}` }}>
@@ -1022,19 +1124,34 @@ export default function BracketPage() {
                 SERIES RESULT
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                {(['2-0', '2-1'] as const).map(s => (
+                {(['2-0', '2-1'] as const).map(s => {
+                  const isSelected = picks.seriesResult === s
+                  const seriesAnswer = matchupResults['series_result']?.result
+                  const seriesResult: PickResult | undefined = (hasSubmitted && seriesAnswer && isSelected)
+                    ? (s === seriesAnswer ? 'correct' : 'incorrect') : undefined
+                  const btnBorder = isSelected
+                    ? (seriesResult === 'correct' ? C.green : seriesResult === 'incorrect' ? C.red : C.gold)
+                    : C.surf3
+                  const btnBg = isSelected
+                    ? (seriesResult === 'correct' ? 'rgba(21,198,120,.15)' : seriesResult === 'incorrect' ? 'rgba(240,58,90,.15)' : 'rgba(245,166,35,.15)')
+                    : C.surf2
+                  const btnColor = isSelected
+                    ? (seriesResult === 'correct' ? C.green : seriesResult === 'incorrect' ? C.red : C.gold)
+                    : C.muted
+                  return (
                   <button key={s}
                     onClick={isLocked ? undefined : () => setPicks(p => ({ ...p, seriesResult: s }))}
                     style={{
                       flex: 1, padding: '7px 0',
-                      border: `1px solid ${picks.seriesResult === s ? C.gold : C.surf3}`,
-                      background: picks.seriesResult === s ? 'rgba(245,166,35,.15)' : C.surf2,
+                      border: `1px solid ${btnBorder}`,
+                      background: btnBg,
                       borderRadius: 6, cursor: isLocked ? 'default' : 'pointer',
                       fontFamily: 'Anton,sans-serif', fontSize: 13,
-                      color: picks.seriesResult === s ? C.gold : C.muted,
+                      color: btnColor,
                       transition: 'all .15s',
-                    }}>{s}</button>
-                ))}
+                    }}>{s}{seriesResult === 'correct' ? ' ✓' : seriesResult === 'incorrect' ? ' ✗' : ''}</button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -1047,6 +1164,8 @@ export default function BracketPage() {
         picked={picks.semifinals[1] ?? null}
         onPick={t => pickSemi(1, t)}
         isLocked={isLocked}
+        resultWinner={matchupResults['semi_1']?.winner}
+        hasSubmitted={hasSubmitted}
       />
 
       {/* How to Play */}
@@ -1088,7 +1207,7 @@ export default function BracketPage() {
   const rightSRCol = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <ColHeader line1="Super Regionals" line2="Best of 3" align="right" />
-      {RIGHT_SR.map(sr => <SRBox key={sr.idx} sr={sr} picks={picks} onPick={pickSR} isLocked={isLocked} />)}
+      {RIGHT_SR.map(sr => <SRBox key={sr.idx} sr={sr} picks={picks} onPick={pickSR} isLocked={isLocked} matchupResults={matchupResults} hasSubmitted={hasSubmitted} />)}
     </div>
   )
 
@@ -1096,12 +1215,12 @@ export default function BracketPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <ColHeader line1="Regionals" line2="Double Elimination" align="right" />
       <ConnectorPairRight>
-        <RegionalPod regionKey="austin"      picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" />
-        <RegionalPod regionKey="los_angeles" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" />
+        <RegionalPod regionKey="austin"      picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
+        <RegionalPod regionKey="los_angeles" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
       </ConnectorPairRight>
       <ConnectorPairRight>
-        <RegionalPod regionKey="oxford"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" />
-        <RegionalPod regionKey="athens"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" />
+        <RegionalPod regionKey="oxford"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
+        <RegionalPod regionKey="athens"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
       </ConnectorPairRight>
     </div>
   )
