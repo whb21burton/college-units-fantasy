@@ -608,7 +608,7 @@ export default function BracketPage() {
     }
   }
 
-  // Load all user entries for this contest, check payment, fetch owning league
+  // Load entries + owning league data
   useEffect(() => {
     if (!userId || !contestId) return
 
@@ -630,16 +630,6 @@ export default function BracketPage() {
       })
 
     supabase
-      .from('transactions')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('type', 'contest_entry')
-      .eq('status', 'completed')
-      .or(`league_id.eq.${contestId},description.ilike.%${contestId}%`)
-      .maybeSingle()
-      .then(({ data }) => { if (data) setHasPaid(true) })
-
-    supabase
       .from('leagues')
       .select('id, buy_in, is_public, invite_code, commissioner_id')
       .eq('league_type', 'bracket')
@@ -651,16 +641,63 @@ export default function BracketPage() {
           setIsPublicLeague(data.is_public ?? false)
           setInviteCode(data.invite_code ?? null)
           setIsCommissioner(data.commissioner_id === userId)
-          supabase
-            .from('league_members')
-            .select('id')
-            .eq('league_id', data.id)
-            .eq('user_id', userId)
-            .maybeSingle()
-            .then(({ data: member }) => { if (member) setHasPaid(true) })
         }
       })
   }, [userId, contestId])
+
+  // Check hasPaid — runs after leagueId is resolved
+  useEffect(() => {
+    if (!userId || !contestId) return
+
+    async function checkPaid() {
+      // Check 1: existing bracket entry
+      const { data: entry } = await supabase
+        .from('user_bracket_entries')
+        .select('id')
+        .eq('contest_id', contestId)
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle()
+
+      if (entry) { setHasPaid(true); return }
+
+      // Check 2: league membership (private bracket leagues)
+      if (leagueId) {
+        const { data: member } = await supabase
+          .from('league_members')
+          .select('id')
+          .eq('league_id', leagueId)
+          .eq('user_id', userId)
+          .maybeSingle()
+
+        if (member) {
+          setHasPaid(true)
+          await supabase.from('user_bracket_entries').upsert({
+            contest_id:   contestId,
+            user_id:      userId,
+            entry_name:   'My Bracket',
+            entry_number: 1,
+            is_submitted: false,
+          }, { onConflict: 'contest_id,user_id,entry_number' })
+          return
+        }
+      }
+
+      // Check 3: contest_entry transaction
+      const { data: tx } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('type', 'contest_entry')
+        .eq('status', 'completed')
+        .or(`description.ilike.%${contestId}%,league_id.eq.${leagueId ?? '00000000-0000-0000-0000-000000000000'}`)
+        .maybeSingle()
+
+      if (tx) setHasPaid(true)
+    }
+
+    checkPaid()
+  }, [userId, contestId, leagueId])
 
   // Chat: subscribe to bracket_messages
   useEffect(() => {
