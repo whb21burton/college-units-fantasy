@@ -706,14 +706,14 @@ function MyLeaguesContent() {
           <InlineBracketDashboard
             contestId={selected.data.settings?.bracket_contest_id ?? selected.id}
             leagueData={selected.data}
-            userId={user?.id}
+            userId={userId}
           />
         )}
 
         {/* Season/weekly league — invite strip shown above iframe */}
         {selected?.type === 'league' && selected.data.league_type !== 'bracket' && (
           <>
-            {selected.data.commissioner_id === user?.id && selected.data.invite_code && (
+            {selected.data.commissioner_id === userId && selected.data.invite_code && (
               <div style={{ margin: '16px 20px 0', padding: '14px 16px', background: C.surf, border: `1px solid ${C.gold}33`, borderRadius: 8 }}>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>
                   🔑 Invite Code (only you can see this)
