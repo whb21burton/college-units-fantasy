@@ -400,12 +400,16 @@ export default function CreateLeaguePage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Failed to create league'); setSubmitting(false); return; }
-      if (leagueType === 'weekly') {
+      if (data.redirect) {
+        router.push(data.redirect);
+      } else if (leagueType === 'bracket') {
+        router.push('/my-leagues');
+      } else if (leagueType === 'weekly') {
         router.push('/leagues');
-        return;
+      } else {
+        const leagueId = data.leagues?.[0]?.id;
+        router.push(leagueId ? `/league/${leagueId}` : '/my-leagues');
       }
-      const leagueId = data.leagues?.[0]?.id;
-      router.push(leagueId ? `/league/${leagueId}` : '/my-leagues');
     } catch (e: any) {
       setError(e?.message ?? 'Network error');
       setSubmitting(false);

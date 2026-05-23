@@ -564,6 +564,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               isCommissioner={isCommissioner}
               inviteUrl={inviteUrl}
               copied={copied}
+              isEmbed={isEmbed}
               cpuTeams={cpuTeams}
               onCopy={copyLink}
               onStartDraft={startDraft}
@@ -963,10 +964,10 @@ function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
 }
 
 /* ── Draft Tab ──────────────────────────────────────────────── */
-function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCommissioner, inviteUrl, copied, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu, onResetDraft, onDeleteLeague, onRequestKick }: {
+function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCommissioner, inviteUrl, copied, isEmbed, cpuTeams, onCopy, onStartDraft, onMockDraft, onAddCpu, onRemoveCpu, onResetDraft, onDeleteLeague, onRequestKick }: {
   league: any; members: any[]; userId: string | null; userEmail: string;
   spotsLeft: number; isFull: boolean; isCommissioner: boolean;
-  inviteUrl: string; copied: boolean; cpuTeams: string[];
+  inviteUrl: string; copied: boolean; isEmbed: boolean; cpuTeams: string[];
   onCopy: () => void; onStartDraft: () => void; onMockDraft: () => void;
   onAddCpu: () => void; onRemoveCpu: (i: number) => void; onResetDraft: () => void;
   onDeleteLeague: () => void; onRequestKick: (member: { userId: string; teamName: string }) => void;
@@ -977,7 +978,7 @@ function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCom
     <div style={{ maxWidth: 680 }}>
 
       {/* Invite friends banner */}
-      {league?.status === 'forming' && (
+      {!isEmbed && league?.status === 'forming' && (
         <div style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 12, padding: '16px 20px', marginBottom: 20 }}>
           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>📨 Invite Friends</div>
           <div style={{ display: 'flex', gap: 8 }}>

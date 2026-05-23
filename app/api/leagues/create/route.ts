@@ -127,5 +127,13 @@ export async function POST(req: NextRequest) {
     created.push(data);
   }
 
-  return NextResponse.json({ leagues: created });
+  const first = created[0]
+  const leagueType = body.league_type ?? 'season'
+  const redirect = leagueType === 'bracket'
+    ? `/my-leagues?league=${first?.id}`
+    : leagueType === 'weekly'
+      ? `/leagues`
+      : `/league/${first?.id}`
+
+  return NextResponse.json({ leagues: created, redirect });
 }
