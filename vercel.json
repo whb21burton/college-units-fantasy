@@ -1,12 +1,5 @@
 {
-  "crons": [
-    { "path": "/api/cron/sync-scores",   "schedule": "0 12 * * *"  },
-    { "path": "/api/cron/sync-schedule", "schedule": "0 6 * * *"   },
-    { "path": "/api/cron/sync-rosters",  "schedule": "0 4 * * *"   },
-    { "path": "/api/cron/sync-stats",    "schedule": "0 3 * * 2"   },
-    { "path": "/api/cron/espn-cws",      "schedule": "*/5 * * * *" }
-  ],
-  "functions": {
+"functions": {
     "app/api/cron/sync-stats/route.ts": {
       "maxDuration": 60
     }
