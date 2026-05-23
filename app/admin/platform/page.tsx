@@ -809,7 +809,7 @@ function AdminStats() {
   useEffect(() => {
     Promise.all([
       supabase.from('admin_contest_stats').select('*').order('completed_at', { ascending: false }),
-      supabase.from('leagues').select('id, name, league_type, buy_in, status, created_at')
+      supabase.from('leagues').select('id, name, league_type, buy_in, status, created_at, is_public, commissioner_id')
         .gt('buy_in', 0)
         .not('status', 'in', '("completed","cancelled")')
         .order('created_at', { ascending: false }),
@@ -889,6 +889,9 @@ function AdminStats() {
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 2 }}>{c.name}</div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>
                     {c.type === 'bracket' ? `⚾ BRACKET · ${c.sport}` : `${c.league_type?.toUpperCase()} LEAGUE`} · {c.status} · ${c.buy_in} entry
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: c.is_public ? C.gold : C.muted, background: C.surf3, padding: '1px 5px', borderRadius: 3, marginLeft: 6 }}>
+                      {c.type === 'bracket' ? 'BRACKET' : c.is_public ? 'PUBLIC' : 'PRIVATE'}
+                    </span>
                   </div>
                 </div>
                 <div style={{ textAlign: 'center' as const }}>

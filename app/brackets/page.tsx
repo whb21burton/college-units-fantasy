@@ -86,6 +86,7 @@ export default function BracketsPage() {
       .select('*')
       .eq('sport', sport)
       .eq('status', 'open')
+      .eq('created_by', '603b48b1-3e85-4c72-bedb-c5166bbe9c6e')
       .order('created_at', { ascending: false })
       .then(({ data }) => {
         setContests(data ?? [])

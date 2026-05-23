@@ -20,8 +20,9 @@ export async function GET() {
     .from('leagues')
     .select('id, name, buy_in, league_size, draft_type, league_type, week, status, invite_code, conference_filter, commissioner_id, created_at, is_capped, is_featured, max_entries_per_user, settings, is_public')
     .eq('is_public', true)
-    .eq('league_type', 'weekly')
-    .in('status', ['forming', 'drafting', 'active'])
+    .eq('commissioner_id', '603b48b1-3e85-4c72-bedb-c5166bbe9c6e')
+    .in('league_type', ['weekly', 'season'])
+    .neq('status', 'cancelled')
     .order('created_at', { ascending: false });
 
   if (error) {
