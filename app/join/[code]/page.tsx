@@ -76,11 +76,24 @@ export default function JoinPage({ params }: { params: { code: string } }) {
       return;
     }
 
-    // API returns redirect; fall back based on league type
-    const defaultDest = league.league_type === 'weekly'
-      ? '/league/' + league.id + '/lineup'
-      : '/league/' + league.id + '?joined=1';
-    const dest = data.redirect ?? defaultDest;
+    // For bracket leagues, create a bracket entry row
+    if (league.league_type === 'bracket') {
+      const contestId = league.settings?.bracket_contest_id
+      if (contestId) {
+        await supabase.from('user_bracket_entries').upsert({
+          contest_id:   contestId,
+          user_id:      user.id,
+          entry_name:   teamName.trim(),
+          entry_number: 1,
+          is_submitted: false,
+        }, { onConflict: 'contest_id,user_id,entry_number' })
+      }
+    }
+
+    // Redirect bracket leagues to My Leagues
+    const dest = league.league_type === 'bracket'
+      ? `/my-leagues?league=${league.id}`
+      : data.redirect ?? `/my-leagues?league=${league.id}`
     router.push(dest);
   }
 

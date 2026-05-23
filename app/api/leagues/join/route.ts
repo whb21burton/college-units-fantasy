@@ -98,6 +98,19 @@ export async function POST(req: Request) {
     paid:      buyInCents > 0,
   })
 
+  if (league.league_type === 'bracket') {
+    const contestId = (league.settings as any)?.bracket_contest_id
+    if (contestId) {
+      await admin.from('user_bracket_entries').upsert({
+        contest_id:   contestId,
+        user_id:      user.id,
+        entry_name:   team_name.trim(),
+        entry_number: 1,
+        is_submitted: false,
+      }, { onConflict: 'contest_id,user_id,entry_number' })
+    }
+  }
+
   const redirect = `/my-leagues?league=${league.id}`
   return NextResponse.json({ success: true, league_id: league.id, redirect })
 }
