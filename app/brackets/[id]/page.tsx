@@ -79,8 +79,8 @@ function getPickResult(pickedId: string | undefined, winnerId: string | undefine
 
 /* ── Sub-components ────────────────────────────────────── */
 
-function TeamCard({ team, isPicked, onPick, isLocked, result }: {
-  team: Team; isPicked: boolean; onPick: () => void; isLocked: boolean; result?: PickResult
+function TeamCard({ team, isPicked, onPick, isLocked, result, isMobile }: {
+  team: Team; isPicked: boolean; onPick: () => void; isLocked: boolean; result?: PickResult; isMobile?: boolean
 }) {
   const sc = seedColor(team.seed)
   const borderColor = isPicked
@@ -94,17 +94,19 @@ function TeamCard({ team, isPicked, onPick, isLocked, result }: {
     <div
       onClick={isLocked ? undefined : onPick}
       style={{
-        padding: '9px 8px',
+        padding: isMobile ? '12px 10px' : '9px 8px',
+        minHeight: isMobile ? 64 : undefined,
         background: bg,
         border: `1px solid ${borderColor}`,
         borderRadius: 6, cursor: isLocked ? 'default' : 'pointer',
         transition: 'all .15s', textAlign: 'center',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       }}
     >
-      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: sc, marginBottom: 1, lineHeight: 1 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: isMobile ? 20 : 17, color: sc, marginBottom: 1, lineHeight: 1 }}>
         {team.seed}
       </div>
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: isPicked ? sc : C.text, lineHeight: 1.2, letterSpacing: 0.3 }}>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: isMobile ? 11 : 10, color: isPicked ? sc : C.text, lineHeight: 1.2, letterSpacing: 0.3 }}>
         {team.name}
       </div>
       {team.record && (
@@ -119,32 +121,33 @@ function TeamCard({ team, isPicked, onPick, isLocked, result }: {
   )
 }
 
-function RegionalPod({ regionKey, picks, onPick, isLocked, arrow, matchupResults, hasSubmitted }: {
+function RegionalPod({ regionKey, picks, onPick, isLocked, arrow, matchupResults, hasSubmitted, isMobile }: {
   regionKey: string; picks: BracketPicks; onPick: (k: string, t: Team) => void; isLocked: boolean; arrow?: 'right' | 'left'
-  matchupResults?: Record<string, any>; hasSubmitted?: boolean
+  matchupResults?: Record<string, any>; hasSubmitted?: boolean; isMobile?: boolean
 }) {
   const r = REGIONS[regionKey]
   if (!r) return null
   const pickedId = picks.regionals[regionKey]?.id
   const resultWinner = matchupResults?.[`regional_${regionKey}`]?.winner
   return (
-    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '10px 10px 12px' }}>
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: isMobile ? '12px 12px 14px' : '10px 10px 12px' }}>
       <div style={{
-        fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold,
-        textTransform: 'uppercase', marginBottom: 8,
+        fontFamily: 'Oswald,sans-serif', fontSize: isMobile ? 13 : 9, letterSpacing: 2, color: C.gold,
+        textTransform: 'uppercase', marginBottom: isMobile ? 10 : 8,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        ...(isMobile ? { paddingBottom: 6, borderBottom: `1px solid ${C.surf3}` } : {}),
       }}>
         <span>{r.display}</span>
-        {arrow === 'right' && <span style={{ color: C.surf3, fontSize: 12 }}>›</span>}
-        {arrow === 'left'  && <span style={{ color: C.surf3, fontSize: 12 }}>‹</span>}
+        {arrow === 'right' && <span style={{ color: C.surf3, fontSize: 14 }}>›</span>}
+        {arrow === 'left'  && <span style={{ color: C.surf3, fontSize: 14 }}>‹</span>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: isMobile ? 8 : 4 }}>
         {r.teams.map(t => {
           const result: PickResult | undefined = (hasSubmitted && resultWinner && pickedId === t.id)
             ? getPickResult(t.id, resultWinner)
             : undefined
           return (
-            <TeamCard key={t.id} team={t} isPicked={pickedId === t.id} onPick={() => onPick(regionKey, t)} isLocked={isLocked} result={result} />
+            <TeamCard key={t.id} team={t} isPicked={pickedId === t.id} onPick={() => onPick(regionKey, t)} isLocked={isLocked} result={result} isMobile={isMobile} />
           )
         })}
       </div>
@@ -1065,15 +1068,15 @@ export default function BracketPage() {
 
   /* ── Bracket columns (shared by desktop & mobile) ── */
   const leftRegionalsCol = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <ColHeader line1="Regionals" line2="Double Elimination" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 10 }}>
+      {!isMobile && <ColHeader line1="Regionals" line2="Double Elimination" />}
       <ConnectorPair>
-        <RegionalPod regionKey="nashville"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
-        <RegionalPod regionKey="hattiesburg" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
+        <RegionalPod regionKey="nashville"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
+        <RegionalPod regionKey="hattiesburg" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
       </ConnectorPair>
       <ConnectorPair>
-        <RegionalPod regionKey="tallahassee" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
-        <RegionalPod regionKey="corvallis"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
+        <RegionalPod regionKey="tallahassee" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
+        <RegionalPod regionKey="corvallis"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
       </ConnectorPair>
     </div>
   )
@@ -1212,15 +1215,15 @@ export default function BracketPage() {
   )
 
   const rightRegionalsCol = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <ColHeader line1="Regionals" line2="Double Elimination" align="right" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 10 }}>
+      {!isMobile && <ColHeader line1="Regionals" line2="Double Elimination" align="right" />}
       <ConnectorPairRight>
-        <RegionalPod regionKey="austin"      picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
-        <RegionalPod regionKey="los_angeles" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
+        <RegionalPod regionKey="austin"      picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
+        <RegionalPod regionKey="los_angeles" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
       </ConnectorPairRight>
       <ConnectorPairRight>
-        <RegionalPod regionKey="oxford"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
-        <RegionalPod regionKey="athens"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} />
+        <RegionalPod regionKey="oxford"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
+        <RegionalPod regionKey="athens"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
       </ConnectorPairRight>
     </div>
   )
@@ -1229,74 +1232,86 @@ export default function BracketPage() {
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, display: 'flex', flexDirection: 'column' as const, overflowY: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
 
       {/* ── Sticky header ── */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 100,
-        background: C.surf, borderBottom: `1px solid ${C.surf3}`,
-        padding: '10px 20px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        {/* Left: contest name */}
-        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
-          {contest.name}
-        </div>
-
-        {/* Center: submit / resubmit / submitted / locked */}
-        <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
-          {isLocked ? (
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, letterSpacing: 1 }}>
-              🔒 Bracket Locked
+      {isMobile ? (
+        <div style={{ position: 'sticky', top: 0, zIndex: 100, background: C.surf, borderBottom: `1px solid ${C.surf3}` }}>
+          {/* Row 1: contest name + entries */}
+          <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.text, letterSpacing: 1, textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>
+              {contest.name}
             </div>
-          ) : hasSubmitted && !picksChanged ? (
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.green, letterSpacing: 1 }}>
-              ✓ Bracket Submitted
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>
+                {myEntries.length}/{maxPerAccount}
+              </span>
+              {!isLocked && myEntries.length < maxPerAccount && hasPaid && (
+                <button onClick={() => setShowAddEntryModal(true)}
+                  style={{ padding: '4px 10px', background: 'none', border: `1px solid ${C.gold}`, borderRadius: 5, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.gold }}>
+                  + Entry
+                </button>
+              )}
             </div>
-          ) : hasSubmitted && picksChanged ? (
-            <button
-              onClick={handleResubmit}
-              disabled={submitting}
-              style={{
-                padding: '8px 24px',
-                background: submitting ? C.surf3 : C.gold,
-                border: 'none', borderRadius: 8,
-                cursor: submitting ? 'not-allowed' : 'pointer',
-                fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2,
-                color: submitting ? C.muted : C.bg,
-                textTransform: 'uppercase' as const,
-              }}>
-              {submitting ? 'Resubmitting...' : 'Resubmit Bracket'}
-            </button>
-          ) : (
-            <button
-              onClick={() => totalPicks >= TOTAL ? handleSubmitDirect() : undefined}
-              disabled={totalPicks < TOTAL || submitting}
-              style={{
-                padding: '8px 24px',
-                background: totalPicks >= TOTAL && !submitting ? C.gold : C.surf3,
-                border: 'none', borderRadius: 8,
-                cursor: totalPicks >= TOTAL && !submitting ? 'pointer' : 'not-allowed',
-                fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2,
-                color: totalPicks >= TOTAL && !submitting ? C.bg : C.muted,
-                textTransform: 'uppercase' as const,
-              }}>
-              {submitting ? 'Submitting...' : totalPicks >= TOTAL ? 'Submit Bracket' : `${TOTAL - totalPicks} picks left`}
-            </button>
-          )}
-        </div>
-
-        {/* Right: entries counter + add entry button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
-            {myEntries.length}/{maxPerAccount} {maxPerAccount === 1 ? 'entry' : 'entries'}
           </div>
-          {!isLocked && myEntries.length < maxPerAccount && hasPaid && (
-            <button
-              onClick={() => setShowAddEntryModal(true)}
-              style={{ padding: '6px 14px', background: 'none', border: `1px solid ${C.gold}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.gold }}>
-              + Entry
-            </button>
-          )}
+          {/* Row 2: submit / status */}
+          <div style={{ padding: '0 12px 8px', display: 'flex', justifyContent: 'center' }}>
+            {isLocked ? (
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red, letterSpacing: 1 }}>🔒 Bracket Locked</div>
+            ) : hasSubmitted && !picksChanged ? (
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, letterSpacing: 1 }}>✓ Bracket Submitted</div>
+            ) : hasSubmitted && picksChanged ? (
+              <button onClick={handleResubmit} disabled={submitting}
+                style={{ padding: '6px 20px', background: submitting ? C.surf3 : C.gold, border: 'none', borderRadius: 6, cursor: submitting ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2, color: submitting ? C.muted : C.bg, textTransform: 'uppercase' as const }}>
+                {submitting ? 'Saving...' : 'Resubmit'}
+              </button>
+            ) : (
+              <button onClick={() => totalPicks >= TOTAL ? handleSubmitDirect() : undefined}
+                disabled={totalPicks < TOTAL || submitting}
+                style={{ padding: '6px 20px', background: totalPicks >= TOTAL && !submitting ? C.gold : C.surf3, border: 'none', borderRadius: 6, cursor: totalPicks >= TOTAL && !submitting ? 'pointer' : 'not-allowed', fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2, color: totalPicks >= TOTAL && !submitting ? C.bg : C.muted, textTransform: 'uppercase' as const }}>
+                {submitting ? 'Submitting...' : totalPicks >= TOTAL ? 'Submit' : `${TOTAL - totalPicks}/16 picks`}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 100,
+          background: C.surf, borderBottom: `1px solid ${C.surf3}`,
+          padding: '10px 20px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
+            {contest.name}
+          </div>
+          <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+            {isLocked ? (
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, letterSpacing: 1 }}>🔒 Bracket Locked</div>
+            ) : hasSubmitted && !picksChanged ? (
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.green, letterSpacing: 1 }}>✓ Bracket Submitted</div>
+            ) : hasSubmitted && picksChanged ? (
+              <button onClick={handleResubmit} disabled={submitting}
+                style={{ padding: '8px 24px', background: submitting ? C.surf3 : C.gold, border: 'none', borderRadius: 8, cursor: submitting ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: submitting ? C.muted : C.bg, textTransform: 'uppercase' as const }}>
+                {submitting ? 'Resubmitting...' : 'Resubmit Bracket'}
+              </button>
+            ) : (
+              <button onClick={() => totalPicks >= TOTAL ? handleSubmitDirect() : undefined}
+                disabled={totalPicks < TOTAL || submitting}
+                style={{ padding: '8px 24px', background: totalPicks >= TOTAL && !submitting ? C.gold : C.surf3, border: 'none', borderRadius: 8, cursor: totalPicks >= TOTAL && !submitting ? 'pointer' : 'not-allowed', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: totalPicks >= TOTAL && !submitting ? C.bg : C.muted, textTransform: 'uppercase' as const }}>
+                {submitting ? 'Submitting...' : totalPicks >= TOTAL ? 'Submit Bracket' : `${TOTAL - totalPicks} picks left`}
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
+              {myEntries.length}/{maxPerAccount} {maxPerAccount === 1 ? 'entry' : 'entries'}
+            </div>
+            {!isLocked && myEntries.length < maxPerAccount && hasPaid && (
+              <button onClick={() => setShowAddEntryModal(true)}
+                style={{ padding: '6px 14px', background: 'none', border: `1px solid ${C.gold}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.gold }}>
+                + Entry
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Tabs ── */}
       {myEntries.length > 1 ? (
@@ -1496,23 +1511,24 @@ export default function BracketPage() {
           {/* Mobile (< 900px): tabbed sections */}
           <div className="bracket-mobile" style={{ display: 'none' }}>
             {/* Mobile section tabs */}
-            <div style={{
-              display: 'flex', overflowX: 'auto', gap: 0,
-              background: C.surf2, borderBottom: `1px solid ${C.surf3}`,
+            <div className="bracket-section-tabs" style={{
+              display: 'flex', overflowX: 'auto',
+              background: C.surf, borderBottom: `1px solid ${C.surf3}`,
+              scrollbarWidth: 'none' as any, msOverflowStyle: 'none' as any,
             }}>
               {([
-                ['left',        'Left Regionals'],
+                ['left',        'L. Regionals'],
                 ['super-left',  'Super Reg L'],
-                ['cws',         'CWS Center'],
+                ['cws',         'CWS'],
                 ['super-right', 'Super Reg R'],
-                ['right',       'Right Regionals'],
+                ['right',       'R. Regionals'],
               ] as [MSection, string][]).map(([k, label]) => (
                 <button key={k} onClick={() => setMSection(k)} style={{
-                  padding: '10px 14px', flexShrink: 0,
-                  background: mSection === k ? C.gold : 'transparent',
-                  color: mSection === k ? C.bg : C.sub,
-                  border: 'none', borderBottom: mSection === k ? `2px solid ${C.gold}` : '2px solid transparent',
+                  padding: '10px 16px', flexShrink: 0, whiteSpace: 'nowrap',
+                  background: 'none', border: 'none',
+                  borderBottom: `2px solid ${mSection === k ? C.gold : 'transparent'}`,
                   fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1,
+                  color: mSection === k ? C.gold : C.sub,
                   cursor: 'pointer', textTransform: 'uppercase',
                 }}>{label}</button>
               ))}
@@ -1520,8 +1536,11 @@ export default function BracketPage() {
             <div
               onTouchStart={handleBracketTouchStart}
               onTouchEnd={handleBracketTouchEnd}
-              style={{ padding: '16px 16px 100px' }}
+              style={{ padding: '0 12px 120px' }}
             >
+              <div style={{ padding: '12px 4px 4px', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.muted, textTransform: 'uppercase' }}>
+                {mSection.replace(/-/g, ' ')}
+              </div>
               {mSection === 'left'        && leftRegionalsCol}
               {mSection === 'super-left'  && leftSRCol}
               {mSection === 'cws'         && cwsCol}
@@ -1537,24 +1556,7 @@ export default function BracketPage() {
           .bracket-desktop { display: none !important; }
           .bracket-mobile  { display: block !important; }
         }
-        @media (max-width: 900px) {
-          .bracket-mobile .bracket-grid {
-            grid-template-columns: 1fr 1fr !important;
-            gap: 6px !important;
-          }
-          .bracket-mobile .team-card {
-            padding: 7px 6px !important;
-            font-size: 9px !important;
-          }
-          .bracket-mobile .bracket-content {
-            -webkit-overflow-scrolling: touch;
-          }
-          .tab-bar {
-            position: sticky;
-            top: 0;
-            z-index: 50;
-          }
-        }
+        .bracket-section-tabs::-webkit-scrollbar { display: none; }
       `}</style>
 
       {/* ── Add Entry confirmation modal ── */}
