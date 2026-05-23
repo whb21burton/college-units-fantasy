@@ -7,6 +7,19 @@ export const dynamic = 'force-dynamic'
 
 const ADMIN_ID = '603b48b1-3e85-4c72-bedb-c5166bbe9c6e'
 
+function getAdaptedStructure(structure: string, n: number): string {
+  if (structure === 'top3') {
+    if (n <= 1) return 'winner_take_all'
+    if (n === 2) return 'top2'
+    return 'top3'
+  }
+  if (structure === 'top2') {
+    if (n <= 1) return 'winner_take_all'
+    return 'top2'
+  }
+  return structure
+}
+
 export async function POST(req: Request) {
   const supabase = createRouteHandlerClient({ cookies })
   const { data: { user } } = await supabase.auth.getUser()
@@ -253,14 +266,16 @@ export async function POST(req: Request) {
     const netPool   = Math.floor(totalPool * 0.95)
     const rake      = totalPool - netPool
 
+    const adaptedStructure = getAdaptedStructure(payoutStructure, ranked.length)
     const isDoubleUp = payoutStructure === 'double_up'
     const doubleUpWinners = isDoubleUp ? Math.floor(ranked.length / 2) : 0
+    const hasMiddle = isDoubleUp && ranked.length % 2 !== 0
     const doubleUpPayoutCents = isDoubleUp ? Math.floor(entryFeeCents * 1.95) : 0
 
     const splits =
-      payoutStructure === 'top3' ? [{ rank: 1, pct: 0.60 }, { rank: 2, pct: 0.25 }, { rank: 3, pct: 0.15 }] :
-      payoutStructure === 'top2' ? [{ rank: 1, pct: 0.70 }, { rank: 2, pct: 0.30 }] :
-                                   [{ rank: 1, pct: 1.00 }]
+      adaptedStructure === 'top3' ? [{ rank: 1, pct: 0.60 }, { rank: 2, pct: 0.25 }, { rank: 3, pct: 0.15 }] :
+      adaptedStructure === 'top2' ? [{ rank: 1, pct: 0.70 }, { rank: 2, pct: 0.30 }] :
+                                    [{ rank: 1, pct: 1.00 }]
 
     // Build winner map: rank → bot
     const winnerMap = new Map<number, typeof ranked[number]>()
@@ -301,7 +316,35 @@ export async function POST(req: Request) {
       payouts.push({ rank, botEmail: winner.email, isReal: winner.isReal ?? false, payoutCents, payoutDollars: (payoutCents / 100).toFixed(2) })
     }
 
-    const winnerIds = new Set(Array.from(winnerMap.values()).map(w => w.id))
+    // Double-up odd: middle player gets entry fee back (break even)
+    const middlePlayer = hasMiddle ? ranked[doubleUpWinners] : null
+    if (middlePlayer && entryFeeCents > 0) {
+      const middleRank = doubleUpWinners + 1
+      const { data: midTx } = await admin.from('transactions').insert({
+        user_id: middlePlayer.id,
+        type: 'contest_settlement',
+        status: 'completed',
+        amount_cents: entryFeeCents,
+        league_id: contestType === 'weekly' ? contestId : null,
+        idempotency_key: `sim_payout_${middlePlayer.id}_${contestId}_rank${middleRank}`,
+        description: `Simulation payout - Rank #${middleRank} (break even): ${contestName}`,
+        completed_at: new Date().toISOString(),
+      }).select('id').single()
+
+      if (midTx) {
+        await admin.from('ledger_entries').insert([
+          { transaction_id: midTx.id, ledger_account_id: middlePlayer.pendingAcctId, amount_cents: -entryFeeCents },
+          { transaction_id: midTx.id, ledger_account_id: middlePlayer.availAcctId,   amount_cents: entryFeeCents  },
+        ])
+      }
+
+      payouts.push({ rank: middleRank, botEmail: middlePlayer.email, isReal: middlePlayer.isReal ?? false, payoutCents: entryFeeCents, payoutDollars: (entryFeeCents / 100).toFixed(2) })
+    }
+
+    const winnerIds = new Set([
+      ...Array.from(winnerMap.values()).map(w => w.id),
+      ...(middlePlayer ? [middlePlayer.id] : []),
+    ])
 
     // Settle losers — debit pending (funds go to rake)
     for (const loser of ranked.filter(b => !winnerIds.has(b.id))) {

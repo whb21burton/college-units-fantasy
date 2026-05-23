@@ -5,6 +5,19 @@ import { cookies } from 'next/headers'
 
 const ADMIN_ID = '603b48b1-3e85-4c72-bedb-c5166bbe9c6e'
 
+function getAdaptedStructure(structure: string, n: number): string {
+  if (structure === 'top3') {
+    if (n <= 1) return 'winner_take_all'
+    if (n === 2) return 'top2'
+    return 'top3'
+  }
+  if (structure === 'top2') {
+    if (n <= 1) return 'winner_take_all'
+    return 'top2'
+  }
+  return structure
+}
+
 const POINTS = {
   regional:       3,
   super_regional: 5,
@@ -116,18 +129,32 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   type Payout = { userId: string; entryName: string; amountCents: number; rank: number }
   const payouts: Payout[] = []
 
+  const adaptedStructure = getAdaptedStructure(payoutStructure, totalEntries)
+
   if (netPoolCents > 0 && totalEntries > 0 && feeCents > 0) {
-    if (payoutStructure === 'winner_take_all') {
+    if (adaptedStructure === 'double_up') {
+      const winners = Math.floor(totalEntries / 2)
+      const hasMiddle = totalEntries % 2 !== 0
+      const perWinner = Math.floor(feeCents * 1.95)
+      for (const entry of rankedEntries) {
+        if (entry.rank <= winners) {
+          payouts.push({ userId: entry.user_id, entryName: entry.entry_name ?? '', amountCents: perWinner, rank: entry.rank })
+        } else if (hasMiddle && entry.rank === winners + 1) {
+          // Middle player in odd contest — gets entry fee back (break even)
+          payouts.push({ userId: entry.user_id, entryName: entry.entry_name ?? '', amountCents: feeCents, rank: entry.rank })
+        }
+      }
+    } else if (adaptedStructure === 'winner_take_all') {
       const w = rankedEntries.find(e => e.rank === 1)
       if (w) payouts.push({ userId: w.user_id, entryName: w.entry_name ?? '', amountCents: netPoolCents, rank: 1 })
-    } else if (payoutStructure === 'top2' && totalEntries >= 2) {
+    } else if (adaptedStructure === 'top2') {
       const p1 = Math.floor(netPoolCents * 0.70)
       const p2 = netPoolCents - p1
       const r1 = rankedEntries.find(e => e.rank === 1)
       const r2 = rankedEntries.find(e => e.rank === 2)
       if (r1) payouts.push({ userId: r1.user_id, entryName: r1.entry_name ?? '', amountCents: p1, rank: 1 })
       if (r2) payouts.push({ userId: r2.user_id, entryName: r2.entry_name ?? '', amountCents: p2, rank: 2 })
-    } else if (payoutStructure === 'top3' && totalEntries >= 3) {
+    } else if (adaptedStructure === 'top3') {
       const p1 = Math.floor(netPoolCents * 0.60)
       const p2 = Math.floor(netPoolCents * 0.25)
       const p3 = netPoolCents - p1 - p2
@@ -137,15 +164,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (r1) payouts.push({ userId: r1.user_id, entryName: r1.entry_name ?? '', amountCents: p1, rank: 1 })
       if (r2) payouts.push({ userId: r2.user_id, entryName: r2.entry_name ?? '', amountCents: p2, rank: 2 })
       if (r3) payouts.push({ userId: r3.user_id, entryName: r3.entry_name ?? '', amountCents: p3, rank: 3 })
-    } else if (payoutStructure === 'double_up') {
-      const numWinners = Math.floor(totalEntries / 2)
-      const perWinner = Math.floor(feeCents * 1.95)
-      rankedEntries.slice(0, numWinners).forEach(entry => {
-        payouts.push({ userId: entry.user_id, entryName: entry.entry_name ?? '', amountCents: perWinner, rank: entry.rank })
-      })
-    } else {
-      const w = rankedEntries.find(e => e.rank === 1)
-      if (w) payouts.push({ userId: w.user_id, entryName: w.entry_name ?? '', amountCents: netPoolCents, rank: 1 })
     }
   }
 

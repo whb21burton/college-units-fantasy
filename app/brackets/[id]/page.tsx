@@ -440,29 +440,53 @@ function LeaderboardTab({ contestId, userId, contest, isLocked }: {
   const totalEntries    = entries.length
   const netPool         = Math.floor(entryFeeCents * totalEntries * 0.95)
 
+  function getAdaptedStructure(structure: string, n: number): string {
+    if (structure === 'top3') {
+      if (n <= 1) return 'winner_take_all'
+      if (n === 2) return 'top2'
+      return 'top3'
+    }
+    if (structure === 'top2') {
+      if (n <= 1) return 'winner_take_all'
+      return 'top2'
+    }
+    return structure
+  }
+
   function getPayoutForRank(rank: number): number {
     if (netPool === 0) return 0
     if (payoutStructure === 'double_up') {
-      return rank <= Math.floor(totalEntries / 2) ? Math.floor(entryFeeCents * 1.95) : 0
+      const winners = Math.floor(totalEntries / 2)
+      const hasMiddle = totalEntries % 2 !== 0
+      if (hasMiddle && rank === winners + 1) return entryFeeCents
+      if (rank <= winners) return Math.floor(entryFeeCents * 1.95)
+      return 0
     }
-    if (payoutStructure === 'top3') {
+    const adapted = getAdaptedStructure(payoutStructure, totalEntries)
+    if (adapted === 'winner_take_all') return rank === 1 ? netPool : 0
+    if (adapted === 'top2') {
+      if (rank === 1) return Math.floor(netPool * 0.70)
+      if (rank === 2) return Math.floor(netPool * 0.30)
+      return 0
+    }
+    if (adapted === 'top3') {
       if (rank === 1) return Math.floor(netPool * 0.60)
       if (rank === 2) return Math.floor(netPool * 0.25)
       if (rank === 3) return Math.floor(netPool * 0.15)
       return 0
     }
-    if (payoutStructure === 'top2') {
-      if (rank === 1) return Math.floor(netPool * 0.70)
-      if (rank === 2) return Math.floor(netPool * 0.30)
-      return 0
-    }
-    return rank === 1 ? netPool : 0
+    return 0
   }
 
   function isInMoney(rank: number): boolean {
-    if (payoutStructure === 'double_up') return rank <= Math.floor(totalEntries / 2)
-    if (payoutStructure === 'top3') return rank <= 3
-    if (payoutStructure === 'top2') return rank <= 2
+    if (payoutStructure === 'double_up') {
+      const winners = Math.floor(totalEntries / 2)
+      const hasMiddle = totalEntries % 2 !== 0
+      return rank <= winners + (hasMiddle ? 1 : 0)
+    }
+    const adapted = getAdaptedStructure(payoutStructure, totalEntries)
+    if (adapted === 'top3') return rank <= 3
+    if (adapted === 'top2') return rank <= 2
     return rank === 1
   }
 
@@ -480,6 +504,12 @@ function LeaderboardTab({ contestId, userId, contest, isLocked }: {
     </div>
   )
 
+  const adaptedStructure = getAdaptedStructure(payoutStructure, totalEntries)
+  const structureLabel = adaptedStructure === 'winner_take_all' ? 'Winner Take All'
+    : adaptedStructure === 'top2' ? 'Top 2 Pay'
+    : adaptedStructure === 'top3' ? 'Top 3 Pay'
+    : 'Double Up'
+
   return (
     <div style={{ padding: '16px 20px' }}>
       <div style={{ marginBottom: 16 }}>
@@ -491,6 +521,11 @@ function LeaderboardTab({ contestId, userId, contest, isLocked }: {
           <span>Max score: {MAX_SCORE} pts</span>
           {netPool > 0 && <span>Prize pool: ${(netPool / 100).toFixed(2)}</span>}
         </div>
+        {adaptedStructure !== payoutStructure && entries.length > 0 && (
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold, marginTop: 4 }}>
+            ⚡ Paying as {structureLabel} ({entries.length} {entries.length === 1 ? 'entry' : 'entries'})
+          </div>
+        )}
       </div>
 
       {/* Column headers */}
