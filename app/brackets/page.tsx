@@ -89,7 +89,8 @@ export default function BracketsPage() {
       .eq('created_by', '603b48b1-3e85-4c72-bedb-c5166bbe9c6e')
       .order('created_at', { ascending: false })
       .then(({ data }) => {
-        setContests(data ?? [])
+        const publicOnly = (data ?? []).filter(c => !c.settings?.league_id)
+        setContests(publicOnly)
         setLoading(false)
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
