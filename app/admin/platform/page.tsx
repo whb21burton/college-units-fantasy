@@ -799,6 +799,149 @@ function ESPNSyncPanel() {
   )
 }
 
+function BracketTeamsEditor() {
+  const supabase = createClientComponentClient()
+  const [contests, setContests] = useState<any[]>([])
+  const [contestId, setContestId] = useState('')
+  const [teams, setTeams] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const REGIONS = [
+    { key: 'nashville',   display: 'Nashville' },
+    { key: 'hattiesburg', display: 'Hattiesburg' },
+    { key: 'tallahassee', display: 'Tallahassee' },
+    { key: 'corvallis',   display: 'Corvallis' },
+    { key: 'austin',      display: 'Austin' },
+    { key: 'los_angeles', display: 'Los Angeles' },
+    { key: 'oxford',      display: 'Oxford' },
+    { key: 'athens',      display: 'Athens' },
+  ]
+
+  useEffect(() => {
+    supabase.from('bracket_contests').select('id, name, sport').eq('sport', 'baseball')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setContests(data ?? [])
+        if (data?.[0]) setContestId(data[0].id)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!contestId) return
+    setLoading(true)
+    supabase.from('bracket_teams').select('*').eq('contest_id', contestId)
+      .order('region_key').order('seed')
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setTeams(data)
+        } else {
+          const empty: any[] = []
+          for (const r of REGIONS) {
+            for (let seed = 1; seed <= 4; seed++) {
+              empty.push({
+                contest_id: contestId,
+                region_key: r.key,
+                region_display: r.display,
+                seed,
+                team_id: `${r.key}_${seed}`,
+                team_name: '',
+                record: '',
+              })
+            }
+          }
+          setTeams(empty)
+        }
+        setLoading(false)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contestId])
+
+  function updateTeam(regionKey: string, seed: number, field: string, value: string) {
+    setTeams(prev => prev.map(t =>
+      t.region_key === regionKey && t.seed === seed ? { ...t, [field]: value } : t
+    ))
+  }
+
+  async function saveTeams() {
+    setSaving(true)
+    const rows = teams.map(t => ({
+      contest_id: contestId,
+      region_key: t.region_key,
+      region_display: t.region_display,
+      seed: t.seed,
+      team_id: t.team_id || `${t.region_key}_${t.seed}`,
+      team_name: t.team_name,
+      record: t.record,
+      updated_at: new Date().toISOString(),
+    }))
+    const { error } = await supabase.from('bracket_teams')
+      .upsert(rows, { onConflict: 'contest_id,region_key,seed' })
+    setSaving(false)
+    if (!error) { setSaved(true); setTimeout(() => setSaved(false), 3000) }
+    else alert('Error saving: ' + error.message)
+  }
+
+  return (
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginTop: 20 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+        Bracket Teams Editor
+      </div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 16 }}>
+        Set team names and records for each regional. Updates apply to all users immediately.
+      </div>
+
+      <select value={contestId} onChange={e => setContestId(e.target.value)}
+        style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13, marginBottom: 16, outline: 'none' }}>
+        {contests.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+
+      {loading ? (
+        <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center', padding: 20 }}>Loading...</div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 16 }}>
+            {REGIONS.map(region => {
+              const regionTeams = teams.filter(t => t.region_key === region.key).sort((a, b) => a.seed - b.seed)
+              return (
+                <div key={region.key} style={{ background: C.surf2, borderRadius: 8, padding: '12px 14px' }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>
+                    {region.display}
+                  </div>
+                  {regionTeams.map(team => (
+                    <div key={team.seed} style={{ display: 'grid', gridTemplateColumns: '20px 1fr 70px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.muted, textAlign: 'center' }}>{team.seed}</div>
+                      <input
+                        value={team.team_name}
+                        onChange={e => updateTeam(region.key, team.seed, 'team_name', e.target.value)}
+                        placeholder={`Seed ${team.seed} team`}
+                        style={{ padding: '5px 8px', background: C.surf3, border: `1px solid ${C.surf3}`, borderRadius: 5, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 11, outline: 'none' }}
+                      />
+                      <input
+                        value={team.record}
+                        onChange={e => updateTeam(region.key, team.seed, 'record', e.target.value)}
+                        placeholder="00-00"
+                        style={{ padding: '5px 6px', background: C.surf3, border: `1px solid ${C.surf3}`, borderRadius: 5, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 10, outline: 'none', textAlign: 'center' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+
+          <button onClick={saveTeams} disabled={saving}
+            style={{ width: '100%', padding: '13px', background: saving ? C.surf3 : saved ? C.green : C.gold, border: 'none', borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: saving ? C.muted : C.bg, textTransform: 'uppercase' as const }}>
+            {saving ? 'Saving...' : saved ? '✓ Saved!' : 'Save All Teams'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 function AdminStats() {
   const supabase = createClientComponentClient()
   const [completedStats, setCompletedStats] = useState<any[]>([])
@@ -1149,6 +1292,7 @@ export default function PlatformManagerPage() {
         <SimulationRunner />
         <AdminStats />
         <ESPNSyncPanel />
+        <BracketTeamsEditor />
       </div>
     </div>
   )

@@ -29,6 +29,25 @@ const REGIONS: Record<string, { display: string; teams: Team[] }> = {
   athens:      { display: 'Athens',      teams: [{ id: 'uga',     name: 'Georgia',           seed: 1, record: '44-14' }, { id: 'bing',   name: 'Binghamton',        seed: 2, record: '37-21' }, { id: 'okst',   name: 'Oklahoma State',   seed: 3, record: '36-20' }, { id: 'duke',   name: 'Duke',             seed: 4, record: '34-23' }] },
 }
 
+function getRegions(dbTeams: any[]): Record<string, { display: string; teams: Team[] }> {
+  if (dbTeams.length === 0) return REGIONS
+  const result: Record<string, { display: string; teams: Team[] }> = {}
+  const regionKeys = ['nashville','hattiesburg','tallahassee','corvallis','austin','los_angeles','oxford','athens']
+  for (const key of regionKeys) {
+    const regionTeams = dbTeams
+      .filter(t => t.region_key === key && t.team_name)
+      .sort((a: any, b: any) => a.seed - b.seed)
+      .map((t: any) => ({ id: t.team_id || `${t.region_key}_${t.seed}`, name: t.team_name, seed: t.seed, record: t.record || '' }))
+    if (regionTeams.length > 0) {
+      const display = dbTeams.find((t: any) => t.region_key === key)?.region_display ?? key
+      result[key] = { display, teams: regionTeams }
+    } else {
+      result[key] = REGIONS[key]
+    }
+  }
+  return result
+}
+
 // SR pairings: two left-side regionals → one SR in col 2
 // Two right-side regionals → one SR in col 4
 const LEFT_SR: Array<{ idx: number; label: string; top: string; bot: string }> = [
@@ -121,11 +140,12 @@ function TeamCard({ team, isPicked, onPick, isLocked, result, isMobile }: {
   )
 }
 
-function RegionalPod({ regionKey, picks, onPick, isLocked, arrow, matchupResults, hasSubmitted, isMobile }: {
+function RegionalPod({ regionKey, picks, onPick, isLocked, arrow, matchupResults, hasSubmitted, isMobile, regions }: {
   regionKey: string; picks: BracketPicks; onPick: (k: string, t: Team) => void; isLocked: boolean; arrow?: 'right' | 'left'
   matchupResults?: Record<string, any>; hasSubmitted?: boolean; isMobile?: boolean
+  regions?: Record<string, { display: string; teams: Team[] }>
 }) {
-  const r = REGIONS[regionKey]
+  const r = (regions ?? REGIONS)[regionKey]
   if (!r) return null
   const pickedId = picks.regionals[regionKey]?.id
   const resultWinner = matchupResults?.[`regional_${regionKey}`]?.winner
@@ -205,15 +225,16 @@ function SRSlot({ team, label, isPicked, onPick, isLocked, result }: {
   )
 }
 
-function SRBox({ sr, picks, onPick, isLocked, matchupResults, hasSubmitted }: {
+function SRBox({ sr, picks, onPick, isLocked, matchupResults, hasSubmitted, regions }: {
   sr: (typeof LEFT_SR)[0]; picks: BracketPicks; onPick: (idx: number, t: Team) => void; isLocked: boolean
   matchupResults?: Record<string, any>; hasSubmitted?: boolean
+  regions?: Record<string, { display: string; teams: Team[] }>
 }) {
   const topWinner = picks.regionals[sr.top]
   const botWinner = picks.regionals[sr.bot]
   const srWinner  = picks.superRegionals[sr.idx]
-  const topDisplay = REGIONS[sr.top]?.display ?? sr.top
-  const botDisplay = REGIONS[sr.bot]?.display ?? sr.bot
+  const topDisplay = (regions ?? REGIONS)[sr.top]?.display ?? sr.top
+  const botDisplay = (regions ?? REGIONS)[sr.bot]?.display ?? sr.bot
   const srResultWinner = matchupResults?.[`super_${sr.idx}`]?.winner
   const topIsPicked = !!(srWinner && topWinner && srWinner.id === topWinner.id)
   const botIsPicked = !!(srWinner && botWinner && srWinner.id === botWinner.id)
@@ -658,6 +679,7 @@ export default function BracketPage() {
   const [entryFeeCents,  setEntryFeeCents]  = useState(0)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const [isMobile,  setIsMobile]  = useState(false)
+  const [dbTeams,   setDbTeams]   = useState<any[]>([])
   const swipeTouchStart = useRef<number>(0)
 
   const loadData = useCallback(async () => {
@@ -672,6 +694,14 @@ export default function BracketPage() {
       if (c.status === 'locked' || c.status === 'active' || c.status === 'completed') setIsLocked(true)
       if (c.locks_at && new Date(c.locks_at) < new Date()) setIsLocked(true)
     }
+
+    const { data: teamData } = await supabase
+      .from('bracket_teams')
+      .select('*')
+      .eq('contest_id', contestId)
+      .order('region_key')
+      .order('seed')
+    if (teamData && teamData.length > 0) setDbTeams(teamData)
 
     try {
       const walletRes = await fetch('/api/wallet')
@@ -1095,6 +1125,7 @@ export default function BracketPage() {
     </div>
   )
 
+  const activeRegions = getRegions(dbTeams)
   const totalPicks   = countPicks(picks)
   const activeEntry  = myEntries.find(e => (e.entry_number ?? 1) === activeEntryNum) ?? null
   const hasSubmitted = activeEntry?.is_submitted ?? false
@@ -1106,12 +1137,12 @@ export default function BracketPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 10 }}>
       {!isMobile && <ColHeader line1="Regionals" line2="Double Elimination" />}
       <ConnectorPair>
-        <RegionalPod regionKey="nashville"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
-        <RegionalPod regionKey="hattiesburg" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
+        <RegionalPod regionKey="nashville"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="hattiesburg" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
       </ConnectorPair>
       <ConnectorPair>
-        <RegionalPod regionKey="tallahassee" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
-        <RegionalPod regionKey="corvallis"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
+        <RegionalPod regionKey="tallahassee" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="corvallis"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
       </ConnectorPair>
     </div>
   )
@@ -1119,7 +1150,7 @@ export default function BracketPage() {
   const leftSRCol = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <ColHeader line1="Super Regionals" line2="Best of 3" />
-      {LEFT_SR.map(sr => <SRBox key={sr.idx} sr={sr} picks={picks} onPick={pickSR} isLocked={isLocked} matchupResults={matchupResults} hasSubmitted={hasSubmitted} />)}
+      {LEFT_SR.map(sr => <SRBox key={sr.idx} sr={sr} picks={picks} onPick={pickSR} isLocked={isLocked} matchupResults={matchupResults} hasSubmitted={hasSubmitted} regions={activeRegions} />)}
     </div>
   )
 
@@ -1245,7 +1276,7 @@ export default function BracketPage() {
   const rightSRCol = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <ColHeader line1="Super Regionals" line2="Best of 3" align="right" />
-      {RIGHT_SR.map(sr => <SRBox key={sr.idx} sr={sr} picks={picks} onPick={pickSR} isLocked={isLocked} matchupResults={matchupResults} hasSubmitted={hasSubmitted} />)}
+      {RIGHT_SR.map(sr => <SRBox key={sr.idx} sr={sr} picks={picks} onPick={pickSR} isLocked={isLocked} matchupResults={matchupResults} hasSubmitted={hasSubmitted} regions={activeRegions} />)}
     </div>
   )
 
@@ -1253,12 +1284,12 @@ export default function BracketPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 10 }}>
       {!isMobile && <ColHeader line1="Regionals" line2="Double Elimination" align="right" />}
       <ConnectorPairRight>
-        <RegionalPod regionKey="austin"      picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
-        <RegionalPod regionKey="los_angeles" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
+        <RegionalPod regionKey="austin"      picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="los_angeles" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
       </ConnectorPairRight>
       <ConnectorPairRight>
-        <RegionalPod regionKey="oxford"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
-        <RegionalPod regionKey="athens"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} />
+        <RegionalPod regionKey="oxford"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="athens"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
       </ConnectorPairRight>
     </div>
   )
