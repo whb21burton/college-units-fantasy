@@ -271,7 +271,7 @@ export default function CreateLeaguePage() {
   const [entries,         setEntries]         = useState(8);
   const [buyIn,           setBuyIn]           = useState(0);
   const [customBuyIn,     setCustomBuyIn]     = useState('');
-  const [inviteCode]                          = useState(genCode);
+  const [inviteCode, setInviteCode]           = useState('');
   const [payoutStructure, setPayoutStructure] = useState<PayoutStructure>('winner_take_all');
   const [customPayouts,   setCustomPayouts]   = useState<{ place: number; pct: number }[]>([{ place: 1, pct: 100 }]);
   const [userEmail,       setUserEmail]       = useState<string | null>(null);
@@ -381,7 +381,7 @@ export default function CreateLeaguePage() {
           is_capped:   leagueType !== 'bracket',
           league_type: leagueType,
           team_name:   teamName.trim(),
-          invite_code: inviteCode,
+          invite_code: inviteCode.trim() || undefined,
           settings: {
             allowed_schools:  allowedSchools,
             league_logo_url:  leagueLogo,
@@ -562,6 +562,21 @@ export default function CreateLeaguePage() {
               <Label>League Name</Label>
               <Input value={leagueName} onChange={setLeagueName} placeholder="Enter league name…" maxLength={40} />
               <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 4 }}>{leagueName.length}/40</div>
+              <div style={{ marginTop: 12 }}>
+                <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                  Invite Code <span style={{ color: C.muted, fontSize: 9 }}>(optional — auto-generated if blank)</span>
+                </label>
+                <input
+                  value={inviteCode}
+                  onChange={e => setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+                  placeholder="e.g. GODAWGS"
+                  maxLength={10}
+                  style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.gold, fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 3, outline: 'none', boxSizing: 'border-box' as const }}
+                />
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 4 }}>
+                  Letters and numbers only. This is the code people use to join your private league.
+                </div>
+              </div>
             </div>
 
             {/* League Logo */}
@@ -683,22 +698,24 @@ export default function CreateLeaguePage() {
               </div>
             )}
 
-            {/* Invite Code */}
-            <div style={{ marginBottom: 4, marginTop: effectiveBuyIn > 0 ? 0 : 0 }}>
-              <Label>Private Invite Code</Label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '11px 16px', fontFamily: 'Anton, sans-serif', fontSize: 22, letterSpacing: 4, color: C.gold }}>
-                  {inviteCode}
+            {/* Invite Code preview */}
+            {inviteCode.trim() && (
+              <div style={{ marginBottom: 4, marginTop: effectiveBuyIn > 0 ? 0 : 0 }}>
+                <Label>Private Invite Code</Label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '11px 16px', fontFamily: 'Anton, sans-serif', fontSize: 22, letterSpacing: 4, color: C.gold }}>
+                    {inviteCode}
+                  </div>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(inviteCode)}
+                    style={{ padding: '10px 16px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 10, letterSpacing: 1, color: C.sub, textTransform: 'uppercase' }}
+                  >
+                    Copy
+                  </button>
                 </div>
-                <button
-                  onClick={() => navigator.clipboard.writeText(inviteCode)}
-                  style={{ padding: '10px 16px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 10, letterSpacing: 1, color: C.sub, textTransform: 'uppercase' }}
-                >
-                  Copy
-                </button>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 6 }}>Share this code with players to invite them to your league.</div>
               </div>
-              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 6 }}>Share this code with players to invite them to your league.</div>
-            </div>
+            )}
           </div>
         )}
 
@@ -931,11 +948,15 @@ export default function CreateLeaguePage() {
             <div style={{ background: 'rgba(245,166,35,.07)', border: `1px solid ${C.gold}33`, borderRadius: 10, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>Invite Code</div>
-                <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 28, letterSpacing: 5, color: C.gold }}>{inviteCode}</div>
+                <div style={{ fontFamily: 'Anton, sans-serif', fontSize: 28, letterSpacing: 5, color: C.gold }}>
+                  {inviteCode.trim() || <span style={{ fontSize: 14, letterSpacing: 1, color: C.muted }}>Auto-generated on create</span>}
+                </div>
               </div>
-              <button onClick={() => navigator.clipboard.writeText(inviteCode)} style={{ padding: '9px 16px', background: 'none', border: `1px solid ${C.gold}44`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 10, letterSpacing: 1, color: C.gold, textTransform: 'uppercase' }}>
-                Copy
-              </button>
+              {inviteCode.trim() && (
+                <button onClick={() => navigator.clipboard.writeText(inviteCode)} style={{ padding: '9px 16px', background: 'none', border: `1px solid ${C.gold}44`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald, sans-serif', fontSize: 10, letterSpacing: 1, color: C.gold, textTransform: 'uppercase' }}>
+                  Copy
+                </button>
+              )}
             </div>
 
             {/* Logos */}

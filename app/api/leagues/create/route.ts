@@ -7,6 +7,11 @@ export const dynamic = 'force-dynamic';
 
 const ADMIN_EMAIL = 'whb21burton@gmail.com';
 
+function generateInviteCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+}
+
 export async function POST(req: NextRequest) {
   const supabase = createRouteHandlerClient({ cookies });
   const { data: { user } } = await supabase.auth.getUser();
@@ -57,7 +62,7 @@ export async function POST(req: NextRequest) {
         week:              body.week ?? null,
         is_capped:              isCapped,
         max_entries_per_user:   maxEntriesPerUser,
-        invite_code:            '',
+        invite_code:            (body.invite_code?.trim().toUpperCase()) || generateInviteCode(),
         status:                 'forming',
         settings:               settings,
       })

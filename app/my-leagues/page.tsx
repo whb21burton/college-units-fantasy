@@ -28,6 +28,7 @@ type LeagueData = {
   week?: number;
   settings: any;
   commissioner_id?: string;
+  invite_code?: string;
   draft_type?: string;
   conference_filter?: string;
   team_name: string;
@@ -152,7 +153,7 @@ function MyLeaguesContent() {
             leagues (
               id, name, league_type, status, buy_in,
               league_size, is_public, week, settings,
-              commissioner_id, draft_type, conference_filter
+              commissioner_id, invite_code, draft_type, conference_filter
             )
           `)
           .eq('user_id', u.id)
@@ -668,7 +669,46 @@ function MyLeaguesContent() {
 
         {/* League iframe */}
         {selected?.type === 'league' && (
-          <InlineLeagueDashboard leagueId={selected.id} />
+          <>
+            {selected.data.commissioner_id === user?.id && selected.data.invite_code && (
+              <div style={{ margin: '16px 20px 0', padding: '14px 16px', background: C.surf, border: `1px solid ${C.gold}33`, borderRadius: 8 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>
+                  🔑 Invite Code (only you can see this)
+                </div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, letterSpacing: 6, color: C.gold, marginBottom: 10 }}>
+                  {selected.data.invite_code}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(selected.data.invite_code!)}
+                    style={{ padding: '7px 14px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.sub }}>
+                    Copy Code
+                  </button>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(`${window.location.origin}/join/${selected.data.invite_code}`)}
+                    style={{ padding: '7px 14px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.sub }}>
+                    Copy Invite Link
+                  </button>
+                  <button
+                    onClick={() => {
+                      const url = `${window.location.origin}/join/${selected.data.invite_code}`
+                      if (navigator.share) {
+                        navigator.share({ title: selected.data.name, text: 'Join my league on College Units Fantasy!', url })
+                      } else {
+                        navigator.clipboard.writeText(url)
+                      }
+                    }}
+                    style={{ padding: '7px 14px', background: 'rgba(245,166,35,.1)', border: `1px solid ${C.gold}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.gold }}>
+                    📤 Share
+                  </button>
+                </div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 8 }}>
+                  Link: {typeof window !== 'undefined' ? `${window.location.origin}/join/${selected.data.invite_code}` : ''}
+                </div>
+              </div>
+            )}
+            <InlineLeagueDashboard leagueId={selected.id} />
+          </>
         )}
 
         {/* Bracket iframe */}
