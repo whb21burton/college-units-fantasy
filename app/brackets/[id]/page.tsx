@@ -698,7 +698,7 @@ export default function BracketPage() {
     const { data: teamData } = await supabase
       .from('bracket_teams')
       .select('*')
-      .eq('contest_id', contestId)
+      .eq('contest_id', 'global')
       .order('region_key')
       .order('seed')
     if (teamData && teamData.length > 0) setDbTeams(teamData)

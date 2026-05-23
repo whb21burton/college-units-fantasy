@@ -801,12 +801,12 @@ function ESPNSyncPanel() {
 
 function BracketTeamsEditor() {
   const supabase = createClientComponentClient()
-  const [contests, setContests] = useState<any[]>([])
-  const [contestId, setContestId] = useState('')
   const [teams, setTeams] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  const GLOBAL_KEY = 'global'
 
   const REGIONS = [
     { key: 'nashville',   display: 'Nashville' },
@@ -820,19 +820,8 @@ function BracketTeamsEditor() {
   ]
 
   useEffect(() => {
-    supabase.from('bracket_contests').select('id, name, sport').eq('sport', 'baseball')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setContests(data ?? [])
-        if (data?.[0]) setContestId(data[0].id)
-      })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    if (!contestId) return
     setLoading(true)
-    supabase.from('bracket_teams').select('*').eq('contest_id', contestId)
+    supabase.from('bracket_teams').select('*').eq('contest_id', GLOBAL_KEY)
       .order('region_key').order('seed')
       .then(({ data }) => {
         if (data && data.length > 0) {
@@ -842,7 +831,7 @@ function BracketTeamsEditor() {
           for (const r of REGIONS) {
             for (let seed = 1; seed <= 4; seed++) {
               empty.push({
-                contest_id: contestId,
+                contest_id: GLOBAL_KEY,
                 region_key: r.key,
                 region_display: r.display,
                 seed,
@@ -857,7 +846,7 @@ function BracketTeamsEditor() {
         setLoading(false)
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contestId])
+  }, [])
 
   function updateTeam(regionKey: string, seed: number, field: string, value: string) {
     setTeams(prev => prev.map(t =>
@@ -865,10 +854,16 @@ function BracketTeamsEditor() {
     ))
   }
 
+  function updateRegionDisplay(regionKey: string, display: string) {
+    setTeams(prev => prev.map(t =>
+      t.region_key === regionKey ? { ...t, region_display: display } : t
+    ))
+  }
+
   async function saveTeams() {
     setSaving(true)
     const rows = teams.map(t => ({
-      contest_id: contestId,
+      contest_id: GLOBAL_KEY,
       region_key: t.region_key,
       region_display: t.region_display,
       seed: t.seed,
@@ -890,13 +885,8 @@ function BracketTeamsEditor() {
         Bracket Teams Editor
       </div>
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 16 }}>
-        Set team names and records for each regional. Updates apply to all users immediately.
+        Set team names and records for each regional. Applies to all bracket contests globally.
       </div>
-
-      <select value={contestId} onChange={e => setContestId(e.target.value)}
-        style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13, marginBottom: 16, outline: 'none' }}>
-        {contests.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-      </select>
 
       {loading ? (
         <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center', padding: 20 }}>Loading...</div>
@@ -907,9 +897,12 @@ function BracketTeamsEditor() {
               const regionTeams = teams.filter(t => t.region_key === region.key).sort((a, b) => a.seed - b.seed)
               return (
                 <div key={region.key} style={{ background: C.surf2, borderRadius: 8, padding: '12px 14px' }}>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>
-                    {region.display}
-                  </div>
+                  <input
+                    value={regionTeams[0]?.region_display ?? region.display}
+                    onChange={e => updateRegionDisplay(region.key, e.target.value)}
+                    placeholder="City name"
+                    style={{ width: '100%', padding: '5px 8px', background: C.surf3, border: `1px solid ${C.gold}33`, borderRadius: 5, color: C.gold, fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', outline: 'none', marginBottom: 8, boxSizing: 'border-box' as const }}
+                  />
                   {regionTeams.map(team => (
                     <div key={team.seed} style={{ display: 'grid', gridTemplateColumns: '20px 1fr 70px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
                       <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.muted, textAlign: 'center' }}>{team.seed}</div>
