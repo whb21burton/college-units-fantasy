@@ -64,7 +64,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     const cents = customAmount
       ? Math.round(parseFloat(customAmount) * 100)
       : depositAmount
-    if (!cents || cents < 500) return
+    if (!cents || cents < 100) return
     try {
       const res = await fetch('/api/wallet/deposit/create', {
         method: 'POST',
@@ -320,14 +320,14 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                       style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: 'Anton,sans-serif', fontSize: 24, color: C.text, padding: '14px 0', width: '100%' }}
                     />
                   </div>
-                  {customAmount && parseFloat(customAmount) * 100 < 500 && (
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red, marginTop: 6 }}>Minimum deposit is $5.00</div>
+                  {customAmount && parseFloat(customAmount) * 100 < 100 && (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red, marginTop: 6 }}>Minimum deposit is $1.00</div>
                   )}
                 </div>
 
                 <button
                   onClick={handleStartDeposit}
-                  disabled={depositCents < 500}
+                  disabled={depositCents < 100}
                   style={{
                     width: '100%', padding: '16px',
                     background: depositCents >= 500

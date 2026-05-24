@@ -24,8 +24,8 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const { amountCents } = body as { amountCents?: number };
-    if (!amountCents || amountCents < 500) {
-      return NextResponse.json({ error: 'Minimum deposit is $5 (500 cents)' }, { status: 400 });
+    if (!amountCents || amountCents < 100) {
+      return NextResponse.json({ error: 'Minimum deposit is $1 (100 cents)' }, { status: 400 });
     }
 
     const admin = createAdminClient();
