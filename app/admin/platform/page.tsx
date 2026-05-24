@@ -1136,8 +1136,13 @@ function AdminStats() {
                 <button
                   onClick={async () => {
                     if (!confirm('Mark as paid and complete this withdrawal?')) return
-                    await supabase.from('transactions').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', w.id)
+                    const { error } = await supabase
+                      .from('transactions')
+                      .update({ status: 'completed', completed_at: new Date().toISOString() })
+                      .eq('id', w.id)
+                    if (error) { alert('Error: ' + error.message); return }
                     setPendingWithdrawals(prev => prev.filter(x => x.id !== w.id))
+                    alert(`✓ Withdrawal ${w.id.slice(0, 8)}... marked as paid`)
                   }}
                   style={{ padding: '8px 16px', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.green }}>
                   ✓ Mark Paid
