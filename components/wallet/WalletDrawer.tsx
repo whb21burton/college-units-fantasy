@@ -64,7 +64,11 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     const cents = customAmount
       ? Math.round(parseFloat(customAmount) * 100)
       : depositAmount
-    if (!cents || cents < 100) return
+    console.log('[deposit] cents:', cents, 'customAmount:', customAmount, 'depositAmount:', depositAmount)
+    if (!cents || cents < 100) {
+      console.log('[deposit] blocked by minimum check')
+      return
+    }
     try {
       const res = await fetch('/api/wallet/deposit/create', {
         method: 'POST',
