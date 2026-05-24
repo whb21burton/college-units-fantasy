@@ -631,7 +631,7 @@ function LeaderboardTab({ contestId, userId, contest, isLocked, matchupResults }
               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: isMe ? C.gold : C.text, marginBottom: 2 }}>
                 {entry.entry_name} {isMe && <span style={{ fontSize: 9, color: C.gold }}>(You)</span>}
               </div>
-              {champion && (
+              {isLocked && champion && (
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
                   <span>🏆</span>
                   <span style={{ color: C.sub }}>{champion.name}</span>
@@ -1060,7 +1060,7 @@ export default function BracketPage() {
     const msg = chatInput.trim()
     setChatInput('')
     const { data: { user } } = await supabase.auth.getUser()
-    const displayName = user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? 'Player'
+    const displayName = activeEntry?.entry_name ?? user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? 'Player'
     await supabase.from('bracket_messages').insert({
       contest_id:   contestId,
       user_id:      userId,
@@ -1547,7 +1547,7 @@ export default function BracketPage() {
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
             Bracket Chat
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 8 }}>
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, paddingBottom: 8 }}>
             {chatMessages.length === 0 && (
               <div style={{ textAlign: 'center', padding: '40px 0', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
                 No messages yet. Start the conversation!
@@ -1555,19 +1555,34 @@ export default function BracketPage() {
             )}
             {chatMessages.map((m: any, i: number) => {
               const isMe = m.user_id === userId
+              const showName = !isMe && (i === 0 || chatMessages[i - 1]?.user_id !== m.user_id)
               return (
-                <div key={m.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 3 }}>
-                    {isMe ? `${m.display_name || 'You'} (You)` : (m.display_name || 'Player')}
-                  </div>
+                <div key={m.id || i} style={{
+                  display: 'flex',
+                  flexDirection: 'column' as const,
+                  alignItems: isMe ? 'flex-end' : 'flex-start',
+                  marginBottom: 2,
+                }}>
+                  {showName && (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 3, marginLeft: 12 }}>
+                      {m.display_name || 'Player'}
+                    </div>
+                  )}
                   <div style={{
-                    maxWidth: '80%', padding: '8px 11px',
-                    borderRadius: isMe ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-                    background: isMe ? 'rgba(245,166,35,.12)' : C.surf2,
-                    border: isMe ? '1px solid rgba(245,166,35,.22)' : `1px solid ${C.surf3}`,
-                    fontFamily: 'Inter,sans-serif', fontSize: 13, color: C.text, lineHeight: 1.4,
-                    wordBreak: 'break-word',
-                  }}>{m.message}</div>
+                    maxWidth: '75%',
+                    padding: '9px 13px',
+                    borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                    background: isMe ? C.gold : C.surf2,
+                    border: isMe ? 'none' : `1px solid ${C.surf3}`,
+                    fontFamily: 'Inter,sans-serif',
+                    fontSize: 14,
+                    color: isMe ? C.bg : C.text,
+                    lineHeight: 1.4,
+                    wordBreak: 'break-word' as const,
+                    animation: 'msgPop 0.15s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  }}>
+                    {m.message}
+                  </div>
                 </div>
               )
             })}
@@ -1713,6 +1728,10 @@ export default function BracketPage() {
           .bracket-mobile  { display: block !important; }
         }
         .bracket-section-tabs::-webkit-scrollbar { display: none; }
+        @keyframes msgPop {
+          from { transform: scale(0.85); opacity: 0; }
+          to   { transform: scale(1);    opacity: 1; }
+        }
       `}</style>
 
       {/* ── Add Entry confirmation modal ── */}

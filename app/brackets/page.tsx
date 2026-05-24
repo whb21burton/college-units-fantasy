@@ -385,61 +385,101 @@ export default function BracketsPage() {
               const totalEntries = contest.entry_count ?? 0
               const totalPrize   = (entryFee * totalEntries * 0.95).toFixed(2)
               const sportIcon    = contest.sport === 'football' ? '🏈' : contest.sport === 'basketball' ? '🏀' : '⚾'
+              const openModal    = () => { setSelectedContest(contest); setShowDetailModal(true); setEnterError(''); setTeamName('') }
+              const handleClick  = () => { if (alreadyEntered) { router.push('/my-leagues?contest=' + contest.id) } else { openModal() } }
               return (
                 <div key={contest.id}
-                  onClick={() => {
-                    if (alreadyEntered) { router.push('/my-leagues?contest=' + contest.id); return }
-                    setSelectedContest(contest); setShowDetailModal(true); setEnterError(''); setTeamName('')
+                  onClick={handleClick}
+                  style={{
+                    padding: isMobile ? '10px 12px' : '14px 16px',
+                    background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 6,
+                    cursor: 'pointer', transition: 'border-color .12s', opacity: alreadyEntered ? 0.75 : 1,
+                    ...(isMobile ? {} : { display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'center' }),
                   }}
-                  style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '14px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 6, alignItems: 'center', cursor: 'pointer', transition: 'border-color .12s', opacity: alreadyEntered ? 0.75 : 1 }}
                   onMouseEnter={e => (e.currentTarget.style.borderColor = alreadyEntered ? C.green : C.gold)}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = C.surf3)}
                 >
-                  <div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600 }}>{contest.name}</div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
-                      {sportIcon} {contest.sport.charAt(0).toUpperCase() + contest.sport.slice(1)} · Bracket
-                    </div>
-                    {contest.settings?.description && (
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, marginTop: 2 }}>{contest.settings.description}</div>
-                    )}
-                  </div>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: myCount > 0 ? C.gold : C.muted }}>
-                    {myCount} / {maxPerAcct === 999 ? '∞' : maxPerAcct}
-                  </div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
-                    {contest.entry_fee_cents === 0
-                      ? <span style={{ color: C.green, fontFamily: 'Anton,sans-serif', fontSize: 13 }}>FREE</span>
-                      : <span>🪙 ${entryFee.toFixed(2)}</span>}
-                  </div>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>
-                    ${totalPrize}
-                  </div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
-                    {totalEntries}{contest.max_entries ? `/${contest.max_entries}` : '/∞'}
-                  </div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, lineHeight: 1.3 }}>
-                    When first<br />game starts
-                  </div>
-                  <button
-                    onClick={e => { e.stopPropagation(); if (alreadyEntered) { router.push('/my-leagues?contest=' + contest.id); return } setSelectedContest(contest); setShowDetailModal(true); setEnterError(''); setTeamName('') }}
-                    style={{ padding: '8px 16px', background: alreadyEntered ? 'rgba(21,198,120,.1)' : C.gold, border: alreadyEntered ? '1px solid rgba(21,198,120,.3)' : 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: alreadyEntered ? C.green : C.bg, whiteSpace: 'nowrap' as const }}>
-                    {alreadyEntered ? '✓ Entered' : 'Enter'}
-                  </button>
-                  {isAdmin && (
+                  {isMobile ? (
+                    /* ── Mobile card layout ── */
                     <>
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>{contest.name}</div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
+                          {sportIcon} {contest.sport.charAt(0).toUpperCase() + contest.sport.slice(1)} · Bracket
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>Entry Fee</div>
+                          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: contest.entry_fee_cents === 0 ? C.green : C.text }}>
+                            {contest.entry_fee_cents === 0 ? 'FREE' : `$${entryFee.toFixed(2)}`}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>Total Prizes</div>
+                          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>${totalPrize}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>Entries</div>
+                          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text }}>{totalEntries}{contest.max_entries ? `/${contest.max_entries}` : ''}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>Your Entries</div>
+                          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: myCount > 0 ? C.gold : C.muted }}>{myCount}/{maxPerAcct === 999 ? '∞' : maxPerAcct}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={e => { e.stopPropagation(); handleClick() }}
+                          style={{ flex: 1, padding: '10px', background: alreadyEntered ? 'rgba(21,198,120,.1)' : C.gold, border: alreadyEntered ? '1px solid rgba(21,198,120,.3)' : 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: alreadyEntered ? C.green : C.bg }}>
+                          {alreadyEntered ? '✓ Entered' : 'Enter'}
+                        </button>
+                        {isAdmin && (
+                          <>
+                            <button onClick={e => { e.stopPropagation(); handleCompleteContest(contest.id, contest.name) }} style={{ padding: '8px 10px', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.green }} title="Complete & pay out">✓</button>
+                            <button onClick={e => { e.stopPropagation(); handleDeleteContest(contest.id, contest.name) }} style={{ padding: '8px 10px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.red }} title="Delete contest">🗑️</button>
+                          </>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    /* ── Desktop grid layout ── */
+                    <>
+                      <div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.text, fontWeight: 600 }}>{contest.name}</div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
+                          {sportIcon} {contest.sport.charAt(0).toUpperCase() + contest.sport.slice(1)} · Bracket
+                        </div>
+                        {contest.settings?.description && (
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, marginTop: 2 }}>{contest.settings.description}</div>
+                        )}
+                      </div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: myCount > 0 ? C.gold : C.muted }}>
+                        {myCount} / {maxPerAcct === 999 ? '∞' : maxPerAcct}
+                      </div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
+                        {contest.entry_fee_cents === 0
+                          ? <span style={{ color: C.green, fontFamily: 'Anton,sans-serif', fontSize: 13 }}>FREE</span>
+                          : <span>🪙 ${entryFee.toFixed(2)}</span>}
+                      </div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>${totalPrize}</div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
+                        {totalEntries}{contest.max_entries ? `/${contest.max_entries}` : '/∞'}
+                      </div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, lineHeight: 1.3 }}>
+                        When first<br />game starts
+                      </div>
                       <button
-                        onClick={e => { e.stopPropagation(); handleCompleteContest(contest.id, contest.name) }}
-                        style={{ padding: '8px 10px', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.green }}
-                        title="Complete & pay out">
-                        ✓
+                        onClick={e => { e.stopPropagation(); handleClick() }}
+                        style={{ padding: '8px 16px', background: alreadyEntered ? 'rgba(21,198,120,.1)' : C.gold, border: alreadyEntered ? '1px solid rgba(21,198,120,.3)' : 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: alreadyEntered ? C.green : C.bg, whiteSpace: 'nowrap' as const }}>
+                        {alreadyEntered ? '✓ Entered' : 'Enter'}
                       </button>
-                      <button
-                        onClick={e => { e.stopPropagation(); handleDeleteContest(contest.id, contest.name) }}
-                        style={{ padding: '8px 10px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.red }}
-                        title="Delete contest">
-                        🗑️
-                      </button>
+                      {isAdmin && (
+                        <>
+                          <button onClick={e => { e.stopPropagation(); handleCompleteContest(contest.id, contest.name) }} style={{ padding: '8px 10px', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.green }} title="Complete & pay out">✓</button>
+                          <button onClick={e => { e.stopPropagation(); handleDeleteContest(contest.id, contest.name) }} style={{ padding: '8px 10px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.red }} title="Delete contest">🗑️</button>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
