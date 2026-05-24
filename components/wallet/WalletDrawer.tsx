@@ -330,18 +330,18 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                   disabled={depositCents < 100}
                   style={{
                     width: '100%', padding: '16px',
-                    background: depositCents >= 500
+                    background: depositCents >= 100
                       ? `linear-gradient(135deg, ${C.gold} 0%, #f0c94a 100%)`
                       : C.surf3,
                     border: 'none', borderRadius: 10,
-                    cursor: depositCents >= 500 ? 'pointer' : 'not-allowed',
+                    cursor: depositCents >= 100 ? 'pointer' : 'not-allowed',
                     fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 2,
-                    color: depositCents >= 500 ? C.bg : C.muted,
+                    color: depositCents >= 100 ? C.bg : C.muted,
                     textTransform: 'uppercase' as const,
                     transition: 'all .15s',
-                    boxShadow: depositCents >= 500 ? '0 4px 20px rgba(245,166,35,.3)' : 'none',
+                    boxShadow: depositCents >= 100 ? '0 4px 20px rgba(245,166,35,.3)' : 'none',
                   }}>
-                  {depositCents >= 500 ? `Deposit $${(depositCents / 100).toFixed(2)}` : 'Select Amount'}
+                  {depositCents >= 100 ? `Deposit $${(depositCents / 100).toFixed(2)}` : 'Select Amount'}
                 </button>
 
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center' as const, marginTop: 12, letterSpacing: 0.5 }}>
