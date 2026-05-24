@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 
@@ -29,6 +29,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [depositSuccess, setDepositSuccess] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [pendingCents, setPendingCents] = useState(0)
 
   useEffect(() => {
     if (!isOpen) {
@@ -59,41 +60,6 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       setLoading(false)
     }
   }
-
-  async function handleStartDeposit() {
-    const cents = customAmount
-      ? Math.round(parseFloat(customAmount) * 100)
-      : depositAmount
-    console.log('[deposit] cents:', cents, 'customAmount:', customAmount, 'depositAmount:', depositAmount)
-    if (!cents || cents < 100) {
-      console.log('[deposit] blocked by minimum check')
-      return
-    }
-    try {
-      const res = await fetch('/api/wallet/deposit/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amountCents: cents }),
-      })
-      const data = await res.json()
-      if (res.ok && data.clientSecret) setClientSecret(data.clientSecret)
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  const depositCents = useMemo(() => {
-    if (customAmount && customAmount.trim() !== '') {
-      const parsed = parseFloat(customAmount)
-      if (!isNaN(parsed) && parsed > 0) return Math.round(parsed * 100)
-      return 0
-    }
-    return depositAmount ?? 0
-  }, [customAmount, depositAmount])
-
-  useEffect(() => {
-    console.log('[wallet] depositCents:', depositCents, 'customAmount:', customAmount, 'depositAmount:', depositAmount)
-  }, [depositCents, customAmount, depositAmount])
 
   if (!isOpen) return null
 
@@ -288,27 +254,26 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                 }
               }}>
                 <StripePaymentForm
-                  amountCents={depositCents}
+                  amountCents={pendingCents}
                   onSuccess={() => setDepositSuccess(true)}
                   onBack={() => setClientSecret(null)}
                 />
               </Elements>
             ) : (
               <div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 12 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const, marginBottom: 12 }}>
                   Select Amount
                 </div>
 
                 {/* Quick amounts */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 14 }}>
                   {[1000, 2500, 5000, 10000].map(cents => (
-                    <button key={cents} onClick={() => { setDepositAmount(cents); setCustomAmount('') }}
+                    <button key={cents}
+                      onClick={() => { setDepositAmount(cents); setCustomAmount('') }}
                       style={{
-                        padding: '16px 12px',
-                        border: `2px solid ${depositAmount === cents && !customAmount ? C.gold : C.surf3}`,
+                        padding: '16px 12px', border: `2px solid ${depositAmount === cents && !customAmount ? C.gold : C.surf3}`,
                         borderRadius: 10, cursor: 'pointer',
                         background: depositAmount === cents && !customAmount ? 'rgba(245,166,35,.08)' : C.surf,
-                        transition: 'all .15s',
                         textAlign: 'center' as const,
                       }}>
                       <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 24, color: depositAmount === cents && !customAmount ? C.gold : C.text, lineHeight: 1 }}>
@@ -320,52 +285,42 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
                 {/* Custom amount */}
                 <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' as const, marginBottom: 8 }}>
                     Custom Amount
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', background: C.surf, border: `2px solid ${customAmount ? C.gold : C.surf3}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color .15s' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', background: C.surf, border: `2px solid ${customAmount ? C.gold : C.surf3}`, borderRadius: 10, overflow: 'hidden' }}>
                     <span style={{ padding: '0 16px', fontFamily: 'Anton,sans-serif', fontSize: 22, color: customAmount ? C.gold : C.muted }}>$</span>
                     <input
-                      type="number" min={5} step="1"
+                      type="number" min={1} step={1}
                       placeholder="Enter amount"
                       value={customAmount}
                       onChange={e => { setCustomAmount(e.target.value); setDepositAmount(null) }}
                       style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: 'Anton,sans-serif', fontSize: 24, color: C.text, padding: '14px 0', width: '100%' }}
                     />
                   </div>
-                  {customAmount && parseFloat(customAmount) * 100 < 100 && (
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red, marginTop: 6 }}>Minimum deposit is $1.00</div>
-                  )}
                 </div>
 
-                <button
-                  onClick={() => {
-                    console.log('[wallet] button clicked, depositCents:', depositCents)
-                    if (depositCents >= 100) handleStartDeposit()
+                <DepositButton
+                  customAmount={customAmount}
+                  depositAmount={depositAmount}
+                  onDeposit={async (cents: number) => {
+                    setPendingCents(cents)
+                    try {
+                      const res = await fetch('/api/wallet/deposit/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ amountCents: cents }),
+                      })
+                      const data = await res.json()
+                      if (res.ok && data.clientSecret) setClientSecret(data.clientSecret)
+                      else alert(data.error ?? 'Failed to create deposit')
+                    } catch (e) {
+                      alert('Network error')
+                    }
                   }}
-                  style={{
-                    width: '100%',
-                    padding: '16px',
-                    background: depositCents >= 100
-                      ? `linear-gradient(135deg, ${C.gold} 0%, #f0c94a 100%)`
-                      : C.surf3,
-                    border: 'none',
-                    borderRadius: 10,
-                    cursor: depositCents >= 100 ? 'pointer' : 'not-allowed',
-                    fontFamily: 'Anton,sans-serif',
-                    fontSize: 16,
-                    letterSpacing: 2,
-                    color: depositCents >= 100 ? C.bg : C.muted,
-                    textTransform: 'uppercase' as const,
-                    transition: 'all .15s',
-                    boxShadow: depositCents >= 100 ? '0 4px 20px rgba(245,166,35,.3)' : 'none',
-                    opacity: 1,
-                    pointerEvents: 'auto' as const,
-                  }}>
-                  {depositCents >= 100 ? `Deposit $${(depositCents / 100).toFixed(2)}` : 'Select Amount'}
-                </button>
+                />
 
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center' as const, marginTop: 12, letterSpacing: 0.5 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center' as const, marginTop: 12 }}>
                   🔒 Secured by Stripe · Instant availability
                 </div>
               </div>
@@ -389,6 +344,44 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
         }
       `}</style>
     </>
+  )
+}
+
+/* ── Deposit Button ── */
+function DepositButton({ customAmount, depositAmount, onDeposit }: {
+  customAmount: string
+  depositAmount: number | null
+  onDeposit: (cents: number) => Promise<void>
+}) {
+  const [loading, setLoading] = useState(false)
+
+  const cents = customAmount && customAmount.trim() !== ''
+    ? Math.round(parseFloat(customAmount) * 100)
+    : (depositAmount ?? 0)
+
+  const valid = cents >= 100 && !isNaN(cents)
+
+  async function handleClick() {
+    if (!valid || loading) return
+    setLoading(true)
+    await onDeposit(cents)
+    setLoading(false)
+  }
+
+  return (
+    <button onClick={handleClick}
+      style={{
+        width: '100%', padding: '16px',
+        background: valid ? `linear-gradient(135deg, #f5a623 0%, #f0c94a 100%)` : '#1e2d47',
+        border: 'none', borderRadius: 10,
+        cursor: valid ? 'pointer' : 'not-allowed',
+        fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 2,
+        color: valid ? '#070a12' : '#3e5470',
+        textTransform: 'uppercase' as const,
+        boxShadow: valid ? '0 4px 20px rgba(245,166,35,.3)' : 'none',
+      }}>
+      {loading ? 'Loading…' : valid ? `Deposit $${(cents / 100).toFixed(2)}` : 'Select Amount'}
+    </button>
   )
 }
 
