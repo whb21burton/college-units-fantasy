@@ -61,14 +61,11 @@ export async function POST(req: Request) {
 
     // Create Stripe PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount:   amountCents,
-      currency: 'usd',
-      customer: stripeCustomerId,
-      metadata: { wallet_id: wallet.id, user_id: user.id },
-      payment_method_types: ['card', 'link'],
-      payment_method_options: {
-        card: { request_three_d_secure: 'automatic' },
-      },
+      amount:               amountCents,
+      currency:             'usd',
+      customer:             stripeCustomerId,
+      payment_method_types: ['card'],
+      metadata:             { user_id: user.id, wallet_id: wallet.id },
     });
 
     // Insert deposit row (non-fatal if it fails — PaymentIntent already created)
