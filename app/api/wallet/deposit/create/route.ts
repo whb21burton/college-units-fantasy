@@ -65,7 +65,7 @@ export async function POST(req: Request) {
       currency: 'usd',
       customer: stripeCustomerId,
       metadata: { wallet_id: wallet.id, user_id: user.id },
-      payment_method_types: ['card', 'link', 'venmo'],
+      payment_method_types: ['card', 'link'],
       payment_method_options: {
         card: { request_three_d_secure: 'automatic' },
       },
