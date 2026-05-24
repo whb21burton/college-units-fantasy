@@ -6,7 +6,7 @@ import { cookies } from 'next/headers'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL!
-const MIN_WITHDRAWAL = 500  // $5 minimum
+const MIN_WITHDRAWAL = 100  // $1 minimum
 
 export async function POST(req: Request) {
   try {

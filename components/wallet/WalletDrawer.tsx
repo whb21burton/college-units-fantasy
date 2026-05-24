@@ -437,7 +437,7 @@ function WithdrawTab({ balance, onSuccess }: { balance: number; onSuccess: () =>
   const [success, setSuccess] = useState('')
 
   const amountCents = Math.round(parseFloat(amount || '0') * 100)
-  const canWithdraw = amountCents >= 500 && amountCents <= balance && handle.trim().length > 0
+  const canWithdraw = amountCents >= 100 && amountCents <= balance && handle.trim().length > 0
 
   const METHODS = [
     { key: 'venmo',   label: 'Venmo',    icon: '🅿️', placeholder: '@username' },
@@ -503,7 +503,7 @@ function WithdrawTab({ balance, onSuccess }: { balance: number; onSuccess: () =>
 
       {/* Quick amounts */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
-        {[500, 1000, 2500, 5000].filter(c => c <= balance).map(cents => (
+        {[100, 500, 1000, 2500].filter(c => c <= balance).map(cents => (
           <button key={cents} onClick={() => setAmount((cents / 100).toFixed(2))}
             style={{ flex: 1, padding: '8px 4px', border: '1px solid #1e2d47', borderRadius: 6, cursor: 'pointer', background: amountCents === cents ? 'rgba(245,166,35,.1)' : '#131d30', fontFamily: 'Anton,sans-serif', fontSize: 12, color: amountCents === cents ? '#f5a623' : '#7a90aa', transition: 'all .15s' }}>
             ${(cents / 100).toFixed(0)}
@@ -555,7 +555,7 @@ function WithdrawTab({ balance, onSuccess }: { balance: number; onSuccess: () =>
 
       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#3e5470', textAlign: 'center' as const, marginTop: 12, lineHeight: 1.8 }}>
         Withdrawals processed within 1-3 business days<br/>
-        Minimum $5.00 · You'll receive a confirmation email
+        Minimum $1.00 · You'll receive a confirmation email
       </div>
     </div>
   )
