@@ -434,13 +434,59 @@ function ProgressBar({ n, total }: { n: number; total: number }) {
   )
 }
 
+/* ── Read-only bracket viewer ───────────────────────────── */
+function ReadOnlyBracket({ picks, matchupResults }: { picks: any; matchupResults: Record<string, any> }) {
+  if (!picks) return <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12, textAlign: 'center', padding: 40 }}>No picks saved</div>
+
+  const sections = [
+    { title: '🏟️ Regionals (3 pts each)', items: Object.entries(picks.regionals ?? {}).map(([region, team]: any) => ({ label: region.replace(/_/g, ' '), team, key: `regional_${region}` })) },
+    { title: '⚔️ Super Regionals (5 pts each)', items: Object.entries(picks.superRegionals ?? {}).map(([idx, team]: any) => ({ label: `Super Regional ${parseInt(idx) + 1}`, team, key: `super_${idx}` })) },
+    { title: '🏟️ CWS Semifinals (10 pts each)', items: Object.entries(picks.semifinals ?? {}).map(([idx, team]: any) => ({ label: `Semifinal ${parseInt(idx) + 1}`, team, key: `semi_${idx}` })) },
+    { title: '🏆 Champion (15 pts)', items: picks.champion ? [{ label: 'National Champion', team: picks.champion, key: 'champion' }] : [] },
+  ]
+
+  return (
+    <div style={{ maxWidth: 500, margin: '0 auto' }}>
+      {sections.map(section => section.items.length === 0 ? null : (
+        <div key={section.title} style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>
+            {section.title}
+          </div>
+          {section.items.map(({ label, team, key }) => {
+            const winner = matchupResults[key]?.winner
+            const result: PickResult = winner ? (team?.id === winner ? 'correct' : 'incorrect') : 'pending'
+            return (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', marginBottom: 4, background: C.surf, border: `1px solid ${result === 'correct' ? C.green : result === 'incorrect' ? C.red : C.surf3}`, borderRadius: 6 }}>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, textTransform: 'capitalize' }}>{label}</span>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: result === 'correct' ? C.green : result === 'incorrect' ? C.red : C.text }}>
+                  {team?.name ?? 'No pick'}
+                  {result === 'correct' && ' ✓'}
+                  {result === 'incorrect' && ' ✗'}
+                </span>
+              </div>
+            )
+          })}
+          {picks.seriesResult && section.title.includes('Champion') && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 6, marginTop: 4 }}>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Series Result</span>
+              <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.gold }}>{picks.seriesResult}</span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ── Leaderboard Tab ────────────────────────────────────── */
-function LeaderboardTab({ contestId, userId, contest, isLocked }: {
+function LeaderboardTab({ contestId, userId, contest, isLocked, matchupResults }: {
   contestId: string; userId: string | null; contest: any; isLocked: boolean
+  matchupResults: Record<string, any>
 }) {
   const supabase = createClientComponentClient()
   const [entries, setEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [viewingEntry, setViewingEntry] = useState<any>(null)
 
   const POINTS = { regional: 3, super_regional: 5, cws_semifinal: 10, championship: 15, series_bonus: 5 }
   const MAX_SCORE = (8 * POINTS.regional) + (4 * POINTS.super_regional) + (2 * POINTS.cws_semifinal) + POINTS.championship + POINTS.series_bonus
@@ -448,7 +494,7 @@ function LeaderboardTab({ contestId, userId, contest, isLocked }: {
   useEffect(() => {
     supabase
       .from('user_bracket_entries')
-      .select('id, entry_name, user_id, total_score, correct_picks, submitted_at, is_submitted')
+      .select('id, entry_name, user_id, total_score, correct_picks, submitted_at, is_submitted, bracket_data')
       .eq('contest_id', contestId)
       .eq('is_submitted', true)
       .order('total_score', { ascending: false })
@@ -557,29 +603,40 @@ function LeaderboardTab({ contestId, userId, contest, isLocked }: {
       </div>
 
       {entries.map((entry, i) => {
-        const rank    = i + 1
-        const isMe    = entry.user_id === userId
-        const inMoney = isInMoney(rank)
-        const prize   = getPayoutForRank(rank)
-        const score   = entry.total_score ?? 0
-        const pct     = MAX_SCORE > 0 ? Math.round((score / MAX_SCORE) * 100) : 0
+        const rank     = i + 1
+        const isMe     = entry.user_id === userId
+        const inMoney  = isInMoney(rank)
+        const prize    = getPayoutForRank(rank)
+        const score    = entry.total_score ?? 0
+        const pct      = MAX_SCORE > 0 ? Math.round((score / MAX_SCORE) * 100) : 0
+        const champion = entry.bracket_data?.champion
 
         return (
-          <div key={entry.id} style={{
-            display: 'grid', gridTemplateColumns: '32px 1fr 80px 90px', gap: 8,
-            padding: '12px 10px', marginBottom: 4,
-            background: isMe ? 'rgba(245,166,35,.08)' : C.surf,
-            border: `1px solid ${isMe ? C.gold : inMoney ? 'rgba(21,198,120,.2)' : C.surf3}`,
-            borderRadius: 8, alignItems: 'center',
-          }}>
+          <div key={entry.id}
+            onClick={() => setViewingEntry(entry)}
+            style={{
+              display: 'grid', gridTemplateColumns: '32px 1fr 80px 90px', gap: 8,
+              padding: '12px 10px', marginBottom: 4,
+              background: isMe ? 'rgba(245,166,35,.08)' : C.surf,
+              border: `1px solid ${isMe ? C.gold : inMoney ? 'rgba(21,198,120,.2)' : C.surf3}`,
+              borderRadius: 8, alignItems: 'center', cursor: 'pointer',
+            }}
+            title="Click to view bracket"
+          >
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, textAlign: 'center', color: rank === 1 ? C.gold : rank === 2 ? '#aaaaaa' : rank === 3 ? '#cd7f32' : C.muted }}>
               {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
             </div>
 
             <div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: isMe ? C.gold : C.text, marginBottom: 4 }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: isMe ? C.gold : C.text, marginBottom: 2 }}>
                 {entry.entry_name} {isMe && <span style={{ fontSize: 9, color: C.gold }}>(You)</span>}
               </div>
+              {champion && (
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                  <span>🏆</span>
+                  <span style={{ color: C.sub }}>{champion.name}</span>
+                </div>
+              )}
               <div style={{ height: 4, background: C.surf3, borderRadius: 2, overflow: 'hidden' }}>
                 <div style={{
                   height: '100%', width: `${pct}%`,
@@ -640,6 +697,26 @@ function LeaderboardTab({ contestId, userId, contest, isLocked }: {
           ))}
         </div>
       </div>
+
+      {viewingEntry && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column' as const }}>
+          <div style={{ background: C.surf, borderBottom: `1px solid ${C.surf3}`, padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 1 }}>
+                {viewingEntry.entry_name}
+              </div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                Score: {viewingEntry.total_score ?? 0} pts · Submitted {new Date(viewingEntry.submitted_at).toLocaleDateString()}
+              </div>
+            </div>
+            <button onClick={() => setViewingEntry(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 24 }}>✕</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+            <ReadOnlyBracket picks={viewingEntry.bracket_data} matchupResults={matchupResults} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -694,6 +771,13 @@ export default function BracketPage() {
       if (c.status === 'locked' || c.status === 'active' || c.status === 'completed') setIsLocked(true)
       if (c.locks_at && new Date(c.locks_at) < new Date()) setIsLocked(true)
     }
+
+    const { data: lockSetting } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'brackets_locked')
+      .single()
+    if (lockSetting?.value === 'true') setIsLocked(true)
 
     const { data: teamData } = await supabase
       .from('bracket_teams')
@@ -975,11 +1059,13 @@ export default function BracketPage() {
     if (!chatInput.trim() || !userId) return
     const msg = chatInput.trim()
     setChatInput('')
+    const { data: { user } } = await supabase.auth.getUser()
+    const displayName = user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? 'Player'
     await supabase.from('bracket_messages').insert({
       contest_id:   contestId,
       user_id:      userId,
       message:      msg,
-      display_name: 'You',
+      display_name: displayName,
     })
   }
 
@@ -1451,6 +1537,7 @@ export default function BracketPage() {
           userId={userId}
           contest={contest}
           isLocked={isLocked}
+          matchupResults={matchupResults}
         />
       )}
 
@@ -1471,7 +1558,7 @@ export default function BracketPage() {
               return (
                 <div key={m.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 3 }}>
-                    {isMe ? 'You' : (m.display_name || 'Player')}
+                    {isMe ? `${m.display_name || 'You'} (You)` : (m.display_name || 'Player')}
                   </div>
                   <div style={{
                     maxWidth: '80%', padding: '8px 11px',
@@ -1489,11 +1576,14 @@ export default function BracketPage() {
           <div style={{ borderTop: `1px solid ${C.surf3}`, paddingTop: 10, paddingBottom: 16, display: 'flex', gap: 8, flexShrink: 0 }}>
             <input
               type="text"
-              placeholder="Message..."
+              placeholder="Message... 😊"
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBracketChat() } }}
-              style={{ flex: 1, padding: '9px 11px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Inter,sans-serif', fontSize: 13, outline: 'none' }}
+              inputMode="text"
+              autoComplete="off"
+              autoCorrect="on"
+              style={{ flex: 1, padding: '9px 11px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Inter,sans-serif', fontSize: '16px', outline: 'none' }}
             />
             <button
               onClick={sendBracketChat}

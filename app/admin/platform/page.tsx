@@ -96,6 +96,7 @@ function PageControls() {
     'bracket_sport_football_locked',
     'bracket_sport_basketball_locked',
     'bracket_sport_baseball_locked',
+    'brackets_locked',
   ]
 
   useEffect(() => {
@@ -196,6 +197,10 @@ function PageControls() {
         <LockRow lockKey="bracket_sport_football_locked" label="Football Bracket" icon="🏈" indent parentLocked={bracketContestsLocked} />
         <LockRow lockKey="bracket_sport_basketball_locked" label="Basketball Bracket" icon="🏀" indent parentLocked={bracketContestsLocked} />
         <LockRow lockKey="bracket_sport_baseball_locked" label="Baseball Bracket" icon="⚾" indent parentLocked={bracketContestsLocked} />
+
+        <div style={{ height: 1, background: C.surf3, margin: '8px 0' }} />
+
+        <LockRow lockKey="brackets_locked" label="Lock ALL Bracket Submissions" icon="🔒" />
       </div>
     </div>
   )
@@ -799,6 +804,44 @@ function ESPNSyncPanel() {
   )
 }
 
+function BracketLockControl() {
+  const supabase = createClientComponentClient()
+  const [locked, setLocked] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    supabase.from('platform_settings').select('value').eq('key', 'brackets_locked').single()
+      .then(({ data }) => setLocked(data?.value === 'true'))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function toggle() {
+    setSaving(true)
+    const newVal = !locked
+    await supabase.from('platform_settings')
+      .upsert({ key: 'brackets_locked', value: newVal.toString(), updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    setLocked(newVal)
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ background: C.surf, border: `2px solid ${locked ? '#f03a5a' : '#1e2d47'}`, borderRadius: 12, padding: 20, marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div>
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: locked ? '#f03a5a' : C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
+          {locked ? '🔒 All Brackets Locked' : '🔓 Brackets Open'}
+        </div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
+          {locked ? 'No submissions or edits allowed. Leaderboard shows all picks.' : 'Users can submit and edit brackets freely.'}
+        </div>
+      </div>
+      <button onClick={toggle} disabled={saving}
+        style={{ padding: '10px 24px', background: locked ? 'rgba(21,198,120,.1)' : 'rgba(240,58,90,.1)', border: `1px solid ${locked ? '#15c678' : '#f03a5a'}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, color: locked ? '#15c678' : '#f03a5a', textTransform: 'uppercase' as const }}>
+        {saving ? '...' : locked ? 'Unlock' : 'Lock Brackets'}
+      </button>
+    </div>
+  )
+}
+
 function BracketTeamsEditor() {
   const supabase = createClientComponentClient()
   const [teams, setTeams] = useState<any[]>([])
@@ -1285,6 +1328,7 @@ export default function PlatformManagerPage() {
         <SimulationRunner />
         <AdminStats />
         <ESPNSyncPanel />
+        <BracketLockControl />
         <BracketTeamsEditor />
       </div>
     </div>
