@@ -123,11 +123,7 @@ export async function POST(req: Request) {
       transactionId: transaction!.id,
     });
   } catch (err: any) {
-    console.error('[deposit/create] UNHANDLED:', err?.message, err?.code, err?.stack?.slice(0, 200));
-    return NextResponse.json({
-      error:   'deposit failed',
-      message: err?.message,
-      code:    err?.code,
-    }, { status: 500 });
+    console.error('[deposit/create] Stripe error:', err?.message, err?.type, err?.code);
+    return NextResponse.json({ error: err?.message ?? 'Stripe error' }, { status: 500 });
   }
 }
