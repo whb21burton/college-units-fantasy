@@ -71,21 +71,18 @@ export async function POST(req: Request) {
       },
     });
 
-    // Insert deposit row
-    const { data: deposit, error: depositErr } = await admin
+    // Insert deposit row (non-fatal if it fails — PaymentIntent already created)
+    const { error: depositError } = await admin
       .from('deposits')
       .insert({
         user_id:                  user.id,
         amount_cents:             amountCents,
-        status:                   'pending',
         stripe_payment_intent_id: paymentIntent.id,
-      })
-      .select('id')
-      .single();
+        status:                   'pending',
+      });
 
-    if (depositErr) {
-      console.error('[deposit/create] deposits insert failed:', depositErr.message, depositErr.code);
-      return NextResponse.json({ error: 'deposits insert failed', message: depositErr.message, code: depositErr.code }, { status: 500 });
+    if (depositError) {
+      console.error('[deposit/create] deposits insert error:', depositError.message, depositError.code);
     }
 
     // Insert transaction row
@@ -110,7 +107,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       clientSecret:  paymentIntent.client_secret,
-      depositId:     deposit!.id,
       transactionId: transaction!.id,
     });
   } catch (err: any) {
