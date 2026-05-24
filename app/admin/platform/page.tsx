@@ -980,10 +980,21 @@ function BracketTeamsEditor() {
 
 function AdminStats() {
   const supabase = createClientComponentClient()
-  const [completedStats, setCompletedStats] = useState<any[]>([])
-  const [activeContests, setActiveContests] = useState<any[]>([])
-  const [loading,        setLoading]        = useState(true)
-  const [tab,            setTab]            = useState<'active' | 'completed'>('active')
+  const [completedStats,     setCompletedStats]     = useState<any[]>([])
+  const [activeContests,     setActiveContests]     = useState<any[]>([])
+  const [pendingWithdrawals, setPendingWithdrawals] = useState<any[]>([])
+  const [loading,            setLoading]            = useState(true)
+  const [tab,                setTab]                = useState<'active' | 'completed' | 'withdrawals'>('active')
+
+  useEffect(() => {
+    supabase.from('transactions')
+      .select('id, user_id, amount_cents, description, created_at')
+      .eq('type', 'withdrawal')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
+      .then(({ data }) => setPendingWithdrawals(data ?? []))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -1047,9 +1058,9 @@ function AdminStats() {
       </div>
 
       <div style={{ display: 'flex', borderBottom: `1px solid ${C.surf3}`, marginBottom: 16 }}>
-        {([['active', 'Active Contests'], ['completed', 'Completed']] as [string, string][]).map(([key, label]) => (
-          <button key={key} onClick={() => setTab(key as 'active' | 'completed')}
-            style={{ padding: '8px 16px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === key ? C.gold : 'transparent'}`, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: tab === key ? C.gold : C.muted }}>
+        {([['active', 'Active Contests'], ['completed', 'Completed'], ['withdrawals', `Withdrawals${pendingWithdrawals.length > 0 ? ` (${pendingWithdrawals.length})` : ''}`]] as [string, string][]).map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key as 'active' | 'completed' | 'withdrawals')}
+            style={{ padding: '8px 16px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === key ? C.gold : 'transparent'}`, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: tab === key ? C.gold : key === 'withdrawals' && pendingWithdrawals.length > 0 ? C.red : C.muted }}>
             {label}
           </button>
         ))}
@@ -1089,7 +1100,7 @@ function AdminStats() {
             ))}
           </div>
         )
-      ) : (
+      ) : tab === 'completed' ? (
         completedStats.length === 0 ? (
           <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center' as const, padding: 20 }}>No completed contests yet</div>
         ) : (
@@ -1106,6 +1117,31 @@ function AdminStats() {
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold }}>${(s.rake_cents / 100).toFixed(2)}</div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>rake earned</div>
                 </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+        pendingWithdrawals.length === 0 ? (
+          <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center' as const, padding: 20 }}>No pending withdrawals</div>
+        ) : (
+          <div>
+            {pendingWithdrawals.map(w => (
+              <div key={w.id} style={{ background: C.surf2, borderRadius: 8, padding: '12px 16px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold }}>${(w.amount_cents / 100).toFixed(2)}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>{w.description}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{new Date(w.created_at).toLocaleDateString()}</div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!confirm('Mark as paid and complete this withdrawal?')) return
+                    await supabase.from('transactions').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', w.id)
+                    setPendingWithdrawals(prev => prev.filter(x => x.id !== w.id))
+                  }}
+                  style={{ padding: '8px 16px', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.green }}>
+                  ✓ Mark Paid
+                </button>
               </div>
             ))}
           </div>
