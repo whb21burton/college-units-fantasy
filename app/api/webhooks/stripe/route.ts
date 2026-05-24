@@ -43,49 +43,81 @@ export async function POST(req: Request) {
 
   try {
     if (event.type === 'payment_intent.succeeded') {
-      const pi = event.data.object as Stripe.PaymentIntent;
-      const userId = pi.metadata?.user_id;
+      const pi       = event.data.object as Stripe.PaymentIntent;
+      const userId   = pi.metadata?.user_id;
+      const walletId = pi.metadata?.wallet_id;
 
-      const { data: deposit } = await admin
-        .from('deposits')
-        .select('id, amount_cents')
-        .eq('stripe_payment_intent_id', pi.id)
-        .single();
+      if (!userId || !walletId) {
+        console.error('[webhook] payment_intent.succeeded missing metadata:', pi.id);
+      } else {
+        // Check if already processed
+        const { data: deposit } = await admin
+          .from('deposits')
+          .select('id, amount_cents, status')
+          .eq('stripe_payment_intent_id', pi.id)
+          .maybeSingle();
 
-      if (deposit && userId) {
-        const { data: wallet } = await admin
-          .from('wallets')
-          .select('id')
-          .eq('user_id', userId)
-          .single();
+        if (deposit?.status === 'succeeded') {
+          console.log('[webhook] deposit already succeeded, skipping:', pi.id);
+        } else {
+          const amountCents = deposit?.amount_cents ?? pi.amount;
 
-        if (wallet) {
-          const [{ data: availAcct }, { data: clearingAcct }] = await Promise.all([
-            admin.from('ledger_accounts').select('id').eq('wallet_id', wallet.id).eq('type', 'user_available').single(),
-            admin.from('ledger_accounts').select('id').eq('name', 'stripe_clearing').single(),
-          ]);
+          // Get user_available ledger account for this wallet
+          const { data: availAcct } = await admin
+            .from('ledger_accounts')
+            .select('id')
+            .eq('wallet_id', walletId)
+            .eq('type', 'user_available')
+            .single();
 
-          if (availAcct && clearingAcct) {
-            const { data: tx } = await admin
+          if (availAcct) {
+            // Find or create transaction
+            let { data: tx } = await admin
               .from('transactions')
               .select('id')
               .eq('idempotency_key', `deposit_${pi.id}`)
-              .single();
+              .maybeSingle();
 
-            await admin.from('ledger_entries').insert([
-              { transaction_id: tx?.id, ledger_account_id: clearingAcct.id, amount_cents: -deposit.amount_cents },
-              { transaction_id: tx?.id, ledger_account_id: availAcct.id,    amount_cents:  deposit.amount_cents },
-            ]);
+            if (!tx) {
+              const { data: newTx } = await admin
+                .from('transactions')
+                .insert({
+                  user_id:                  userId,
+                  type:                     'deposit',
+                  status:                   'pending',
+                  amount_cents:             amountCents,
+                  stripe_payment_intent_id: pi.id,
+                  description:              `Deposit $${(amountCents / 100).toFixed(2)}`,
+                  idempotency_key:          `deposit_${pi.id}`,
+                })
+                .select('id')
+                .single();
+              tx = newTx;
+            }
+
+            // Credit available balance
+            await admin.from('ledger_entries').insert({
+              transaction_id:   tx?.id,
+              ledger_account_id: availAcct.id,
+              amount_cents:     amountCents,
+            });
+
+            console.log('[webhook] deposit credited:', amountCents, 'cents to wallet:', walletId);
+          } else {
+            console.error('[webhook] user_available ledger account not found for wallet:', walletId);
           }
+
+          // Update deposit and transaction status
+          if (deposit) {
+            await admin.from('deposits')
+              .update({ status: 'succeeded', completed_at: new Date().toISOString() })
+              .eq('id', deposit.id);
+          }
+
+          await admin.from('transactions')
+            .update({ status: 'completed', completed_at: new Date().toISOString() })
+            .eq('idempotency_key', `deposit_${pi.id}`);
         }
-
-        await admin.from('deposits')
-          .update({ status: 'succeeded', completed_at: new Date().toISOString() })
-          .eq('id', deposit.id);
-
-        await admin.from('transactions')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
-          .eq('idempotency_key', `deposit_${pi.id}`);
       }
     }
 
