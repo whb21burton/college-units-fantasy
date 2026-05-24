@@ -325,24 +325,6 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                   )}
                 </div>
 
-                {/* Payment methods info */}
-                <div style={{ padding: '12px 16px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 20 }}>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>Accepted Methods</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                    {[
-                      { label: '💳 Card', desc: 'Visa, MC, Amex' },
-                      { label: ' Apple Pay', desc: 'Safari only' },
-                      { label: '🅿️ Venmo', desc: 'Mobile' },
-                      { label: '🏦 Bank', desc: 'ACH' },
-                    ].map(m => (
-                      <div key={m.label} style={{ padding: '6px 10px', background: C.surf2, borderRadius: 6, textAlign: 'center' as const }}>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.text }}>{m.label}</div>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted }}>{m.desc}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
                 <button
                   onClick={handleStartDeposit}
                   disabled={depositCents < 500}
