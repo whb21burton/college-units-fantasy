@@ -339,20 +339,28 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                 </div>
 
                 <button
-                  onClick={depositCents >= 100 ? handleStartDeposit : undefined}
-                  disabled={depositCents < 100}
+                  onClick={() => {
+                    console.log('[wallet] button clicked, depositCents:', depositCents)
+                    if (depositCents >= 100) handleStartDeposit()
+                  }}
                   style={{
-                    width: '100%', padding: '16px',
+                    width: '100%',
+                    padding: '16px',
                     background: depositCents >= 100
                       ? `linear-gradient(135deg, ${C.gold} 0%, #f0c94a 100%)`
                       : C.surf3,
-                    border: 'none', borderRadius: 10,
+                    border: 'none',
+                    borderRadius: 10,
                     cursor: depositCents >= 100 ? 'pointer' : 'not-allowed',
-                    fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 2,
+                    fontFamily: 'Anton,sans-serif',
+                    fontSize: 16,
+                    letterSpacing: 2,
                     color: depositCents >= 100 ? C.bg : C.muted,
                     textTransform: 'uppercase' as const,
                     transition: 'all .15s',
                     boxShadow: depositCents >= 100 ? '0 4px 20px rgba(245,166,35,.3)' : 'none',
+                    opacity: 1,
+                    pointerEvents: 'auto' as const,
                   }}>
                   {depositCents >= 100 ? `Deposit $${(depositCents / 100).toFixed(2)}` : 'Select Amount'}
                 </button>
