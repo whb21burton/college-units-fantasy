@@ -9,15 +9,6 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    // Temp debug — remove after fixing
-    console.log('[deposit/create] ENV CHECK:', {
-      hasServiceKey:    !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      serviceKeyPrefix: process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 20),
-      hasStripeKey:     !!process.env.STRIPE_SECRET_KEY,
-      stripeKeyPrefix:  process.env.STRIPE_SECRET_KEY?.slice(0, 10),
-      hasSupabaseUrl:   !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-    });
-
     const supabase = createRouteHandlerClient({ cookies });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -74,7 +65,7 @@ export async function POST(req: Request) {
       currency: 'usd',
       customer: stripeCustomerId,
       metadata: { wallet_id: wallet.id, user_id: user.id },
-      payment_method_types: ['card', 'link', 'us_bank_account'],
+      payment_method_types: ['card', 'link', 'venmo'],
       payment_method_options: {
         card: { request_three_d_secure: 'automatic' },
       },
