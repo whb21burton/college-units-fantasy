@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 
@@ -82,9 +82,18 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     }
   }
 
-  const depositCents = customAmount
-    ? Math.round(parseFloat(customAmount) * 100)
-    : (depositAmount ?? 0)
+  const depositCents = useMemo(() => {
+    if (customAmount && customAmount.trim() !== '') {
+      const parsed = parseFloat(customAmount)
+      if (!isNaN(parsed) && parsed > 0) return Math.round(parsed * 100)
+      return 0
+    }
+    return depositAmount ?? 0
+  }, [customAmount, depositAmount])
+
+  useEffect(() => {
+    console.log('[wallet] depositCents:', depositCents, 'customAmount:', customAmount, 'depositAmount:', depositAmount)
+  }, [depositCents, customAmount, depositAmount])
 
   if (!isOpen) return null
 
@@ -330,7 +339,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                 </div>
 
                 <button
-                  onClick={handleStartDeposit}
+                  onClick={depositCents >= 100 ? handleStartDeposit : undefined}
                   disabled={depositCents < 100}
                   style={{
                     width: '100%', padding: '16px',
