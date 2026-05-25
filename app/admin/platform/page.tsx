@@ -1148,7 +1148,7 @@ function AdminStats() {
                         .update({ status: 'completed', completed_at: new Date().toISOString() })
                         .eq('id', w.id)
                       if (error) { alert('Error: ' + error.message); return }
-                      setPaidIds(prev => new Set([...prev, w.id]))
+                      setPaidIds(prev => new Set(Array.from(prev).concat(w.id)))
                     }}
                     style={{
                       padding: '10px 20px',
