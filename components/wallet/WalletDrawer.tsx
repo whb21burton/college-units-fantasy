@@ -258,7 +258,12 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
               }}>
                 <StripePaymentForm
                   amountCents={pendingCents}
-                  onSuccess={() => { refresh(); setDepositSuccess(true) }}
+                  onSuccess={() => {
+                    setDepositSuccess(true)
+                    refresh()
+                    setTimeout(refresh, 3000)
+                    setTimeout(refresh, 8000)
+                  }}
                   onBack={() => setClientSecret(null)}
                 />
               </Elements>
