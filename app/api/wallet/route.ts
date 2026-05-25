@@ -64,6 +64,7 @@ export async function GET() {
     .from('transactions')
     .select('id, type, status, amount_cents, description, created_at, completed_at')
     .eq('user_id', user.id)
+    .eq('status', 'completed')
     .order('created_at', { ascending: false })
     .limit(50);
 

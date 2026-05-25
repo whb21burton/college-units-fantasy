@@ -72,7 +72,8 @@ export async function POST(req: Request) {
             .eq('status', 'pending');
 
           // Atomic credit via postgres function — creates ledger accounts if missing, idempotent
-          const { error: rpcError } = await admin.rpc('credit_wallet', {
+          console.log('[webhook] processing payment_intent.succeeded', pi.id, 'userId:', userId, 'amount:', amountCents);
+          const { error: creditError } = await admin.rpc('credit_wallet', {
             p_user_id:         userId,
             p_amount_cents:    amountCents,
             p_type:            'deposit',
@@ -80,10 +81,10 @@ export async function POST(req: Request) {
             p_idempotency_key: `deposit_${pi.id}`,
           });
 
-          if (rpcError) {
-            console.error('[webhook] credit_wallet error:', rpcError.message);
+          if (creditError) {
+            console.error('[webhook] credit_wallet failed:', creditError.message, creditError.code);
           } else {
-            console.log('[webhook] deposit credited:', amountCents, 'cents to wallet:', walletId);
+            console.log('[webhook] credit_wallet SUCCESS — credited', amountCents, 'to wallet', walletId);
           }
 
           // Update deposit and transaction status
