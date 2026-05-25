@@ -833,22 +833,22 @@ function BracketAdminPanel() {
   }, [])
 
   async function loadResults() {
-    const { data } = await supabase.from('tournament_matchups').select('*').eq('contest_id', 'global')
-    if (!data) return
-    const regWinners: Record<string, string> = {}
-    const srW: Record<number, string> = {}
-    for (const m of data) {
-      if (m.round === 'regional' && m.winner) regWinners[m.regional_name] = m.winner.name
-      if (m.round === 'super_regional' && m.winner) srW[m.matchup_index] = m.winner.name
-      if (m.round === 'omaha_a' && m.winner) setOmahaAWinner(m.winner.name)
-      if (m.round === 'omaha_b' && m.winner) setOmahaBWinner(m.winner.name)
-      if (m.round === 'national_championship' && m.winner) {
-        setChampion(m.winner.name)
-        if (m.championship_series_result) setSeriesResult(m.championship_series_result)
-      }
-    }
-    setRegionalWinners(regWinners)
-    setSrWinners(srW)
+    const { data } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'bracket_results_2026')
+      .single()
+
+    if (!data?.value) return
+    try {
+      const r = JSON.parse(data.value)
+      setRegionalWinners(r.regionalWinners ?? {})
+      setSrWinners(r.srWinners ?? {})
+      setOmahaAWinner(r.omahaAWinner ?? '')
+      setOmahaBWinner(r.omahaBWinner ?? '')
+      setChampion(r.champion ?? '')
+      setSeriesResult(r.seriesResult ?? '')
+    } catch {}
   }
 
   async function saveResults() {

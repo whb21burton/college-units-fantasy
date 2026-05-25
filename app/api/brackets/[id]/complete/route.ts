@@ -21,7 +21,7 @@ function getAdaptedStructure(structure: string, n: number): string {
 const POINTS = {
   regional:       3,
   super_regional: 5,
-  cws_semifinal:  10,
+  omaha:          10,
   championship:   15,
   series_bonus:   5,
 }
@@ -30,11 +30,27 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const contestId = params.id
-  const supabase = createRouteHandlerClient({ cookies })
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || user.id !== ADMIN_ID) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+
+  // Auth: admin user session OR admin key header (for server-side calls from save-bracket-results)
+  const adminKey = req.headers.get('x-admin-key')
+  const isAdminKey = adminKey && adminKey === process.env.CRON_SECRET
+  if (!isAdminKey) {
+    const supabase = createRouteHandlerClient({ cookies })
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || user.id !== ADMIN_ID) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
   }
+
+  const body = await req.json().catch(() => ({}))
+  const results = body.results as {
+    regionalWinners: Record<string, string>
+    srWinners: Record<string, string>
+    omahaAWinner: string
+    omahaBWinner: string
+    champion: string
+    seriesResult: string
+  } | undefined
 
   const admin = createAdminClient()
 
@@ -53,47 +69,35 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .eq('contest_id', contestId)
     .eq('is_submitted', true)
 
-  // Fetch matchups to score picks (may not exist yet — scoring gracefully falls back to stored total_score)
-  const { data: matchups } = await admin
-    .from('tournament_matchups')
-    .select('*')
-    .eq('contest_id', contestId)
-
-  // Score each entry using bracket_data picks vs matchup results
+  // Score each entry using bracket_data picks vs results from platform_settings
   const scored = (rawEntries ?? []).map(entry => {
     const picks = entry.bracket_data ?? {}
     let score = 0
 
-    if (matchups && matchups.length > 0) {
-      for (const matchup of matchups) {
-        if (!matchup.winner) continue
-
-        if (['regional_winners', 'regional_losers', 'regional_final'].includes(matchup.round)) {
-          const regionPick = picks.regionals?.[matchup.region]
-          if (regionPick?.id === matchup.winner?.id) score += POINTS.regional
-        }
-
-        if (matchup.round === 'super_regional') {
-          const superPick = picks.superRegionals?.[matchup.matchup_index]
-          if (superPick?.id === matchup.winner?.id) score += POINTS.super_regional
-        }
-
-        if (matchup.round === 'championship' && matchup.matchup_index < 2) {
-          const semiPick = picks.semifinals?.[matchup.matchup_index]
-          if (semiPick?.id === matchup.winner?.id) score += POINTS.cws_semifinal
-        }
-
-        if (matchup.round === 'championship' && matchup.matchup_index === 2) {
-          if (picks.champion?.id === matchup.winner?.id) {
-            score += POINTS.championship
-            if (picks.seriesResult && picks.seriesResult === matchup.series_result) {
-              score += POINTS.series_bonus
-            }
-          }
+    if (results) {
+      // Regional picks
+      for (const [regionKey, winnerName] of Object.entries(results.regionalWinners ?? {})) {
+        if (!winnerName) continue
+        const pick = picks.regionals?.[regionKey]
+        if (pick && pick.name === winnerName) score += POINTS.regional
+      }
+      // Super regional picks
+      for (const [idxStr, winnerName] of Object.entries(results.srWinners ?? {})) {
+        if (!winnerName) continue
+        const pick = picks.superRegionals?.[parseInt(idxStr)]
+        if (pick && pick.name === winnerName) score += POINTS.super_regional
+      }
+      // Omaha bracket picks
+      if (results.omahaAWinner && picks.omahaA?.name === results.omahaAWinner) score += POINTS.omaha
+      if (results.omahaBWinner && picks.omahaB?.name === results.omahaBWinner) score += POINTS.omaha
+      // Champion
+      if (results.champion && picks.champion?.name === results.champion) {
+        score += POINTS.championship
+        if (results.seriesResult && picks.seriesResult === results.seriesResult) {
+          score += POINTS.series_bonus
         }
       }
     } else {
-      // No matchup data yet — fall back to stored total_score
       score = entry.total_score ?? 0
     }
 

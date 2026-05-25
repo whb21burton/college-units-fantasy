@@ -478,8 +478,8 @@ function LeaderboardTab({ contestId, userId, contest, isLocked, matchupResults }
   const [loading, setLoading] = useState(true)
   const [viewingEntry, setViewingEntry] = useState<any>(null)
 
-  const POINTS = { regional: 3, super_regional: 5, cws_semifinal: 10, championship: 15, series_bonus: 5 }
-  const MAX_SCORE = (16 * POINTS.regional) + (8 * POINTS.super_regional) + (2 * POINTS.cws_semifinal) + POINTS.championship + POINTS.series_bonus
+  const POINTS = { regional: 3, super_regional: 5, omaha: 10, championship: 15, series_bonus: 5 }
+  const MAX_SCORE = (16 * POINTS.regional) + (8 * POINTS.super_regional) + (2 * POINTS.omaha) + POINTS.championship + POINTS.series_bonus
 
   useEffect(() => {
     supabase
@@ -906,29 +906,33 @@ export default function BracketPage() {
   useEffect(() => {
     if (!isLocked || !contestId) return
     supabase
-      .from('tournament_matchups')
-      .select('round, regional_name, matchup_index, winner, championship_series_result')
-      .eq('contest_id', contestId)
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'bracket_results_2026')
+      .single()
       .then(({ data }) => {
-        if (!data) return
-        const results: Record<string, any> = {}
-        for (const m of data) {
-          if (!m.winner) continue
-          if (m.round === 'regional') {
-            const key = `regional_${(m.regional_name ?? '').toLowerCase().replace(/[\s-]+/g, '_')}`
-            results[key] = { winner: m.winner }
-          } else if (m.round === 'super_regional') {
-            results[`super_${m.matchup_index}`] = { winner: m.winner }
-          } else if (m.round === 'omaha_a') {
-            results['omaha_a'] = { winner: m.winner }
-          } else if (m.round === 'omaha_b') {
-            results['omaha_b'] = { winner: m.winner }
-          } else if (m.round === 'national_championship') {
-            results['champion'] = { winner: m.winner }
-            if (m.championship_series_result) results['series_result'] = { result: m.championship_series_result }
+        if (!data?.value) return
+        try {
+          const r = JSON.parse(data.value)
+          const map: Record<string, any> = {}
+
+          for (const [region, winner] of Object.entries(r.regionalWinners ?? {})) {
+            if (winner) map[`regional_${region}`] = { winner: { id: (winner as string).toLowerCase().replace(/\s+/g, '_'), name: winner } }
           }
+          for (const [idx, winner] of Object.entries(r.srWinners ?? {})) {
+            if (winner) map[`super_${idx}`] = { winner: { id: (winner as string).toLowerCase().replace(/\s+/g, '_'), name: winner } }
+          }
+          if (r.omahaAWinner) map['omaha_a'] = { winner: { id: r.omahaAWinner.toLowerCase().replace(/\s+/g, '_'), name: r.omahaAWinner } }
+          if (r.omahaBWinner) map['omaha_b'] = { winner: { id: r.omahaBWinner.toLowerCase().replace(/\s+/g, '_'), name: r.omahaBWinner } }
+          if (r.champion) {
+            map['champion'] = { winner: { id: r.champion.toLowerCase().replace(/\s+/g, '_'), name: r.champion } }
+            map['series_result'] = { result: r.seriesResult }
+          }
+
+          setMatchupResults(map)
+        } catch (e) {
+          console.error('Failed to parse bracket results:', e)
         }
-        setMatchupResults(results)
       })
   }, [contestId, isLocked])
 

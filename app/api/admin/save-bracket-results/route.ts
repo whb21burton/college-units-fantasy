@@ -13,62 +13,48 @@ export async function POST(req: Request) {
   const { regionalWinners, srWinners, omahaAWinner, omahaBWinner, champion, seriesResult } = await req.json()
   const admin = createAdminClient()
 
-  const upserts: any[] = []
-
-  for (const [region, winner] of Object.entries(regionalWinners as Record<string, string>)) {
-    if (!winner) continue
-    upserts.push({
-      contest_id: 'global',
-      round: 'regional',
-      regional_name: region,
-      matchup_index: 0,
-      winner: { name: winner, id: winner.toLowerCase().replace(/\s+/g, '_') },
-      game_status: 'final',
-      updated_at: new Date().toISOString(),
-    })
+  const results = {
+    regionalWinners,
+    srWinners,
+    omahaAWinner,
+    omahaBWinner,
+    champion,
+    seriesResult,
+    updatedAt: new Date().toISOString(),
   }
-
-  for (const [idx, winner] of Object.entries(srWinners as Record<string, string>)) {
-    if (!winner) continue
-    upserts.push({
-      contest_id: 'global',
-      round: 'super_regional',
-      regional_name: null,
-      matchup_index: parseInt(idx),
-      winner: { name: winner, id: winner.toLowerCase().replace(/\s+/g, '_') },
-      game_status: 'final',
-      updated_at: new Date().toISOString(),
-    })
-  }
-
-  if (omahaAWinner) upserts.push({
-    contest_id: 'global', round: 'omaha_a', matchup_index: 0,
-    winner: { name: omahaAWinner, id: omahaAWinner.toLowerCase().replace(/\s+/g, '_') },
-    game_status: 'final', updated_at: new Date().toISOString(),
-  })
-
-  if (omahaBWinner) upserts.push({
-    contest_id: 'global', round: 'omaha_b', matchup_index: 0,
-    winner: { name: omahaBWinner, id: omahaBWinner.toLowerCase().replace(/\s+/g, '_') },
-    game_status: 'final', updated_at: new Date().toISOString(),
-  })
-
-  if (champion) upserts.push({
-    contest_id: 'global',
-    round: 'national_championship',
-    matchup_index: 0,
-    winner: { name: champion, id: champion.toLowerCase().replace(/\s+/g, '_') },
-    championship_series_result: seriesResult || null,
-    game_status: 'final',
-    updated_at: new Date().toISOString(),
-  })
-
-  if (upserts.length === 0) return NextResponse.json({ success: true, saved: 0 })
 
   const { error } = await admin
-    .from('tournament_matchups')
-    .upsert(upserts, { onConflict: 'contest_id,round,matchup_index' })
+    .from('platform_settings')
+    .upsert({
+      key: 'bracket_results_2026',
+      value: JSON.stringify(results),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true, saved: upserts.length })
+  if (error) {
+    console.error('[save-bracket-results] error:', error.message)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // Trigger payouts for all open baseball bracket contests when champion is set
+  if (champion) {
+    const { data: contests } = await admin
+      .from('bracket_contests')
+      .select('id, name, entry_fee_cents, settings')
+      .eq('sport', 'baseball')
+      .eq('status', 'open')
+
+    for (const contest of contests ?? []) {
+      await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/brackets/${contest.id}/complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': process.env.CRON_SECRET ?? '',
+        },
+        body: JSON.stringify({ results }),
+      })
+    }
+  }
+
+  return NextResponse.json({ success: true })
 }
