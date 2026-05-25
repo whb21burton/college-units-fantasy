@@ -31,6 +31,7 @@ export default function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [leagues, setLeagues] = useState<any[]>([]);
+  const [bracketCount, setBracketCount] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
   const [showWallet, setShowWallet] = useState(false);
   const [locks, setLocks] = useState({ public_leagues: false, bracket_contests: false, create_season_league: false, create_bracket: false });
@@ -145,11 +146,12 @@ export default function HomePage() {
   }
 
   async function loadLeagues(userId: string) {
-    const { data } = await supabase
-      .from('league_members')
-      .select('league_id, leagues(*)')
-      .eq('user_id', userId);
-    if (data) setLeagues(data.map((d: any) => d.leagues).filter(Boolean));
+    const [{ data: members }, { count }] = await Promise.all([
+      supabase.from('league_members').select('league_id, leagues(*)').eq('user_id', userId),
+      supabase.from('user_bracket_entries').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+    ]);
+    if (members) setLeagues(members.map((d: any) => d.leagues).filter(Boolean));
+    setBracketCount(count ?? 0);
   }
 
   async function handleSignIn() {
@@ -325,7 +327,7 @@ export default function HomePage() {
                   {(user?.user_metadata?.display_name ?? user?.email?.split('@')[0])}'s Leagues
                 </div>
                 <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.muted, letterSpacing: 1, marginTop: 3 }}>
-                  {leagues.length} active league{leagues.length !== 1 ? 's' : ''}
+                  {leagues.length} active league{leagues.length !== 1 ? 's' : ''}{bracketCount > 0 ? ` · ${bracketCount} bracket${bracketCount !== 1 ? 's' : ''}` : ''}
                 </div>
               </div>
             </div>
