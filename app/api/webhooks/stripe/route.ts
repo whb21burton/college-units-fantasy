@@ -65,6 +65,12 @@ export async function POST(req: Request) {
             ? parseInt(pi.metadata.credit_amount_cents)
             : (deposit?.amount_cents ?? pi.amount);
 
+          // Mark any existing pending transaction for this PI as failed so credit_wallet can insert fresh
+          await admin.from('transactions')
+            .update({ status: 'failed' })
+            .eq('idempotency_key', `deposit_${pi.id}`)
+            .eq('status', 'pending');
+
           // Atomic credit via postgres function — creates ledger accounts if missing, idempotent
           const { error: rpcError } = await admin.rpc('credit_wallet', {
             p_user_id:         userId,
