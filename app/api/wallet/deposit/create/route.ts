@@ -35,6 +35,13 @@ export async function POST(req: Request) {
         .select('id, stripe_customer_id')
         .single();
       wallet = newWallet;
+
+      if (newWallet) {
+        await admin.from('ledger_accounts').insert([
+          { wallet_id: newWallet.id, type: 'user_available', name: 'Available' },
+          { wallet_id: newWallet.id, type: 'user_pending',   name: 'Pending' },
+        ]);
+      }
     }
 
     if (!wallet) return NextResponse.json({ error: 'Failed to get wallet' }, { status: 500 });
