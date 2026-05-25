@@ -1130,18 +1130,17 @@ export default function BracketPage() {
   /* ── Add a second/third/etc entry ── */
   async function handleAddEntry() {
     if (myEntries.length >= maxPerAccount || isLocked) return
+    const nextNum = myEntries.length + 1
+
     if (entryFeeCents > 0) {
       if (walletBalance < entryFeeCents) {
         alert(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
         return
       }
-      const payRes = await fetch(leagueId ? '/api/wallet/join-contest' : '/api/wallet/bracket-entry', {
+      const payRes = await fetch('/api/wallet/bracket-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(leagueId
-          ? { league_id: leagueId, team_name: `${myEntries[0]?.entry_name ?? 'My Bracket'} (${myEntries.length + 1})` }
-          : { contestId, buyInCents: entryFeeCents, entryNumber: myEntries.length + 1 }
-        ),
+        body: JSON.stringify({ contestId, buyInCents: entryFeeCents, entryNumber: nextNum }),
       })
       if (!payRes.ok) {
         const d = await payRes.json()
@@ -1151,9 +1150,8 @@ export default function BracketPage() {
       refreshWallet()
     }
 
-    const nextNum = myEntries.length + 1
     const baseName = myEntries[0]?.entry_name ?? 'My Bracket'
-    const newName = nextNum === 1 ? baseName : `${baseName} (${nextNum})`
+    const newName = `${baseName} (${nextNum})`
 
     const { data: newEntry } = await supabase
       .from('user_bracket_entries')
@@ -1166,6 +1164,7 @@ export default function BracketPage() {
       setActiveEntryNum(nextNum)
       setPicks(empty())
       setOriginalPicks(null)
+      setShowAddEntryModal(false)
     }
   }
 
