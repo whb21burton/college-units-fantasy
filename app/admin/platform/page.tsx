@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { CONFERENCES } from '@/lib/playerPool'
+import { REGIONS_2026 } from '@/data/cws2026'
 
 const C = {
   bg: '#070a12', surf: '#0c1422', surf2: '#131d30', surf3: '#1e2d47',
@@ -784,7 +785,6 @@ function BracketTeamsEditor() {
 
 function BracketAdminPanel() {
   const supabase = createClientComponentClient()
-  const [bracketTeams, setBracketTeams] = useState<any[]>([])
   const [regionalWinners, setRegionalWinners] = useState<Record<string, string>>({})
   const [srWinners, setSrWinners] = useState<Record<number, string>>({})
   const [omahaAWinner, setOmahaAWinner] = useState('')
@@ -828,9 +828,6 @@ function BracketAdminPanel() {
   ]
 
   useEffect(() => {
-    supabase.from('bracket_teams').select('*').eq('contest_id', 'global')
-      .order('region_key').order('seed')
-      .then(({ data }) => setBracketTeams(data ?? []))
     loadResults()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -867,11 +864,9 @@ function BracketAdminPanel() {
   }
 
   function getRegionTeams(regionKey: string): string[] {
-    return bracketTeams
-      .filter(t => t.region_key === regionKey)
-      .sort((a: any, b: any) => a.seed - b.seed)
-      .map((t: any) => t.team_name)
-      .filter(Boolean)
+    const region = REGIONS_2026[regionKey]
+    if (!region) return []
+    return region.teams.map(t => t.name)
   }
 
   function RegionResultPod({ region }: { region: { key: string; display: string } }) {
@@ -879,23 +874,34 @@ function BracketAdminPanel() {
     const winner = regionalWinners[region.key]
     return (
       <div style={{ background: C.surf2, borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 6 }}>
-          {region.display}
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.gold, textTransform: 'uppercase', padding: '6px 0', borderBottom: `1px solid ${C.surf3}`, marginBottom: 10 }}>
+          {region.display} Regional
           {winner && <span style={{ color: C.green, marginLeft: 8 }}>→ {winner}</span>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4 }}>
-          {teams.length > 0 ? teams.map(team => (
+          {teams.map(team => (
             <button key={team} onClick={() => setRegionalWinners(prev => ({
               ...prev, [region.key]: prev[region.key] === team ? '' : team
             }))}
-              style={{ padding: '6px 8px', border: `1px solid ${winner === team ? C.green : C.surf3}`, borderRadius: 5, cursor: 'pointer', background: winner === team ? 'rgba(21,198,120,.15)' : C.surf, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: winner === team ? C.green : C.text, textAlign: 'left' as const }}>
-              {winner === team && '✓ '}{team}
+              style={{
+                padding: '8px 10px',
+                border: `2px solid ${winner === team ? C.green : C.surf3}`,
+                borderRadius: 6,
+                cursor: 'pointer',
+                background: winner === team ? 'rgba(21,198,120,.12)' : C.surf,
+                fontFamily: 'Oswald,sans-serif',
+                fontSize: 11,
+                color: winner === team ? C.green : C.text,
+                textAlign: 'left' as const,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                transition: 'all .15s',
+              }}>
+              {winner === team && <span style={{ color: C.green }}>✓</span>}
+              {team}
             </button>
-          )) : (
-            <div style={{ gridColumn: '1/-1', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
-              No teams set — add teams in Bracket Teams Editor
-            </div>
-          )}
+          ))}
         </div>
       </div>
     )
