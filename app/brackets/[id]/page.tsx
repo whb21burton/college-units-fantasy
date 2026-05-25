@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Team } from '@/lib/bracketTypes'
 import { useWallet } from '@/context/WalletContext'
-import { REGIONS_2026, LEFT_SR_2026, RIGHT_SR_2026, CWS_SEMIS_2026 } from '@/data/cws2026'
+import { REGIONS_2026, LEFT_SR_2026, RIGHT_SR_2026 } from '@/data/cws2026'
 
 const C = {
   bg: '#070a12', surf: '#0c1422', surf2: '#131d30', surf3: '#1e2d47',
@@ -49,29 +49,30 @@ function getRegions(dbTeams: any[]): Record<string, { display: string; teams: Te
 
 const LEFT_SR = LEFT_SR_2026
 const RIGHT_SR = RIGHT_SR_2026
-const CWS_SEMIS = CWS_SEMIS_2026
 
 type BracketPicks = {
   regionals:      Record<string, Team>
   superRegionals: Record<number, Team>
-  semifinals:     Record<number, Team>
+  omahaA:         Team | null
+  omahaB:         Team | null
   champion:       Team | null
   seriesResult:   '2-0' | '2-1' | null
 }
 
 function empty(): BracketPicks {
-  return { regionals: {}, superRegionals: {}, semifinals: {}, champion: null, seriesResult: null }
+  return { regionals: {}, superRegionals: {}, omahaA: null, omahaB: null, champion: null, seriesResult: null }
 }
 
 function countPicks(p: BracketPicks): number {
   return Object.keys(p.regionals).length
     + Object.keys(p.superRegionals).length
-    + Object.keys(p.semifinals).length
+    + (p.omahaA ? 1 : 0)
+    + (p.omahaB ? 1 : 0)
     + (p.champion ? 1 : 0)
     + (p.seriesResult ? 1 : 0)
 }
 
-const TOTAL = 30 // 16 reg + 8 SR + 4 semi + 1 champ + 1 series
+const TOTAL = 28 // 16 reg + 8 SR + 1 omahaA + 1 omahaB + 1 champ + 1 series
 
 type Tab = 'bracket' | 'leaderboard' | 'chat' | 'invite'
 type MSection = 'left' | 'super-left' | 'cws' | 'super-right' | 'right'
@@ -427,7 +428,10 @@ function ReadOnlyBracket({ picks, matchupResults }: { picks: any; matchupResults
   const sections = [
     { title: '🏟️ Regionals (3 pts each)', items: Object.entries(picks.regionals ?? {}).map(([region, team]: any) => ({ label: region.replace(/_/g, ' '), team, key: `regional_${region}` })) },
     { title: '⚔️ Super Regionals (5 pts each)', items: Object.entries(picks.superRegionals ?? {}).map(([idx, team]: any) => ({ label: `Super Regional ${parseInt(idx) + 1}`, team, key: `super_${idx}` })) },
-    { title: '🏟️ CWS Semifinals (10 pts each)', items: Object.entries(picks.semifinals ?? {}).map(([idx, team]: any) => ({ label: `Semifinal ${parseInt(idx) + 1}`, team, key: `semi_${idx}` })) },
+    { title: '🏟️ Omaha Brackets (10 pts each)', items: [
+      ...(picks.omahaA ? [{ label: 'Omaha Bracket 1 Winner', team: picks.omahaA, key: 'omaha_a' }] : []),
+      ...(picks.omahaB ? [{ label: 'Omaha Bracket 2 Winner', team: picks.omahaB, key: 'omaha_b' }] : []),
+    ]},
     { title: '🏆 Champion (15 pts)', items: picks.champion ? [{ label: 'National Champion', team: picks.champion, key: 'champion' }] : [] },
   ]
 
@@ -475,7 +479,7 @@ function LeaderboardTab({ contestId, userId, contest, isLocked, matchupResults }
   const [viewingEntry, setViewingEntry] = useState<any>(null)
 
   const POINTS = { regional: 3, super_regional: 5, cws_semifinal: 10, championship: 15, series_bonus: 5 }
-  const MAX_SCORE = (16 * POINTS.regional) + (8 * POINTS.super_regional) + (4 * POINTS.cws_semifinal) + POINTS.championship + POINTS.series_bonus
+  const MAX_SCORE = (16 * POINTS.regional) + (8 * POINTS.super_regional) + (2 * POINTS.cws_semifinal) + POINTS.championship + POINTS.series_bonus
 
   useEffect(() => {
     supabase
@@ -671,7 +675,7 @@ function LeaderboardTab({ contestId, userId, contest, isLocked, matchupResults }
           {([
             ['Regional', '3 pts'],
             ['Super Regional', '5 pts'],
-            ['CWS Semifinal', '10 pts'],
+            ['Omaha Bracket', '10 pts'],
             ['Champion', '15 pts'],
             ['Series Result', '+5 bonus'],
             ['Max Score', `${MAX_SCORE} pts`],
@@ -978,17 +982,16 @@ export default function BracketPage() {
         if (prevReg && srW && srW.id === prevReg.id && team.id !== prevReg.id) {
           const { [srDef.idx]: _sr, ...restSR } = next.superRegionals
           next.superRegionals = restSR
-          // Find CWS semi that used this SR
-          const semiDef = CWS_SEMIS.find(s => s.leftSR === srDef.idx || s.rightSR === srDef.idx)
-          if (semiDef) {
-            const semiW = prev.semifinals[semiDef.semiIdx]
-            const srW2 = prev.superRegionals[srDef.idx]
-            if (semiW && srW2 && semiW.id === srW2.id) {
-              const { [semiDef.semiIdx]: _s, ...restSemi } = next.semifinals
-              next.semifinals = restSemi
-              next.champion = null
-              next.seriesResult = null
-            }
+          const prevSRWinner = prev.superRegionals[srDef.idx]
+          if (srDef.idx <= 3 && prev.omahaA && prevSRWinner && prev.omahaA.id === prevSRWinner.id) {
+            next.omahaA = null
+            next.champion = null
+            next.seriesResult = null
+          }
+          if (srDef.idx >= 4 && prev.omahaB && prevSRWinner && prev.omahaB.id === prevSRWinner.id) {
+            next.omahaB = null
+            next.champion = null
+            next.seriesResult = null
           }
         }
       }
@@ -1000,27 +1003,13 @@ export default function BracketPage() {
     if (isLocked) return
     setPicks(prev => {
       const next = { ...prev, superRegionals: { ...prev.superRegionals, [idx]: team } }
-      const semiDef = CWS_SEMIS.find(s => s.leftSR === idx || s.rightSR === idx)
-      if (semiDef) {
-        const semiW = prev.semifinals[semiDef.semiIdx]
-        const prevSR = prev.superRegionals[idx]
-        if (semiW && prevSR && semiW.id === prevSR.id && team.id !== prevSR.id) {
-          const { [semiDef.semiIdx]: _, ...restSemi } = next.semifinals
-          next.semifinals = restSemi
-          next.champion = null
-          next.seriesResult = null
-        }
+      if (idx <= 3 && prev.omahaA && prev.superRegionals[idx]?.id === prev.omahaA.id) {
+        next.omahaA = null
+        next.champion = null
+        next.seriesResult = null
       }
-      return next
-    })
-  }
-
-  function pickSemi(semiIdx: number, team: Team) {
-    if (isLocked) return
-    setPicks(prev => {
-      const next = { ...prev, semifinals: { ...prev.semifinals, [semiIdx]: team } }
-      const prevSemi = prev.semifinals[semiIdx]
-      if (prev.champion && prevSemi && prev.champion.id === prevSemi.id && team.id !== prevSemi.id) {
+      if (idx >= 4 && prev.omahaB && prev.superRegionals[idx]?.id === prev.omahaB.id) {
+        next.omahaB = null
         next.champion = null
         next.seriesResult = null
       }
@@ -1170,18 +1159,6 @@ export default function BracketPage() {
     }
   }
 
-  /* ── Derived CWS teams ── */
-  const cwsT = (srIdx: number) => picks.superRegionals[srIdx] ?? null
-  const semi0t1 = cwsT(CWS_SEMIS[0].leftSR)
-  const semi0t2 = cwsT(CWS_SEMIS[0].rightSR)
-  const semi1t1 = cwsT(CWS_SEMIS[1].leftSR)
-  const semi1t2 = cwsT(CWS_SEMIS[1].rightSR)
-  const semi2t1 = cwsT(CWS_SEMIS[2].leftSR)
-  const semi2t2 = cwsT(CWS_SEMIS[2].rightSR)
-  const semi3t1 = cwsT(CWS_SEMIS[3].leftSR)
-  const semi3t2 = cwsT(CWS_SEMIS[3].rightSR)
-  const champT1 = picks.semifinals[0] ?? picks.semifinals[1] ?? null
-  const champT2 = picks.semifinals[2] ?? picks.semifinals[3] ?? null
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1235,28 +1212,46 @@ export default function BracketPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <ColHeader line1="College World Series" line2="Omaha, Nebraska" align="center" />
 
-      {/* Bracket A */}
+      {/* Omaha Bracket 1 — left SR winners */}
       <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, overflow: 'hidden' }}>
-        <div style={{ padding: '6px 10px', background: C.surf2, borderBottom: `1px solid ${C.surf3}`, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold, letterSpacing: 2 }}>
-          BRACKET A
+        <div style={{ padding: '6px 12px', background: C.surf2, borderBottom: `1px solid ${C.surf3}`, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, textTransform: 'uppercase' }}>
+          Omaha Bracket 1
         </div>
-        <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <CWSMatchupBox label="CWS Semifinal 1" t1={cwsT(0)} t2={cwsT(4)} picked={picks.semifinals[0] ?? null} onPick={t => pickSemi(0, t)} isLocked={isLocked} resultWinner={matchupResults['semi_0']?.winner} hasSubmitted={hasSubmitted} />
-          <CWSMatchupBox label="CWS Semifinal 2" t1={cwsT(1)} t2={cwsT(5)} picked={picks.semifinals[1] ?? null} onPick={t => pickSemi(1, t)} isLocked={isLocked} resultWinner={matchupResults['semi_1']?.winner} hasSubmitted={hasSubmitted} />
+        <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {[0,1,2,3].map(srIdx => {
+            const srWinner = picks.superRegionals[srIdx]
+            const isPicked = picks.omahaA?.id === srWinner?.id
+            return (
+              <div key={srIdx}
+                onClick={() => srWinner && !isLocked && setPicks(p => ({ ...p, omahaA: isPicked ? null : srWinner }))}
+                style={{ padding: '8px 10px', background: isPicked ? 'rgba(245,166,35,.1)' : C.surf, border: `1px solid ${isPicked ? C.gold : C.surf3}`, borderRadius: 6, cursor: srWinner && !isLocked ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 8, minHeight: 40 }}>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, width: 20 }}>SR{srIdx+1}</span>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: isPicked ? C.gold : srWinner ? C.text : C.muted, flex: 1 }}>
+                  {srWinner?.name ?? 'TBD'}
+                </span>
+                {isPicked && <span style={{ color: C.gold, fontSize: 12 }}>✓</span>}
+              </div>
+            )
+          })}
+          {picks.omahaA && (
+            <div style={{ padding: '6px 10px', background: 'rgba(245,166,35,.06)', borderRadius: 4, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold, textAlign: 'center', letterSpacing: 1 }}>
+              → {picks.omahaA.name} advances to Championship
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Championship */}
+      {/* National Championship */}
       <div style={{ background: C.surf, border: `2px solid ${C.gold}`, borderRadius: 10, overflow: 'hidden' }}>
         <div style={{ padding: '8px 12px', background: 'rgba(245,166,35,.08)', borderBottom: '1px solid rgba(245,166,35,.3)', textAlign: 'center', fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 3, color: C.gold }}>
           🏆 NATIONAL CHAMPIONSHIP
         </div>
         <div style={{ padding: 10 }}>
-          <ChampSlot team={champT1} isPicked={picks.champion?.id === champT1?.id} onPick={() => champT1 && pickChampion(champT1)} isLocked={isLocked}
-            result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === champT1?.id && champT1) ? getPickResult(champT1.id, matchupResults['champion'].winner) : undefined} />
+          <ChampSlot team={picks.omahaA} isPicked={picks.champion?.id === picks.omahaA?.id} onPick={() => picks.omahaA && pickChampion(picks.omahaA)} isLocked={isLocked}
+            result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === picks.omahaA?.id && picks.omahaA) ? getPickResult(picks.omahaA.id, matchupResults['champion'].winner) : undefined} />
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.muted, textAlign: 'center', padding: '4px 0' }}>VS</div>
-          <ChampSlot team={champT2} isPicked={picks.champion?.id === champT2?.id} onPick={() => champT2 && pickChampion(champT2)} isLocked={isLocked}
-            result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === champT2?.id && champT2) ? getPickResult(champT2.id, matchupResults['champion'].winner) : undefined} />
+          <ChampSlot team={picks.omahaB} isPicked={picks.champion?.id === picks.omahaB?.id} onPick={() => picks.omahaB && pickChampion(picks.omahaB)} isLocked={isLocked}
+            result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === picks.omahaB?.id && picks.omahaB) ? getPickResult(picks.omahaB.id, matchupResults['champion'].winner) : undefined} />
           {picks.champion && (
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.surf3}` }}>
               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 6, textAlign: 'center' }}>SERIES RESULT</div>
@@ -1282,14 +1277,32 @@ export default function BracketPage() {
         </div>
       </div>
 
-      {/* Bracket B */}
+      {/* Omaha Bracket 2 — right SR winners */}
       <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, overflow: 'hidden' }}>
-        <div style={{ padding: '6px 10px', background: C.surf2, borderBottom: `1px solid ${C.surf3}`, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold, letterSpacing: 2 }}>
-          BRACKET B
+        <div style={{ padding: '6px 12px', background: C.surf2, borderBottom: `1px solid ${C.surf3}`, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, textTransform: 'uppercase' }}>
+          Omaha Bracket 2
         </div>
-        <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <CWSMatchupBox label="CWS Semifinal 3" t1={cwsT(2)} t2={cwsT(6)} picked={picks.semifinals[2] ?? null} onPick={t => pickSemi(2, t)} isLocked={isLocked} resultWinner={matchupResults['semi_2']?.winner} hasSubmitted={hasSubmitted} />
-          <CWSMatchupBox label="CWS Semifinal 4" t1={cwsT(3)} t2={cwsT(7)} picked={picks.semifinals[3] ?? null} onPick={t => pickSemi(3, t)} isLocked={isLocked} resultWinner={matchupResults['semi_3']?.winner} hasSubmitted={hasSubmitted} />
+        <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {[4,5,6,7].map(srIdx => {
+            const srWinner = picks.superRegionals[srIdx]
+            const isPicked = picks.omahaB?.id === srWinner?.id
+            return (
+              <div key={srIdx}
+                onClick={() => srWinner && !isLocked && setPicks(p => ({ ...p, omahaB: isPicked ? null : srWinner }))}
+                style={{ padding: '8px 10px', background: isPicked ? 'rgba(245,166,35,.1)' : C.surf, border: `1px solid ${isPicked ? C.gold : C.surf3}`, borderRadius: 6, cursor: srWinner && !isLocked ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 8, minHeight: 40 }}>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, width: 20 }}>SR{srIdx+1}</span>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: isPicked ? C.gold : srWinner ? C.text : C.muted, flex: 1 }}>
+                  {srWinner?.name ?? 'TBD'}
+                </span>
+                {isPicked && <span style={{ color: C.gold, fontSize: 12 }}>✓</span>}
+              </div>
+            )
+          })}
+          {picks.omahaB && (
+            <div style={{ padding: '6px 10px', background: 'rgba(245,166,35,.06)', borderRadius: 4, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold, textAlign: 'center', letterSpacing: 1 }}>
+              → {picks.omahaB.name} advances to Championship
+            </div>
+          )}
         </div>
       </div>
 
@@ -1297,29 +1310,27 @@ export default function BracketPage() {
       <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '12px 14px' }}>
         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 8 }}>HOW TO PLAY</div>
         <ol style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, lineHeight: 2.1, paddingLeft: 14, margin: 0 }}>
-          <li>Pick 1 team to win each Regional (16 total)</li>
-          <li>Pick 1 team to win each Super Regional (8 total)</li>
-          <li>Pick 1 team to win each CWS Semifinal (4 total)</li>
+          <li>Pick 1 winner from each of the 16 Regionals</li>
+          <li>Pick 1 winner from each of the 8 Super Regionals</li>
+          <li>Pick 1 team to win Omaha Bracket 1 (left side)</li>
+          <li>Pick 1 team to win Omaha Bracket 2 (right side)</li>
           <li>Pick the National Champion + series result</li>
         </ol>
-        <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '14px 16px', marginTop: 12 }}>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>📊 Scoring</div>
+        <div style={{ marginTop: 10, padding: '10px 12px', background: C.surf, borderRadius: 6 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>📊 Scoring</div>
           {([
-            ['Regional Winner',       '3 pts each × 16'],
-            ['Super Regional Winner', '5 pts each × 8'],
-            ['CWS Semifinal Winner',  '10 pts each × 4'],
-            ['National Champion',     '15 pts'],
-            ['Correct Series Result', '+5 bonus pts'],
-          ] as [string, string][]).map(([label, pts]) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 6 }}>
+            ['Regional Winner',        '3 pts × 16'],
+            ['Super Regional Winner',  '5 pts × 8'],
+            ['Omaha Bracket Winner',   '10 pts × 2'],
+            ['National Champion',      '15 pts'],
+            ['Series Result',          '+5 bonus'],
+            ['Max Score',              '118 pts'],
+          ] as [string,string][]).map(([label, val]) => (
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, padding: '2px 0' }}>
               <span>{label}</span>
-              <span style={{ color: C.gold, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>{pts}</span>
+              <span style={{ color: C.gold }}>{val}</span>
             </div>
           ))}
-          <div style={{ borderTop: `1px solid ${C.surf3}`, marginTop: 8, paddingTop: 8, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
-            Max score: {(16 * 3) + (8 * 5) + (4 * 10) + 15 + 5} pts
-            <span style={{ marginLeft: 4 }}>(48 + 40 + 40 + 15 + 5 = 148)</span>
-          </div>
         </div>
       </div>
     </div>
