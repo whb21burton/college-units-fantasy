@@ -67,6 +67,8 @@ export async function POST(req: Request) {
       user_agent: req.headers.get('user-agent') ?? 'unknown',
     }).then(() => {})
 
+    console.log('[deposit/create] amountCents:', amountCents, 'chargeAmountCents:', chargeAmountCents, 'charging:', chargeAmount)
+
     // Create Stripe PaymentIntent — charge card full amount (deposit + fee), credit only deposit amount
     const paymentIntent = await stripe.paymentIntents.create({
       amount:               chargeAmount,
