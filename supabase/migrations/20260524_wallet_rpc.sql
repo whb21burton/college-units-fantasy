@@ -15,7 +15,7 @@ DECLARE
   v_tx_id UUID;
 BEGIN
   SELECT id INTO v_wallet_id FROM wallets WHERE user_id = p_user_id;
-  IF v_wallet_id IS NULL THEN RAISE EXCEPTION 'Wallet not found'; END IF;
+  IF v_wallet_id IS NULL THEN RAISE EXCEPTION 'Wallet not found for user %', p_user_id; END IF;
 
   SELECT id INTO v_avail_id FROM ledger_accounts
     WHERE wallet_id = v_wallet_id AND type = 'user_available';
@@ -33,9 +33,20 @@ BEGIN
       RETURNING id INTO v_pending_id;
   END IF;
 
-  IF EXISTS (SELECT 1 FROM transactions WHERE idempotency_key = p_idempotency_key AND status = 'completed') THEN
+  -- Only skip if a COMPLETED transaction exists (not pending/failed)
+  IF EXISTS (
+    SELECT 1 FROM transactions
+    WHERE idempotency_key = p_idempotency_key
+    AND status = 'completed'
+    AND EXISTS (SELECT 1 FROM ledger_entries WHERE transaction_id = transactions.id)
+  ) THEN
     RETURN;
   END IF;
+
+  -- Delete any failed/pending transaction with same key so we can retry
+  DELETE FROM transactions
+  WHERE idempotency_key = p_idempotency_key
+  AND status IN ('pending', 'failed');
 
   INSERT INTO transactions (user_id, type, status, amount_cents, idempotency_key, description, completed_at)
     VALUES (p_user_id, p_type, 'completed', p_amount_cents, p_idempotency_key, p_description, NOW())
@@ -44,6 +55,10 @@ BEGIN
   INSERT INTO ledger_entries (transaction_id, ledger_account_id, amount_cents)
     VALUES (v_tx_id, v_avail_id, p_amount_cents);
 
+  -- Verify the ledger entry was created
+  IF NOT EXISTS (SELECT 1 FROM ledger_entries WHERE transaction_id = v_tx_id) THEN
+    RAISE EXCEPTION 'Ledger entry failed to create for transaction %', v_tx_id;
+  END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
