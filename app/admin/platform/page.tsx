@@ -645,202 +645,6 @@ function PublicBracketCreator() {
   )
 }
 
-function ESPNSyncPanel() {
-  const [contests, setContests] = useState<any[]>([])
-  const [contestId, setContestId] = useState('')
-  const [status, setStatus] = useState<any>(null)
-  const [syncing, setSyncing] = useState(false)
-  const [confirming, setConfirming] = useState<string | null>(null)
-  const [msg, setMsg] = useState('')
-
-  useEffect(() => {
-    fetch('/api/admin/espn-status?contestId=__probe__')
-      .then(() => {})
-      .catch(() => {})
-    const supabase = createClientComponentClient()
-    supabase.from('bracket_contests')
-      .select('id, name, sport, status')
-      .eq('sport', 'baseball')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setContests(data ?? [])
-        if (data?.[0]) setContestId(data[0].id)
-      })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  async function loadStatus(id?: string) {
-    const cid = id ?? contestId
-    if (!cid) return
-    const res = await fetch(`/api/admin/espn-status?contestId=${cid}`)
-    setStatus(await res.json())
-  }
-
-  async function runSync(fullScan = false) {
-    if (!contestId) return
-    setSyncing(true)
-    setMsg('')
-    const res = await fetch('/api/admin/espn-sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contestId, fullScan }),
-    })
-    const data = await res.json()
-    setMsg(data.error ?? `✓ ${data.gamesUpdated} games updated, ${data.advancementsSuggested} advancements suggested`)
-    await loadStatus()
-    setSyncing(false)
-  }
-
-  async function advance(advancementId: string, action: 'confirm' | 'dismiss') {
-    setConfirming(advancementId)
-    await fetch('/api/admin/espn-advance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ advancementId, action }),
-    })
-    await loadStatus()
-    setConfirming(null)
-  }
-
-  const pending = status?.pendingAdvancements ?? []
-  const syncs   = status?.recentSyncs ?? []
-
-  return (
-    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginTop: 20 }}>
-      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
-        ⚾ ESPN CWS Sync
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' as const }}>
-        <select
-          value={contestId}
-          onChange={e => { setContestId(e.target.value); loadStatus(e.target.value) }}
-          style={{ flex: 1, minWidth: 200, padding: '8px 10px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none' }}>
-          {contests.map(c => (
-            <option key={c.id} value={c.id}>{c.name} ({c.status})</option>
-          ))}
-        </select>
-        <button onClick={() => loadStatus()}
-          style={{ padding: '8px 14px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, cursor: 'pointer', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>
-          Refresh
-        </button>
-        <button onClick={() => runSync(false)} disabled={syncing}
-          style={{ padding: '8px 14px', background: 'rgba(245,166,35,.1)', border: `1px solid ${C.gold}`, borderRadius: 6, cursor: 'pointer', color: C.gold, fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>
-          {syncing ? 'Syncing...' : 'Sync Today'}
-        </button>
-        <button onClick={() => runSync(true)} disabled={syncing}
-          style={{ padding: '8px 14px', background: 'rgba(245,166,35,.05)', border: `1px solid ${C.surf3}`, borderRadius: 6, cursor: 'pointer', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>
-          Full Scan
-        </button>
-      </div>
-
-      {msg && (
-        <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: msg.startsWith('✓') ? C.green : C.red }}>
-          {msg}
-        </div>
-      )}
-
-      {pending.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>
-            Pending Advancements ({pending.length})
-          </div>
-          {pending.map((p: any) => {
-            const team = p.advancing_team
-            return (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.surf2, borderRadius: 8, padding: '10px 12px', marginBottom: 6, gap: 10, flexWrap: 'wrap' as const }}>
-                <div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
-                    {team?.displayName ?? team?.name ?? 'Unknown'} — {p.round_type?.replace(/_/g, ' ')}
-                  </div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
-                    {p.from_region ?? 'CWS'}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    onClick={() => advance(p.id, 'confirm')}
-                    disabled={confirming === p.id}
-                    style={{ padding: '6px 12px', background: 'rgba(21,198,120,.1)', border: `1px solid ${C.green}`, borderRadius: 6, cursor: 'pointer', color: C.green, fontFamily: 'Oswald,sans-serif', fontSize: 10 }}>
-                    {confirming === p.id ? '...' : 'Confirm'}
-                  </button>
-                  <button
-                    onClick={() => advance(p.id, 'dismiss')}
-                    disabled={confirming === p.id}
-                    style={{ padding: '6px 12px', background: 'rgba(240,58,90,.1)', border: `1px solid ${C.red}`, borderRadius: 6, cursor: 'pointer', color: C.red, fontFamily: 'Oswald,sans-serif', fontSize: 10 }}>
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {syncs.length > 0 && (
-        <div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>
-            Recent Syncs
-          </div>
-          {syncs.map((s: any) => (
-            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', background: C.surf2, borderRadius: 6, padding: '8px 12px', marginBottom: 4 }}>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
-                {new Date(s.synced_at).toLocaleString()}
-              </span>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.text }}>
-                {s.games_updated} updated · {s.advancements_suggested} suggested · {s.duration_ms}ms
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!status && (
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, textAlign: 'center', padding: '20px 0' }}>
-          Select a contest and click Refresh to load sync status
-        </div>
-      )}
-    </div>
-  )
-}
-
-function BracketLockControl() {
-  const supabase = createClientComponentClient()
-  const [locked, setLocked] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    supabase.from('platform_settings').select('value').eq('key', 'brackets_locked').single()
-      .then(({ data }) => setLocked(data?.value === 'true'))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  async function toggle() {
-    setSaving(true)
-    const newVal = !locked
-    await supabase.from('platform_settings')
-      .upsert({ key: 'brackets_locked', value: newVal.toString(), updated_at: new Date().toISOString() }, { onConflict: 'key' })
-    setLocked(newVal)
-    setSaving(false)
-  }
-
-  return (
-    <div style={{ background: C.surf, border: `2px solid ${locked ? '#f03a5a' : '#1e2d47'}`, borderRadius: 12, padding: 20, marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <div>
-        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: locked ? '#f03a5a' : C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
-          {locked ? '🔒 All Brackets Locked' : '🔓 Brackets Open'}
-        </div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
-          {locked ? 'No submissions or edits allowed. Leaderboard shows all picks.' : 'Users can submit and edit brackets freely.'}
-        </div>
-      </div>
-      <button onClick={toggle} disabled={saving}
-        style={{ padding: '10px 24px', background: locked ? 'rgba(21,198,120,.1)' : 'rgba(240,58,90,.1)', border: `1px solid ${locked ? '#15c678' : '#f03a5a'}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, color: locked ? '#15c678' : '#f03a5a', textTransform: 'uppercase' as const }}>
-        {saving ? '...' : locked ? 'Unlock' : 'Lock Brackets'}
-      </button>
-    </div>
-  )
-}
 
 function BracketTeamsEditor() {
   const supabase = createClientComponentClient()
@@ -973,6 +777,209 @@ function BracketTeamsEditor() {
             {saving ? 'Saving...' : saved ? '✓ Saved!' : 'Save All Teams'}
           </button>
         </>
+      )}
+    </div>
+  )
+}
+
+function BracketAdminPanel() {
+  const supabase = createClientComponentClient()
+  const [activeTab, setActiveTab] = useState<'teams' | 'results'>('teams')
+  const [regionalWinners, setRegionalWinners] = useState<Record<string, string>>({})
+  const [srWinners, setSrWinners] = useState<Record<number, string>>({})
+  const [omahaAWinner, setOmahaAWinner] = useState('')
+  const [omahaBWinner, setOmahaBWinner] = useState('')
+  const [champion, setChampion] = useState('')
+  const [seriesResult, setSeriesResult] = useState<'2-0' | '2-1' | ''>('')
+  const [savingResults, setSavingResults] = useState(false)
+  const [savedResults, setSavedResults] = useState(false)
+
+  const LEFT_REGIONS = ['ucla','west_virginia','southern_miss','florida','north_carolina','texas_am','nebraska','auburn']
+  const RIGHT_REGIONS = ['georgia_tech','kansas','florida_state','alabama','texas','oregon','mississippi_st','georgia']
+  const LEFT_SR = [
+    { idx: 0, label: 'SR1', top: 'ucla', bot: 'west_virginia' },
+    { idx: 1, label: 'SR2', top: 'southern_miss', bot: 'florida' },
+    { idx: 2, label: 'SR3', top: 'north_carolina', bot: 'texas_am' },
+    { idx: 3, label: 'SR4', top: 'nebraska', bot: 'auburn' },
+  ]
+  const RIGHT_SR = [
+    { idx: 4, label: 'SR5', top: 'georgia_tech', bot: 'kansas' },
+    { idx: 5, label: 'SR6', top: 'florida_state', bot: 'alabama' },
+    { idx: 6, label: 'SR7', top: 'texas', bot: 'oregon' },
+    { idx: 7, label: 'SR8', top: 'mississippi_st', bot: 'georgia' },
+  ]
+
+  useEffect(() => {
+    loadResults()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function loadResults() {
+    const { data } = await supabase.from('tournament_matchups').select('*').eq('contest_id', 'global')
+    if (!data) return
+    const regWinners: Record<string, string> = {}
+    const srW: Record<number, string> = {}
+    for (const m of data) {
+      if (m.round_type === 'regional' && m.winner) regWinners[m.regional_name] = m.winner.name
+      if (m.round_type === 'super_regional' && m.winner) srW[m.matchup_index] = m.winner.name
+      if (m.round_type === 'omaha_a' && m.winner) setOmahaAWinner(m.winner.name)
+      if (m.round_type === 'omaha_b' && m.winner) setOmahaBWinner(m.winner.name)
+      if (m.round_type === 'national_championship' && m.winner) {
+        setChampion(m.winner.name)
+        if (m.championship_series_result) setSeriesResult(m.championship_series_result)
+      }
+    }
+    setRegionalWinners(regWinners)
+    setSrWinners(srW)
+  }
+
+  async function saveResults() {
+    setSavingResults(true)
+    const res = await fetch('/api/admin/save-bracket-results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ regionalWinners, srWinners, omahaAWinner, omahaBWinner, champion, seriesResult }),
+    })
+    if (res.ok) { setSavedResults(true); setTimeout(() => setSavedResults(false), 3000) }
+    else alert('Error saving results')
+    setSavingResults(false)
+  }
+
+  function getSROptions(sr: { top: string; bot: string }) {
+    return [regionalWinners[sr.top], regionalWinners[sr.bot]].filter(Boolean) as string[]
+  }
+
+  return (
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginTop: 20 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>
+        ⚾ Bracket Admin
+      </div>
+
+      <div style={{ display: 'flex', borderBottom: `1px solid ${C.surf3}`, marginBottom: 20 }}>
+        {([['teams', '🏟️ Teams'], ['results', '📊 Results']] as [string, string][]).map(([key, label]) => (
+          <button key={key} onClick={() => setActiveTab(key as 'teams' | 'results')}
+            style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${activeTab === key ? C.gold : 'transparent'}`, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: activeTab === key ? C.gold : C.muted }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'teams' && <BracketTeamsEditor />}
+
+      {activeTab === 'results' && (
+        <div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 16 }}>
+            Enter winners as games complete. Scores update automatically for all user brackets.
+          </div>
+
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
+            Regional Winners (type team name)
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 20 }}>
+            {[...LEFT_REGIONS, ...RIGHT_REGIONS].map(region => (
+              <div key={region} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, width: 90, textTransform: 'capitalize' }}>
+                  {region.replace(/_/g, ' ')}
+                </span>
+                <input
+                  value={regionalWinners[region] ?? ''}
+                  onChange={e => setRegionalWinners(prev => ({ ...prev, [region]: e.target.value }))}
+                  placeholder="Winner"
+                  style={{ flex: 1, padding: '5px 8px', background: C.surf3, border: `1px solid ${regionalWinners[region] ? C.green : C.surf3}`, borderRadius: 5, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 11, outline: 'none' }}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
+            Super Regional Winners
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 20 }}>
+            {[...LEFT_SR, ...RIGHT_SR].map(sr => {
+              const options = getSROptions(sr)
+              return (
+                <div key={sr.idx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, width: 30 }}>{sr.label}</span>
+                  {options.length > 0 ? (
+                    <select value={srWinners[sr.idx] ?? ''}
+                      onChange={e => setSrWinners(prev => ({ ...prev, [sr.idx]: e.target.value }))}
+                      style={{ flex: 1, padding: '5px 8px', background: C.surf3, border: `1px solid ${srWinners[sr.idx] ? C.green : C.surf3}`, borderRadius: 5, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 11, outline: 'none' }}>
+                      <option value="">-- Pick winner --</option>
+                      {options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input value={srWinners[sr.idx] ?? ''} onChange={e => setSrWinners(prev => ({ ...prev, [sr.idx]: e.target.value }))}
+                      placeholder="Regional winners needed first"
+                      style={{ flex: 1, padding: '5px 8px', background: C.surf3, border: `1px solid ${C.surf3}`, borderRadius: 5, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 10, outline: 'none' }} />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
+            Omaha Bracket Winners
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+            {([
+              { label: 'Bracket 1 Winner', key: 'A', options: ([0,1,2,3] as number[]).map(i => srWinners[i]).filter(Boolean) as string[] },
+              { label: 'Bracket 2 Winner', key: 'B', options: ([4,5,6,7] as number[]).map(i => srWinners[i]).filter(Boolean) as string[] },
+            ]).map(({ label, key, options }) => (
+              <div key={key}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 4 }}>{label}</div>
+                {options.length > 0 ? (
+                  <select value={key === 'A' ? omahaAWinner : omahaBWinner}
+                    onChange={e => key === 'A' ? setOmahaAWinner(e.target.value) : setOmahaBWinner(e.target.value)}
+                    style={{ width: '100%', padding: '6px 8px', background: C.surf3, border: `1px solid ${(key === 'A' ? omahaAWinner : omahaBWinner) ? C.green : C.surf3}`, borderRadius: 5, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 11, outline: 'none' }}>
+                    <option value="">-- Pick winner --</option>
+                    {options.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input value={key === 'A' ? omahaAWinner : omahaBWinner}
+                    onChange={e => key === 'A' ? setOmahaAWinner(e.target.value) : setOmahaBWinner(e.target.value)}
+                    placeholder="SR winners needed first"
+                    style={{ width: '100%', padding: '6px 8px', background: C.surf3, border: `1px solid ${C.surf3}`, borderRadius: 5, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 10, outline: 'none' }} />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
+            National Champion
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+            <div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 4 }}>Champion</div>
+              {[omahaAWinner, omahaBWinner].filter(Boolean).length > 0 ? (
+                <select value={champion} onChange={e => setChampion(e.target.value)}
+                  style={{ width: '100%', padding: '6px 8px', background: C.surf3, border: `1px solid ${champion ? C.green : C.surf3}`, borderRadius: 5, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 11, outline: 'none' }}>
+                  <option value="">-- Pick champion --</option>
+                  {[omahaAWinner, omahaBWinner].filter(Boolean).map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <input value={champion} onChange={e => setChampion(e.target.value)}
+                  placeholder="Omaha winners needed first"
+                  style={{ width: '100%', padding: '6px 8px', background: C.surf3, border: `1px solid ${C.surf3}`, borderRadius: 5, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 10, outline: 'none' }} />
+              )}
+            </div>
+            <div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 4 }}>Series Result</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['2-0', '2-1'] as const).map(s => (
+                  <button key={s} onClick={() => setSeriesResult(seriesResult === s ? '' : s)}
+                    style={{ flex: 1, padding: '6px', border: `1px solid ${seriesResult === s ? C.gold : C.surf3}`, borderRadius: 5, cursor: 'pointer', background: seriesResult === s ? 'rgba(245,166,35,.1)' : C.surf3, fontFamily: 'Anton,sans-serif', fontSize: 13, color: seriesResult === s ? C.gold : C.muted }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button onClick={saveResults} disabled={savingResults}
+            style={{ width: '100%', padding: '13px', background: savingResults ? C.surf3 : savedResults ? C.green : C.gold, border: 'none', borderRadius: 8, cursor: savingResults ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' as const }}>
+            {savingResults ? 'Saving...' : savedResults ? '✓ Saved!' : 'Save Results'}
+          </button>
+        </div>
       )}
     </div>
   )
@@ -1393,9 +1400,7 @@ export default function PlatformManagerPage() {
         </div>
         <SimulationRunner />
         <AdminStats />
-        <ESPNSyncPanel />
-        <BracketLockControl />
-        <BracketTeamsEditor />
+        <BracketAdminPanel />
       </div>
     </div>
   )

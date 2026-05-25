@@ -919,9 +919,11 @@ export default function BracketPage() {
             results[key] = { winner: m.winner }
           } else if (m.round_type === 'super_regional') {
             results[`super_${m.matchup_index}`] = { winner: m.winner }
-          } else if (m.round_type === 'cws_semifinal') {
-            results[`semi_${m.matchup_index}`] = { winner: m.winner }
-          } else if (m.round_type === 'championship') {
+          } else if (m.round_type === 'omaha_a') {
+            results['omaha_a'] = { winner: m.winner }
+          } else if (m.round_type === 'omaha_b') {
+            results['omaha_b'] = { winner: m.winner }
+          } else if (m.round_type === 'national_championship') {
             results['champion'] = { winner: m.winner }
             if (m.championship_series_result) results['series_result'] = { result: m.championship_series_result }
           }
