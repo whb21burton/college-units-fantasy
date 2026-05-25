@@ -118,8 +118,8 @@ export async function POST(req: NextRequest) {
         p_user_id:         user.id,
         p_amount_cents:    buyInCents,
         p_type:            'contest_entry',
-        p_description:     `Contest entry: ${league.name}`,
-        p_idempotency_key: `entry_${league_id}_${user.id}`,
+        p_description:     `League entry: ${league_id}`,
+        p_idempotency_key: `league_join_${league_id}_${user.id}`,
       });
 
       if (rpcError) {

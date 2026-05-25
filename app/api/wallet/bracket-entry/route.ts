@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     p_amount_cents:    buyInCents,
     p_type:            'contest_entry',
     p_description:     `Bracket entry #${entryNumber}: ${contestId}`,
-    p_idempotency_key: `entry_${contestId}_${user.id}_${entryNumber}`,
+    p_idempotency_key: `bracket_entry_${contestId}_${user.id}_${entryNumber}`,
   })
 
   if (rpcError) {
