@@ -62,64 +62,88 @@ export async function POST(req: Request) {
 
   try {
     if (event.type === 'payment_intent.succeeded') {
-      const pi       = event.data.object as Stripe.PaymentIntent;
-      const userId   = pi.metadata?.user_id;
-      const walletId = pi.metadata?.wallet_id;
+      const pi          = event.data.object as Stripe.PaymentIntent;
+      const userId      = pi.metadata?.user_id;
+      const walletId    = pi.metadata?.wallet_id;
+      const amountCents = pi.metadata?.credit_amount_cents
+        ? parseInt(pi.metadata.credit_amount_cents)
+        : pi.amount;
 
       if (!userId || !walletId) {
-        console.error('[webhook] payment_intent.succeeded missing metadata:', pi.id);
+        console.error('[webhook] missing metadata', pi.id);
       } else {
-        // Check if already processed
-        const { data: deposit } = await admin
-          .from('deposits')
-          .select('id, amount_cents, status')
-          .eq('stripe_payment_intent_id', pi.id)
+        // Check if already credited (ledger entry exists)
+        const { data: completedTx } = await admin
+          .from('transactions')
+          .select('id')
+          .eq('idempotency_key', `deposit_${pi.id}`)
+          .eq('status', 'completed')
           .maybeSingle();
 
-        if (deposit?.status === 'succeeded') {
-          console.log('[webhook] deposit already succeeded, skipping:', pi.id);
-        } else {
-          // Use credit_amount_cents from metadata (deposit amount, not charge amount)
-          const amountCents = pi.metadata?.credit_amount_cents
-            ? parseInt(pi.metadata.credit_amount_cents)
-            : (deposit?.amount_cents ?? pi.amount);
+        const { data: existingEntry } = completedTx
+          ? await admin.from('ledger_entries').select('id').eq('transaction_id', completedTx.id).maybeSingle()
+          : { data: null };
 
-          // Mark any existing pending transaction for this PI as failed so credit_wallet can insert fresh
+        if (existingEntry) {
+          console.log('[webhook] already credited, skipping', pi.id);
+        } else {
+          // Ensure ledger accounts exist
+          const { data: accounts } = await admin
+            .from('ledger_accounts')
+            .select('id, type')
+            .eq('wallet_id', walletId);
+
+          let availId = accounts?.find(a => a.type === 'user_available')?.id;
+
+          if (!availId) {
+            const { data: newAcct } = await admin.from('ledger_accounts')
+              .insert({ wallet_id: walletId, type: 'user_available', name: `${walletId}_available` })
+              .select('id').single();
+            availId = newAcct?.id;
+          }
+
+          const hasPending = accounts?.find(a => a.type === 'user_pending');
+          if (!hasPending) {
+            await admin.from('ledger_accounts')
+              .insert({ wallet_id: walletId, type: 'user_pending', name: `${walletId}_pending` });
+          }
+
+          // Mark pending transaction as failed
           await admin.from('transactions')
             .update({ status: 'failed' })
             .eq('idempotency_key', `deposit_${pi.id}`)
             .eq('status', 'pending');
 
-          // Atomic credit via postgres function — creates ledger accounts if missing, idempotent
-          console.log('[webhook] processing payment_intent.succeeded', pi.id, 'userId:', userId, 'amount:', amountCents);
-          const { error: creditError } = await admin.rpc('credit_wallet', {
-            p_user_id:         userId,
-            p_amount_cents:    amountCents,
-            p_type:            'deposit',
-            p_description:     `Deposit via Stripe`,
-            p_idempotency_key: `deposit_${pi.id}`,
-          });
+          // Create completed transaction
+          const { data: tx } = await admin.from('transactions')
+            .upsert({
+              user_id:         userId,
+              type:            'deposit',
+              status:          'completed',
+              amount_cents:    amountCents,
+              idempotency_key: `deposit_${pi.id}`,
+              description:     'Deposit via Stripe',
+              completed_at:    new Date().toISOString(),
+            }, { onConflict: 'idempotency_key' })
+            .select('id').single();
 
-          if (creditError) {
-            console.error('[webhook] credit_wallet failed:', creditError.message, creditError.code);
-            // Mark as NOT processed so Stripe will retry
-            await admin.from('stripe_webhook_events')
-              .update({ processed: false })
-              .eq('stripe_event_id', event.id);
+          if (tx?.id && availId) {
+            await admin.from('ledger_entries')
+              .upsert({
+                transaction_id:    tx.id,
+                ledger_account_id: availId,
+                amount_cents:      amountCents,
+              }, { onConflict: 'transaction_id,ledger_account_id' });
+
+            console.log('[webhook] credited', amountCents, 'to wallet', walletId);
           } else {
-            console.log('[webhook] credit_wallet SUCCESS — credited', amountCents, 'to wallet', walletId);
+            console.error('[webhook] failed to insert tx or find availId', { txId: tx?.id, availId });
           }
 
-          // Update deposit and transaction status
-          if (deposit) {
-            await admin.from('deposits')
-              .update({ status: 'succeeded', completed_at: new Date().toISOString() })
-              .eq('id', deposit.id);
-          }
-
-          await admin.from('transactions')
-            .update({ status: 'completed', completed_at: new Date().toISOString() })
-            .eq('idempotency_key', `deposit_${pi.id}`);
+          // Update deposit record
+          await admin.from('deposits')
+            .update({ status: 'succeeded', completed_at: new Date().toISOString() })
+            .eq('stripe_payment_intent_id', pi.id);
         }
       }
     }
