@@ -62,64 +62,19 @@ export async function POST(req: Request) {
         } else {
           const amountCents = deposit?.amount_cents ?? pi.amount;
 
-          // Get or create user_available ledger account for this wallet
-          let availAcct = await admin
-            .from('ledger_accounts')
-            .select('id')
-            .eq('wallet_id', walletId)
-            .eq('type', 'user_available')
-            .maybeSingle()
-            .then(r => r.data);
+          // Atomic credit via postgres function — creates ledger accounts if missing, idempotent
+          const { error: rpcError } = await admin.rpc('credit_wallet', {
+            p_user_id:        userId,
+            p_amount_cents:   amountCents,
+            p_type:           'deposit',
+            p_description:    `Stripe deposit ${pi.id}`,
+            p_idempotency_key: `deposit_${pi.id}`,
+          });
 
-          if (!availAcct) {
-            await admin.from('ledger_accounts').insert([
-              { wallet_id: walletId, type: 'user_available', name: 'Available' },
-              { wallet_id: walletId, type: 'user_pending',   name: 'Pending' },
-            ]);
-            availAcct = await admin
-              .from('ledger_accounts')
-              .select('id')
-              .eq('wallet_id', walletId)
-              .eq('type', 'user_available')
-              .single()
-              .then(r => r.data);
-          }
-
-          if (availAcct) {
-            // Find or create transaction
-            let { data: tx } = await admin
-              .from('transactions')
-              .select('id')
-              .eq('idempotency_key', `deposit_${pi.id}`)
-              .maybeSingle();
-
-            if (!tx) {
-              const { data: newTx } = await admin
-                .from('transactions')
-                .insert({
-                  user_id:                  userId,
-                  type:                     'deposit',
-                  status:                   'pending',
-                  amount_cents:             amountCents,
-                  stripe_payment_intent_id: pi.id,
-                  description:              `Deposit $${(amountCents / 100).toFixed(2)}`,
-                  idempotency_key:          `deposit_${pi.id}`,
-                })
-                .select('id')
-                .single();
-              tx = newTx;
-            }
-
-            // Credit available balance
-            await admin.from('ledger_entries').insert({
-              transaction_id:   tx?.id,
-              ledger_account_id: availAcct.id,
-              amount_cents:     amountCents,
-            });
-
-            console.log('[webhook] deposit credited:', amountCents, 'cents to wallet:', walletId);
+          if (rpcError) {
+            console.error('[webhook] credit_wallet error:', rpcError.message);
           } else {
-            console.error('[webhook] user_available ledger account not found for wallet:', walletId);
+            console.log('[webhook] deposit credited:', amountCents, 'cents to wallet:', walletId);
           }
 
           // Update deposit and transaction status

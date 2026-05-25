@@ -114,71 +114,25 @@ export async function POST(req: NextRequest) {
       }
     } else {
       // ── Paid league — deduct from wallet atomically ────────────────────────
-      const { data: wallet } = await admin
-        .from('wallets')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
+      const { error: rpcError } = await admin.rpc('debit_wallet', {
+        p_user_id:         user.id,
+        p_amount_cents:    buyInCents,
+        p_type:            'contest_entry',
+        p_description:     `Contest entry: ${league.name}`,
+        p_idempotency_key: `entry_${league_id}_${user.id}`,
+      });
 
-      if (!wallet) {
-        return NextResponse.json({ error: 'Wallet not found', code: 'INSUFFICIENT_BALANCE', balance: 0, required: buyInCents }, { status: 402 });
+      if (rpcError) {
+        if (rpcError.message.includes('Insufficient balance') || rpcError.message.includes('Wallet not found')) {
+          return NextResponse.json({
+            error:    rpcError.message,
+            code:     'INSUFFICIENT_BALANCE',
+            balance:  0,
+            required: buyInCents,
+          }, { status: 402 });
+        }
+        return NextResponse.json({ error: rpcError.message }, { status: 500 });
       }
-
-      // Compute balance from ledger entries (same as /api/wallet)
-      const { data: accounts } = await admin
-        .from('ledger_accounts')
-        .select('id, type')
-        .eq('wallet_id', wallet.id);
-
-      const availableId = accounts?.find(a => a.type === 'user_available')?.id;
-      let currentBalance = 0;
-      if (availableId) {
-        const { data: entries } = await admin
-          .from('ledger_entries')
-          .select('amount_cents')
-          .eq('ledger_account_id', availableId);
-        currentBalance = entries?.reduce((sum, e) => sum + Number(e.amount_cents), 0) ?? 0;
-      }
-
-      if (currentBalance < buyInCents) {
-        return NextResponse.json({
-          error:    'Insufficient balance',
-          code:     'INSUFFICIENT_BALANCE',
-          balance:  currentBalance,
-          required: buyInCents,
-        }, { status: 402 });
-      }
-
-      const pendingAcctId = accounts?.find(a => a.type === 'user_pending')?.id;
-
-      if (!availableId || !pendingAcctId) {
-        return NextResponse.json({ error: 'Ledger accounts not found' }, { status: 500 });
-      }
-
-      // Create transaction record
-      const { data: tx, error: txErr } = await admin
-        .from('transactions')
-        .insert({
-          user_id:         user.id,
-          type:            'contest_entry',
-          status:          'completed',
-          amount_cents:    buyInCents,
-          league_id,
-          idempotency_key: `entry_${league_id}_${user.id}_${Date.now()}`,
-          description:     `Contest entry: ${league.name}`,
-        })
-        .select('id')
-        .single();
-
-      if (txErr) {
-        return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 });
-      }
-
-      // Double-entry: debit user_available, credit user_pending
-      await admin.from('ledger_entries').insert([
-        { transaction_id: tx!.id, ledger_account_id: availableId,   amount_cents: -buyInCents },
-        { transaction_id: tx!.id, ledger_account_id: pendingAcctId, amount_cents: +buyInCents },
-      ]);
 
       if (league.league_type !== 'bracket') {
         await admin.from('league_members').insert({
