@@ -1180,10 +1180,8 @@ export default function BracketPage() {
   const semi2t2 = cwsT(CWS_SEMIS[2].rightSR)
   const semi3t1 = cwsT(CWS_SEMIS[3].leftSR)
   const semi3t2 = cwsT(CWS_SEMIS[3].rightSR)
-  const champT1 = picks.semifinals[0] ?? null
-  const champT2 = picks.semifinals[1] ?? null
-  const champT3 = picks.semifinals[2] ?? null
-  const champT4 = picks.semifinals[3] ?? null
+  const champT1 = picks.semifinals[0] ?? picks.semifinals[1] ?? null
+  const champT2 = picks.semifinals[2] ?? picks.semifinals[3] ?? null
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1234,98 +1232,48 @@ export default function BracketPage() {
   )
 
   const cwsCol = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <ColHeader line1="College World Series" line2="Omaha, Nebraska" align="center" />
 
-      <CWSMatchupBox
-        label="CWS Semifinal 1"
-        t1={semi0t1} t2={semi0t2}
-        picked={picks.semifinals[0] ?? null}
-        onPick={t => pickSemi(0, t)}
-        isLocked={isLocked}
-        resultWinner={matchupResults['semi_0']?.winner}
-        hasSubmitted={hasSubmitted}
-      />
-
-      <CWSMatchupBox
-        label="CWS Semifinal 2"
-        t1={semi1t1} t2={semi1t2}
-        picked={picks.semifinals[1] ?? null}
-        onPick={t => pickSemi(1, t)}
-        isLocked={isLocked}
-        resultWinner={matchupResults['semi_1']?.winner}
-        hasSubmitted={hasSubmitted}
-      />
-
-      <CWSMatchupBox
-        label="CWS Semifinal 3"
-        t1={semi2t1} t2={semi2t2}
-        picked={picks.semifinals[2] ?? null}
-        onPick={t => pickSemi(2, t)}
-        isLocked={isLocked}
-        resultWinner={matchupResults['semi_2']?.winner}
-        hasSubmitted={hasSubmitted}
-      />
-
-      <CWSMatchupBox
-        label="CWS Semifinal 4"
-        t1={semi3t1} t2={semi3t2}
-        picked={picks.semifinals[3] ?? null}
-        onPick={t => pickSemi(3, t)}
-        isLocked={isLocked}
-        resultWinner={matchupResults['semi_3']?.winner}
-        hasSubmitted={hasSubmitted}
-      />
+      {/* Bracket A */}
+      <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ padding: '6px 10px', background: C.surf2, borderBottom: `1px solid ${C.surf3}`, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold, letterSpacing: 2 }}>
+          BRACKET A
+        </div>
+        <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <CWSMatchupBox label="CWS Semifinal 1" t1={cwsT(0)} t2={cwsT(4)} picked={picks.semifinals[0] ?? null} onPick={t => pickSemi(0, t)} isLocked={isLocked} resultWinner={matchupResults['semi_0']?.winner} hasSubmitted={hasSubmitted} />
+          <CWSMatchupBox label="CWS Semifinal 2" t1={cwsT(1)} t2={cwsT(5)} picked={picks.semifinals[1] ?? null} onPick={t => pickSemi(1, t)} isLocked={isLocked} resultWinner={matchupResults['semi_1']?.winner} hasSubmitted={hasSubmitted} />
+        </div>
+      </div>
 
       {/* Championship */}
       <div style={{ background: C.surf, border: `2px solid ${C.gold}`, borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{
-          padding: '8px 12px', background: 'rgba(245,166,35,.08)',
-          borderBottom: '1px solid rgba(245,166,35,.3)',
-          textAlign: 'center',
-          fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 3, color: C.gold,
-        }}>
+        <div style={{ padding: '8px 12px', background: 'rgba(245,166,35,.08)', borderBottom: '1px solid rgba(245,166,35,.3)', textAlign: 'center', fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 3, color: C.gold }}>
           🏆 NATIONAL CHAMPIONSHIP
         </div>
-        <div style={{ padding: '10px' }}>
-          {([champT1, champT2, champT3, champT4] as (Team | null)[]).map((team, i) => (
-            <ChampSlot key={i} team={team} isPicked={picks.champion?.id === team?.id} onPick={() => team && pickChampion(team)} isLocked={isLocked}
-              result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === team?.id && team)
-                ? getPickResult(team.id, matchupResults['champion'].winner) : undefined} />
-          ))}
-
+        <div style={{ padding: 10 }}>
+          <ChampSlot team={champT1} isPicked={picks.champion?.id === champT1?.id} onPick={() => champT1 && pickChampion(champT1)} isLocked={isLocked}
+            result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === champT1?.id && champT1) ? getPickResult(champT1.id, matchupResults['champion'].winner) : undefined} />
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.muted, textAlign: 'center', padding: '4px 0' }}>VS</div>
+          <ChampSlot team={champT2} isPicked={picks.champion?.id === champT2?.id} onPick={() => champT2 && pickChampion(champT2)} isLocked={isLocked}
+            result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === champT2?.id && champT2) ? getPickResult(champT2.id, matchupResults['champion'].winner) : undefined} />
           {picks.champion && (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.surf3}` }}>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 8, textAlign: 'center' }}>
-                SERIES RESULT
-              </div>
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.surf3}` }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 6, textAlign: 'center' }}>SERIES RESULT</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {(['2-0', '2-1'] as const).map(s => {
                   const isSelected = picks.seriesResult === s
                   const seriesAnswer = matchupResults['series_result']?.result
                   const seriesResult: PickResult | undefined = (hasSubmitted && seriesAnswer && isSelected)
                     ? (s === seriesAnswer ? 'correct' : 'incorrect') : undefined
-                  const btnBorder = isSelected
-                    ? (seriesResult === 'correct' ? C.green : seriesResult === 'incorrect' ? C.red : C.gold)
-                    : C.surf3
-                  const btnBg = isSelected
-                    ? (seriesResult === 'correct' ? 'rgba(21,198,120,.15)' : seriesResult === 'incorrect' ? 'rgba(240,58,90,.15)' : 'rgba(245,166,35,.15)')
-                    : C.surf2
-                  const btnColor = isSelected
-                    ? (seriesResult === 'correct' ? C.green : seriesResult === 'incorrect' ? C.red : C.gold)
-                    : C.muted
+                  const btnBorder = isSelected ? (seriesResult === 'correct' ? C.green : seriesResult === 'incorrect' ? C.red : C.gold) : C.surf3
+                  const btnBg = isSelected ? (seriesResult === 'correct' ? 'rgba(21,198,120,.15)' : seriesResult === 'incorrect' ? 'rgba(240,58,90,.15)' : 'rgba(245,166,35,.15)') : C.surf2
+                  const btnColor = isSelected ? (seriesResult === 'correct' ? C.green : seriesResult === 'incorrect' ? C.red : C.gold) : C.muted
                   return (
-                  <button key={s}
-                    onClick={isLocked ? undefined : () => setPicks(p => ({ ...p, seriesResult: s }))}
-                    style={{
-                      flex: 1, padding: '7px 0',
-                      border: `1px solid ${btnBorder}`,
-                      background: btnBg,
-                      borderRadius: 6, cursor: isLocked ? 'default' : 'pointer',
-                      fontFamily: 'Anton,sans-serif', fontSize: 13,
-                      color: btnColor,
-                      transition: 'all .15s',
-                    }}>{s}{seriesResult === 'correct' ? ' ✓' : seriesResult === 'incorrect' ? ' ✗' : ''}</button>
+                    <button key={s} onClick={isLocked ? undefined : () => setPicks(p => ({ ...p, seriesResult: s }))}
+                      style={{ flex: 1, padding: '7px 0', border: `1px solid ${btnBorder}`, background: btnBg, borderRadius: 6, cursor: isLocked ? 'default' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, color: btnColor, transition: 'all .15s' }}>
+                      {s}{seriesResult === 'correct' ? ' ✓' : seriesResult === 'incorrect' ? ' ✗' : ''}
+                    </button>
                   )
                 })}
               </div>
@@ -1334,11 +1282,20 @@ export default function BracketPage() {
         </div>
       </div>
 
+      {/* Bracket B */}
+      <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ padding: '6px 10px', background: C.surf2, borderBottom: `1px solid ${C.surf3}`, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold, letterSpacing: 2 }}>
+          BRACKET B
+        </div>
+        <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <CWSMatchupBox label="CWS Semifinal 3" t1={cwsT(2)} t2={cwsT(6)} picked={picks.semifinals[2] ?? null} onPick={t => pickSemi(2, t)} isLocked={isLocked} resultWinner={matchupResults['semi_2']?.winner} hasSubmitted={hasSubmitted} />
+          <CWSMatchupBox label="CWS Semifinal 4" t1={cwsT(3)} t2={cwsT(7)} picked={picks.semifinals[3] ?? null} onPick={t => pickSemi(3, t)} isLocked={isLocked} resultWinner={matchupResults['semi_3']?.winner} hasSubmitted={hasSubmitted} />
+        </div>
+      </div>
+
       {/* How to Play */}
       <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '12px 14px' }}>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 8 }}>
-          HOW TO PLAY
-        </div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 8 }}>HOW TO PLAY</div>
         <ol style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, lineHeight: 2.1, paddingLeft: 14, margin: 0 }}>
           <li>Pick 1 team to win each Regional (16 total)</li>
           <li>Pick 1 team to win each Super Regional (8 total)</li>
@@ -1346,15 +1303,13 @@ export default function BracketPage() {
           <li>Pick the National Champion + series result</li>
         </ol>
         <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '14px 16px', marginTop: 12 }}>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
-            📊 Scoring
-          </div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>📊 Scoring</div>
           {([
-            ['Regional Winner',        '3 pts each'],
-            ['Super Regional Winner',  '5 pts each'],
-            ['CWS Semifinal Winner',   '10 pts each'],
-            ['National Champion',      '15 pts'],
-            ['Correct Series Result',  '+5 bonus pts'],
+            ['Regional Winner',       '3 pts each × 16'],
+            ['Super Regional Winner', '5 pts each × 8'],
+            ['CWS Semifinal Winner',  '10 pts each × 4'],
+            ['National Champion',     '15 pts'],
+            ['Correct Series Result', '+5 bonus pts'],
           ] as [string, string][]).map(([label, pts]) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 6 }}>
               <span>{label}</span>
@@ -1363,7 +1318,7 @@ export default function BracketPage() {
           ))}
           <div style={{ borderTop: `1px solid ${C.surf3}`, marginTop: 8, paddingTop: 8, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
             Max score: {(16 * 3) + (8 * 5) + (4 * 10) + 15 + 5} pts
-            <span style={{ marginLeft: 4 }}>(16 reg + 8 super + 4 semis + champion + series)</span>
+            <span style={{ marginLeft: 4 }}>(48 + 40 + 40 + 15 + 5 = 148)</span>
           </div>
         </div>
       </div>
@@ -1685,9 +1640,9 @@ export default function BracketPage() {
           <div className="bracket-desktop" style={{ overflowX: 'auto', padding: '16px 16px 120px' }}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 200px 260px 200px 1fr',
+              gridTemplateColumns: '1fr 180px 300px 180px 1fr',
               gap: 12,
-              minWidth: 1050,
+              minWidth: 1200,
               alignItems: 'start',
             }}>
               {leftRegionalsCol}
