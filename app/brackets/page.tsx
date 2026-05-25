@@ -369,12 +369,20 @@ export default function BracketsPage() {
               <br />Check back soon!
             </div>
           </div>
-        ) : (
+        ) : (() => {
+          const CONTEST_GRID = isAdmin
+            ? '1fr 90px 80px 90px 80px 100px 80px auto auto'
+            : '1fr 90px 80px 90px 80px 100px 80px'
+          return (
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, padding: '8px 16px', borderBottom: `1px solid ${C.surf3}`, marginBottom: 4 }}>
-              {['Contest', 'Your Entries', 'Entry Fee', 'Total Prizes', 'Entries', 'Live/Start', ''].map((h, i) => (
-                <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{h}</div>
-              ))}
+            <div style={{ display: isMobile ? 'none' : 'grid', gridTemplateColumns: CONTEST_GRID, gap: 8, padding: '6px 16px', borderBottom: `1px solid ${C.surf3}`, marginBottom: 4 }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Contest</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', textAlign: 'center' }}>Your Entries</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', textAlign: 'center' }}>Entry Fee</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', textAlign: 'center' }}>Total Prizes</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', textAlign: 'center' }}>Entries</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', textAlign: 'center' }}>Live/Start</div>
+              <div />
               {isAdmin && <><div /><div /></>}
             </div>
             {contests.map(contest => {
@@ -394,7 +402,7 @@ export default function BracketsPage() {
                     padding: isMobile ? '10px 12px' : '14px 16px',
                     background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, marginBottom: 6,
                     cursor: 'pointer', transition: 'border-color .12s', opacity: alreadyEntered ? 0.75 : 1,
-                    ...(isMobile ? {} : { display: 'grid', gridTemplateColumns: isAdmin ? '2fr 1fr 1fr 1fr 1fr 1fr auto auto auto' : '2fr 1fr 1fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'center' }),
+                    ...(isMobile ? {} : { display: 'grid', gridTemplateColumns: CONTEST_GRID, gap: 8, alignItems: 'center' }),
                   }}
                   onMouseEnter={e => (e.currentTarget.style.borderColor = alreadyEntered ? C.green : C.gold)}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = C.surf3)}
@@ -454,19 +462,19 @@ export default function BracketsPage() {
                           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, marginTop: 2 }}>{contest.settings.description}</div>
                         )}
                       </div>
-                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: myCount > 0 ? C.gold : C.muted }}>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: myCount > 0 ? C.gold : C.muted, textAlign: 'center' }}>
                         {myCount} / {maxPerAcct === 999 ? '∞' : maxPerAcct}
                       </div>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, textAlign: 'center' }}>
                         {contest.entry_fee_cents === 0
                           ? <span style={{ color: C.green, fontFamily: 'Anton,sans-serif', fontSize: 13 }}>FREE</span>
                           : <span>🪙 ${entryFee.toFixed(2)}</span>}
                       </div>
-                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>${totalPrize}</div>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold, textAlign: 'center' }}>${totalPrize}</div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, textAlign: 'center' }}>
                         {totalEntries}{contest.max_entries ? `/${contest.max_entries}` : '/∞'}
                       </div>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, lineHeight: 1.3 }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, lineHeight: 1.3, textAlign: 'center' }}>
                         When first<br />game starts
                       </div>
                       <button
@@ -486,7 +494,8 @@ export default function BracketsPage() {
               )
             })}
           </div>
-        )}
+          )
+        })()}
       </div>
 
       </div>{/* end flex wrapper */}
