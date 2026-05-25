@@ -784,7 +784,7 @@ function BracketTeamsEditor() {
 
 function BracketAdminPanel() {
   const supabase = createClientComponentClient()
-  const [activeTab, setActiveTab] = useState<'teams' | 'results'>('teams')
+  const [bracketTeams, setBracketTeams] = useState<any[]>([])
   const [regionalWinners, setRegionalWinners] = useState<Record<string, string>>({})
   const [srWinners, setSrWinners] = useState<Record<number, string>>({})
   const [omahaAWinner, setOmahaAWinner] = useState('')
@@ -794,22 +794,43 @@ function BracketAdminPanel() {
   const [savingResults, setSavingResults] = useState(false)
   const [savedResults, setSavedResults] = useState(false)
 
-  const LEFT_REGIONS = ['ucla','west_virginia','southern_miss','florida','north_carolina','texas_am','nebraska','auburn']
-  const RIGHT_REGIONS = ['georgia_tech','kansas','florida_state','alabama','texas','oregon','mississippi_st','georgia']
+  const LEFT_REGIONS = [
+    { key: 'ucla',          display: 'Los Angeles' },
+    { key: 'west_virginia', display: 'Morgantown' },
+    { key: 'southern_miss', display: 'Hattiesburg' },
+    { key: 'florida',       display: 'Gainesville' },
+    { key: 'north_carolina',display: 'Chapel Hill' },
+    { key: 'texas_am',      display: 'College Station' },
+    { key: 'nebraska',      display: 'Lincoln' },
+    { key: 'auburn',        display: 'Auburn' },
+  ]
+  const RIGHT_REGIONS = [
+    { key: 'georgia_tech',   display: 'Atlanta' },
+    { key: 'kansas',         display: 'Lawrence' },
+    { key: 'florida_state',  display: 'Tallahassee' },
+    { key: 'alabama',        display: 'Tuscaloosa' },
+    { key: 'texas',          display: 'Austin' },
+    { key: 'oregon',         display: 'Eugene' },
+    { key: 'mississippi_st', display: 'Starkville' },
+    { key: 'georgia',        display: 'Athens' },
+  ]
   const LEFT_SR = [
-    { idx: 0, label: 'SR1', top: 'ucla', bot: 'west_virginia' },
-    { idx: 1, label: 'SR2', top: 'southern_miss', bot: 'florida' },
+    { idx: 0, label: 'SR1', top: 'ucla',          bot: 'west_virginia' },
+    { idx: 1, label: 'SR2', top: 'southern_miss',  bot: 'florida' },
     { idx: 2, label: 'SR3', top: 'north_carolina', bot: 'texas_am' },
-    { idx: 3, label: 'SR4', top: 'nebraska', bot: 'auburn' },
+    { idx: 3, label: 'SR4', top: 'nebraska',       bot: 'auburn' },
   ]
   const RIGHT_SR = [
-    { idx: 4, label: 'SR5', top: 'georgia_tech', bot: 'kansas' },
-    { idx: 5, label: 'SR6', top: 'florida_state', bot: 'alabama' },
-    { idx: 6, label: 'SR7', top: 'texas', bot: 'oregon' },
+    { idx: 4, label: 'SR5', top: 'georgia_tech',   bot: 'kansas' },
+    { idx: 5, label: 'SR6', top: 'florida_state',  bot: 'alabama' },
+    { idx: 6, label: 'SR7', top: 'texas',           bot: 'oregon' },
     { idx: 7, label: 'SR8', top: 'mississippi_st', bot: 'georgia' },
   ]
 
   useEffect(() => {
+    supabase.from('bracket_teams').select('*').eq('contest_id', 'global')
+      .order('region_key').order('seed')
+      .then(({ data }) => setBracketTeams(data ?? []))
     loadResults()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -845,8 +866,68 @@ function BracketAdminPanel() {
     setSavingResults(false)
   }
 
-  function getSROptions(sr: { top: string; bot: string }) {
-    return [regionalWinners[sr.top], regionalWinners[sr.bot]].filter(Boolean) as string[]
+  function getRegionTeams(regionKey: string): string[] {
+    return bracketTeams
+      .filter(t => t.region_key === regionKey)
+      .sort((a: any, b: any) => a.seed - b.seed)
+      .map((t: any) => t.team_name)
+      .filter(Boolean)
+  }
+
+  function RegionResultPod({ region }: { region: { key: string; display: string } }) {
+    const teams = getRegionTeams(region.key)
+    const winner = regionalWinners[region.key]
+    return (
+      <div style={{ background: C.surf2, borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 6 }}>
+          {region.display}
+          {winner && <span style={{ color: C.green, marginLeft: 8 }}>→ {winner}</span>}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4 }}>
+          {teams.length > 0 ? teams.map(team => (
+            <button key={team} onClick={() => setRegionalWinners(prev => ({
+              ...prev, [region.key]: prev[region.key] === team ? '' : team
+            }))}
+              style={{ padding: '6px 8px', border: `1px solid ${winner === team ? C.green : C.surf3}`, borderRadius: 5, cursor: 'pointer', background: winner === team ? 'rgba(21,198,120,.15)' : C.surf, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: winner === team ? C.green : C.text, textAlign: 'left' as const }}>
+              {winner === team && '✓ '}{team}
+            </button>
+          )) : (
+            <div style={{ gridColumn: '1/-1', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
+              No teams set — add teams in Bracket Teams Editor
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  function SRResultPod({ sr }: { sr: { idx: number; label: string; top: string; bot: string } }) {
+    const topWinner = regionalWinners[sr.top]
+    const botWinner = regionalWinners[sr.bot]
+    const winner = srWinners[sr.idx]
+    const options = [topWinner, botWinner].filter(Boolean) as string[]
+    return (
+      <div style={{ background: C.surf2, borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 6 }}>
+          {sr.label}
+          {winner && <span style={{ color: C.green, marginLeft: 8 }}>→ {winner}</span>}
+        </div>
+        {options.length === 0 ? (
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>Set regional winners first</div>
+        ) : (
+          <div style={{ display: 'flex', gap: 6 }}>
+            {options.map(team => (
+              <button key={team} onClick={() => setSrWinners(prev => ({
+                ...prev, [sr.idx]: prev[sr.idx] === team ? undefined : team
+              } as any))}
+                style={{ flex: 1, padding: '8px', border: `1px solid ${winner === team ? C.green : C.surf3}`, borderRadius: 5, cursor: 'pointer', background: winner === team ? 'rgba(21,198,120,.15)' : C.surf, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: winner === team ? C.green : C.text, textAlign: 'center' as const }}>
+                {winner === team && '✓ '}{team}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -855,132 +936,82 @@ function BracketAdminPanel() {
         ⚾ Bracket Admin
       </div>
 
-      <div style={{ display: 'flex', borderBottom: `1px solid ${C.surf3}`, marginBottom: 20 }}>
-        {([['teams', '🏟️ Teams'], ['results', '📊 Results']] as [string, string][]).map(([key, label]) => (
-          <button key={key} onClick={() => setActiveTab(key as 'teams' | 'results')}
-            style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${activeTab === key ? C.gold : 'transparent'}`, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: activeTab === key ? C.gold : C.muted }}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 16 }}>
+          Click the winning team at each round. Results update for all users when you save.
+        </div>
 
-      {activeTab === 'teams' && <BracketTeamsEditor />}
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>🏟️ Regional Winners</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 20 }}>
+          {[...LEFT_REGIONS, ...RIGHT_REGIONS].map(r => <RegionResultPod key={r.key} region={r} />)}
+        </div>
 
-      {activeTab === 'results' && (
-        <div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 16 }}>
-            Enter winners as games complete. Scores update automatically for all user brackets.
-          </div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>⚔️ Super Regional Winners</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 20 }}>
+          {[...LEFT_SR, ...RIGHT_SR].map(sr => <SRResultPod key={sr.idx} sr={sr} />)}
+        </div>
 
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
-            Regional Winners (type team name)
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 20 }}>
-            {[...LEFT_REGIONS, ...RIGHT_REGIONS].map(region => (
-              <div key={region} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, width: 90, textTransform: 'capitalize' }}>
-                  {region.replace(/_/g, ' ')}
-                </span>
-                <input
-                  value={regionalWinners[region] ?? ''}
-                  onChange={e => setRegionalWinners(prev => ({ ...prev, [region]: e.target.value }))}
-                  placeholder="Winner"
-                  style={{ flex: 1, padding: '5px 8px', background: C.surf3, border: `1px solid ${regionalWinners[region] ? C.green : C.surf3}`, borderRadius: 5, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 11, outline: 'none' }}
-                />
-              </div>
-            ))}
-          </div>
-
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
-            Super Regional Winners
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 20 }}>
-            {[...LEFT_SR, ...RIGHT_SR].map(sr => {
-              const options = getSROptions(sr)
-              return (
-                <div key={sr.idx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, width: 30 }}>{sr.label}</span>
-                  {options.length > 0 ? (
-                    <select value={srWinners[sr.idx] ?? ''}
-                      onChange={e => setSrWinners(prev => ({ ...prev, [sr.idx]: e.target.value }))}
-                      style={{ flex: 1, padding: '5px 8px', background: C.surf3, border: `1px solid ${srWinners[sr.idx] ? C.green : C.surf3}`, borderRadius: 5, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 11, outline: 'none' }}>
-                      <option value="">-- Pick winner --</option>
-                      {options.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  ) : (
-                    <input value={srWinners[sr.idx] ?? ''} onChange={e => setSrWinners(prev => ({ ...prev, [sr.idx]: e.target.value }))}
-                      placeholder="Regional winners needed first"
-                      style={{ flex: 1, padding: '5px 8px', background: C.surf3, border: `1px solid ${C.surf3}`, borderRadius: 5, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 10, outline: 'none' }} />
-                  )}
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>🏟️ Omaha Bracket Winners</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 20 }}>
+          {([
+            { label: 'Omaha Bracket 1', key: 'A', srIdxs: [0,1,2,3] as number[], state: omahaAWinner, set: setOmahaAWinner },
+            { label: 'Omaha Bracket 2', key: 'B', srIdxs: [4,5,6,7] as number[], state: omahaBWinner, set: setOmahaBWinner },
+          ]).map(({ label, key, srIdxs, state, set }) => {
+            const options = srIdxs.map(i => srWinners[i]).filter(Boolean) as string[]
+            return (
+              <div key={key} style={{ background: C.surf2, borderRadius: 8, padding: '10px 12px' }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 6 }}>
+                  {label} {state && <span style={{ color: C.green }}>→ {state}</span>}
                 </div>
-              )
-            })}
-          </div>
-
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
-            Omaha Bracket Winners
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
-            {([
-              { label: 'Bracket 1 Winner', key: 'A', options: ([0,1,2,3] as number[]).map(i => srWinners[i]).filter(Boolean) as string[] },
-              { label: 'Bracket 2 Winner', key: 'B', options: ([4,5,6,7] as number[]).map(i => srWinners[i]).filter(Boolean) as string[] },
-            ]).map(({ label, key, options }) => (
-              <div key={key}>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 4 }}>{label}</div>
-                {options.length > 0 ? (
-                  <select value={key === 'A' ? omahaAWinner : omahaBWinner}
-                    onChange={e => key === 'A' ? setOmahaAWinner(e.target.value) : setOmahaBWinner(e.target.value)}
-                    style={{ width: '100%', padding: '6px 8px', background: C.surf3, border: `1px solid ${(key === 'A' ? omahaAWinner : omahaBWinner) ? C.green : C.surf3}`, borderRadius: 5, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 11, outline: 'none' }}>
-                    <option value="">-- Pick winner --</option>
-                    {options.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
+                {options.length === 0 ? (
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>Set SR winners first</div>
                 ) : (
-                  <input value={key === 'A' ? omahaAWinner : omahaBWinner}
-                    onChange={e => key === 'A' ? setOmahaAWinner(e.target.value) : setOmahaBWinner(e.target.value)}
-                    placeholder="SR winners needed first"
-                    style={{ width: '100%', padding: '6px 8px', background: C.surf3, border: `1px solid ${C.surf3}`, borderRadius: 5, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 10, outline: 'none' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                    {options.map(team => (
+                      <button key={team} onClick={() => set(state === team ? '' : team)}
+                        style={{ padding: '8px', border: `1px solid ${state === team ? C.green : C.surf3}`, borderRadius: 5, cursor: 'pointer', background: state === team ? 'rgba(21,198,120,.15)' : C.surf, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: state === team ? C.green : C.text, textAlign: 'left' as const }}>
+                        {state === team && '✓ '}{team}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
+            )
+          })}
+        </div>
 
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
-            National Champion
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>🏆 National Championship</div>
+        <div style={{ background: C.surf2, borderRadius: 8, padding: '12px', marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            {[omahaAWinner, omahaBWinner].filter(Boolean).length > 0 ? [omahaAWinner, omahaBWinner].filter(Boolean).map(team => (
+              <button key={team} onClick={() => setChampion(champion === team ? '' : team)}
+                style={{ flex: 1, padding: '10px', border: `2px solid ${champion === team ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: champion === team ? 'rgba(245,166,35,.15)' : C.surf, fontFamily: 'Anton,sans-serif', fontSize: 14, color: champion === team ? C.gold : C.text, textAlign: 'center' as const }}>
+                {champion === team && '🏆 '}{team}
+              </button>
+            )) : (
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>Set Omaha bracket winners first</div>
+            )}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+          {champion && (
             <div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 4 }}>Champion</div>
-              {[omahaAWinner, omahaBWinner].filter(Boolean).length > 0 ? (
-                <select value={champion} onChange={e => setChampion(e.target.value)}
-                  style={{ width: '100%', padding: '6px 8px', background: C.surf3, border: `1px solid ${champion ? C.green : C.surf3}`, borderRadius: 5, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 11, outline: 'none' }}>
-                  <option value="">-- Pick champion --</option>
-                  {[omahaAWinner, omahaBWinner].filter(Boolean).map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              ) : (
-                <input value={champion} onChange={e => setChampion(e.target.value)}
-                  placeholder="Omaha winners needed first"
-                  style={{ width: '100%', padding: '6px 8px', background: C.surf3, border: `1px solid ${C.surf3}`, borderRadius: 5, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 10, outline: 'none' }} />
-              )}
-            </div>
-            <div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 4 }}>Series Result</div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 6, letterSpacing: 1 }}>SERIES RESULT</div>
+              <div style={{ display: 'flex', gap: 8 }}>
                 {(['2-0', '2-1'] as const).map(s => (
                   <button key={s} onClick={() => setSeriesResult(seriesResult === s ? '' : s)}
-                    style={{ flex: 1, padding: '6px', border: `1px solid ${seriesResult === s ? C.gold : C.surf3}`, borderRadius: 5, cursor: 'pointer', background: seriesResult === s ? 'rgba(245,166,35,.1)' : C.surf3, fontFamily: 'Anton,sans-serif', fontSize: 13, color: seriesResult === s ? C.gold : C.muted }}>
+                    style={{ flex: 1, padding: '8px', border: `1px solid ${seriesResult === s ? C.gold : C.surf3}`, borderRadius: 5, cursor: 'pointer', background: seriesResult === s ? 'rgba(245,166,35,.15)' : C.surf, fontFamily: 'Anton,sans-serif', fontSize: 16, color: seriesResult === s ? C.gold : C.muted }}>
                     {s}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
-
-          <button onClick={saveResults} disabled={savingResults}
-            style={{ width: '100%', padding: '13px', background: savingResults ? C.surf3 : savedResults ? C.green : C.gold, border: 'none', borderRadius: 8, cursor: savingResults ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' as const }}>
-            {savingResults ? 'Saving...' : savedResults ? '✓ Saved!' : 'Save Results'}
-          </button>
+          )}
         </div>
-      )}
+
+        <button onClick={saveResults} disabled={savingResults}
+          style={{ width: '100%', padding: '14px', background: savingResults ? C.surf3 : savedResults ? C.green : C.gold, border: 'none', borderRadius: 8, cursor: savingResults ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' as const }}>
+          {savingResults ? 'Saving...' : savedResults ? '✓ Saved — All Brackets Updated!' : 'Save Results'}
+        </button>
+      </div>
     </div>
   )
 }
