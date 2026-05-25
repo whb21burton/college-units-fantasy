@@ -33,7 +33,7 @@ BEGIN
       RETURNING id INTO v_pending_id;
   END IF;
 
-  IF EXISTS (SELECT 1 FROM transactions WHERE idempotency_key = p_idempotency_key) THEN
+  IF EXISTS (SELECT 1 FROM transactions WHERE idempotency_key = p_idempotency_key AND status = 'completed') THEN
     RETURN;
   END IF;
 
