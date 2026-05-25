@@ -20,7 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Find all paid transactions for this contest
   const { data: paidTxs } = await admin
     .from('transactions')
-    .select('user_id, amount_cents')
+    .select('id, user_id, amount_cents')
     .eq('type', 'contest_entry')
     .eq('status', 'completed')
     .ilike('description', `%${contestId}%`)
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       status:          'completed',
       amount_cents:    tx.amount_cents,
       description:     `Refund: bracket contest ${contestId} deleted`,
-      idempotency_key: `refund_delete_${contestId}_${tx.user_id}`,
+      idempotency_key: `refund_delete_${contestId}_${tx.id}`,
       completed_at:    new Date().toISOString(),
     }).select('id').single()
 

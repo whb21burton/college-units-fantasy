@@ -257,6 +257,7 @@ export async function POST(req: Request) {
   }
 
   const payouts: { rank: number; botEmail: string; isReal: boolean; payoutCents: number; payoutDollars: string }[] = []
+  const simRunId = Date.now()
 
   if (simulateResults && allEntrants.length > 0) {
     // Shuffle for random rankings
@@ -301,7 +302,7 @@ export async function POST(req: Request) {
         status: 'completed',
         amount_cents: payoutCents,
         league_id: contestType === 'weekly' ? contestId : null,
-        idempotency_key: `sim_payout_${winner.id}_${contestId}_rank${rank}`,
+        idempotency_key: `sim_payout_${winner.id}_${contestId}_rank${rank}_${simRunId}`,
         description: `Simulation payout - Rank #${rank}: ${contestName}`,
         completed_at: new Date().toISOString(),
       }).select('id').single()
@@ -326,7 +327,7 @@ export async function POST(req: Request) {
         status: 'completed',
         amount_cents: entryFeeCents,
         league_id: contestType === 'weekly' ? contestId : null,
-        idempotency_key: `sim_payout_${middlePlayer.id}_${contestId}_rank${middleRank}`,
+        idempotency_key: `sim_payout_${middlePlayer.id}_${contestId}_rank${middleRank}_${simRunId}`,
         description: `Simulation payout - Rank #${middleRank} (break even): ${contestName}`,
         completed_at: new Date().toISOString(),
       }).select('id').single()

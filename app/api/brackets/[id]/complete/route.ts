@@ -126,7 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   // Determine winners and payout amounts
-  type Payout = { userId: string; entryName: string; amountCents: number; rank: number }
+  type Payout = { entryId: string; userId: string; entryName: string; amountCents: number; rank: number }
   const payouts: Payout[] = []
 
   const adaptedStructure = getAdaptedStructure(payoutStructure, totalEntries)
@@ -138,22 +138,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const perWinner = Math.floor(feeCents * 1.95)
       for (const entry of rankedEntries) {
         if (entry.rank <= winners) {
-          payouts.push({ userId: entry.user_id, entryName: entry.entry_name ?? '', amountCents: perWinner, rank: entry.rank })
+          payouts.push({ entryId: entry.id, userId: entry.user_id, entryName: entry.entry_name ?? '', amountCents: perWinner, rank: entry.rank })
         } else if (hasMiddle && entry.rank === winners + 1) {
-          // Middle player in odd contest — gets entry fee back (break even)
-          payouts.push({ userId: entry.user_id, entryName: entry.entry_name ?? '', amountCents: feeCents, rank: entry.rank })
+          payouts.push({ entryId: entry.id, userId: entry.user_id, entryName: entry.entry_name ?? '', amountCents: feeCents, rank: entry.rank })
         }
       }
     } else if (adaptedStructure === 'winner_take_all') {
       const w = rankedEntries.find(e => e.rank === 1)
-      if (w) payouts.push({ userId: w.user_id, entryName: w.entry_name ?? '', amountCents: netPoolCents, rank: 1 })
+      if (w) payouts.push({ entryId: w.id, userId: w.user_id, entryName: w.entry_name ?? '', amountCents: netPoolCents, rank: 1 })
     } else if (adaptedStructure === 'top2') {
       const p1 = Math.floor(netPoolCents * 0.70)
       const p2 = netPoolCents - p1
       const r1 = rankedEntries.find(e => e.rank === 1)
       const r2 = rankedEntries.find(e => e.rank === 2)
-      if (r1) payouts.push({ userId: r1.user_id, entryName: r1.entry_name ?? '', amountCents: p1, rank: 1 })
-      if (r2) payouts.push({ userId: r2.user_id, entryName: r2.entry_name ?? '', amountCents: p2, rank: 2 })
+      if (r1) payouts.push({ entryId: r1.id, userId: r1.user_id, entryName: r1.entry_name ?? '', amountCents: p1, rank: 1 })
+      if (r2) payouts.push({ entryId: r2.id, userId: r2.user_id, entryName: r2.entry_name ?? '', amountCents: p2, rank: 2 })
     } else if (adaptedStructure === 'top3') {
       const p1 = Math.floor(netPoolCents * 0.60)
       const p2 = Math.floor(netPoolCents * 0.25)
@@ -161,14 +160,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       const r1 = rankedEntries.find(e => e.rank === 1)
       const r2 = rankedEntries.find(e => e.rank === 2)
       const r3 = rankedEntries.find(e => e.rank === 3)
-      if (r1) payouts.push({ userId: r1.user_id, entryName: r1.entry_name ?? '', amountCents: p1, rank: 1 })
-      if (r2) payouts.push({ userId: r2.user_id, entryName: r2.entry_name ?? '', amountCents: p2, rank: 2 })
-      if (r3) payouts.push({ userId: r3.user_id, entryName: r3.entry_name ?? '', amountCents: p3, rank: 3 })
+      if (r1) payouts.push({ entryId: r1.id, userId: r1.user_id, entryName: r1.entry_name ?? '', amountCents: p1, rank: 1 })
+      if (r2) payouts.push({ entryId: r2.id, userId: r2.user_id, entryName: r2.entry_name ?? '', amountCents: p2, rank: 2 })
+      if (r3) payouts.push({ entryId: r3.id, userId: r3.user_id, entryName: r3.entry_name ?? '', amountCents: p3, rank: 3 })
     }
   }
 
-  // Process all entrants: credit winners, release pending for all
-  const winnerIds = new Set(payouts.map(p => p.userId))
+  // Process all entries independently: credit winners, release pending for all
+  const winnerEntryIds = new Set(payouts.map(p => p.entryId))
   for (const entry of rankedEntries) {
     const { data: wallet } = await admin
       .from('wallets').select('id').eq('user_id', entry.user_id).single()
@@ -179,8 +178,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const pendingAcct = accounts?.find(a => a.type === 'user_pending')
     if (!availAcct || !pendingAcct) continue
 
-    const payout = payouts.find(p => p.userId === entry.user_id)
-    const isWinner = winnerIds.has(entry.user_id)
+    const payout = payouts.find(p => p.entryId === entry.id)
+    const isWinner = winnerEntryIds.has(entry.id)
 
     const { data: settleTx } = await admin.from('transactions').insert({
       user_id:         entry.user_id,
@@ -190,7 +189,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       description:     isWinner
         ? `Bracket payout: ${contest.name} — rank #${payout!.rank}`
         : `Bracket settlement: ${contest.name} — no payout`,
-      idempotency_key: `bracket_settle_${contestId}_${entry.user_id}`,
+      idempotency_key: `bracket_settle_${contestId}_${entry.id}`,
       completed_at:    new Date().toISOString(),
     }).select('id').single()
 
