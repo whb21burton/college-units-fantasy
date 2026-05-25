@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Team } from '@/lib/bracketTypes'
+import { useWallet } from '@/context/WalletContext'
 
 const C = {
   bg: '#070a12', surf: '#0c1422', surf2: '#131d30', surf3: '#1e2d47',
@@ -728,6 +729,7 @@ export default function BracketPage() {
   const contestId     = params.id as string
   const isEmbed       = searchParams.get('embed') === '1'
   const supabase      = createClientComponentClient()
+  const { balance: walletBalance, refresh: refreshWallet } = useWallet()
 
   const [userId,         setUserId]         = useState<string | null>(null)
   const [contest,        setContest]        = useState<any>(null)
@@ -743,7 +745,6 @@ export default function BracketPage() {
   const [inviteCode,     setInviteCode]     = useState<string | null>(null)
   const [isCommissioner, setIsCommissioner] = useState(false)
   const [matchupResults, setMatchupResults] = useState<Record<string, any>>({})
-  const [walletBalance,  setWalletBalance]  = useState<number>(0)
   const [showWalletModal,   setShowWalletModal]   = useState(false)
   const [showAddEntryModal, setShowAddEntryModal] = useState(false)
   const [originalPicks,  setOriginalPicks]  = useState<BracketPicks | null>(null)
@@ -787,13 +788,6 @@ export default function BracketPage() {
       .order('seed')
     if (teamData && teamData.length > 0) setDbTeams(teamData)
 
-    try {
-      const walletRes = await fetch('/api/wallet')
-      if (walletRes.ok) {
-        const walletData = await walletRes.json()
-        setWalletBalance(walletData.wallet?.balance ?? 0)
-      }
-    } catch {}
 
     setLoading(false)
   }, [supabase, contestId])
@@ -1095,7 +1089,7 @@ export default function BracketPage() {
           })
           if (!payRes.ok) { const d = await payRes.json(); alert(d.error ?? 'Payment failed'); setSubmitting(false); return }
         }
-        setWalletBalance(prev => prev - entryFeeCents)
+        refreshWallet()
         setHasPaid(true)
       }
 
@@ -1170,7 +1164,7 @@ export default function BracketPage() {
         alert(d.error ?? 'Payment failed')
         return
       }
-      setWalletBalance(prev => prev - entryFeeCents)
+      refreshWallet()
     }
 
     const nextNum = myEntries.length + 1

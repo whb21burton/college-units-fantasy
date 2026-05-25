@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase-browser';
 import AgeVerificationModal from '@/components/compliance/AgeVerificationModal';
 import TermsAcceptanceModal from '@/components/compliance/TermsAcceptanceModal';
 import WalletDrawer from '@/components/wallet/WalletDrawer';
+import { useWallet } from '@/context/WalletContext';
 
 const IntroAnimation = dynamic(() => import('@/components/IntroAnimation'), { ssr: false });
 
@@ -30,9 +31,9 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+  const { balance: walletBalance } = useWallet();
   const [leagues, setLeagues] = useState<any[]>([]);
   const [bracketCount, setBracketCount] = useState(0);
-  const [walletBalance, setWalletBalance] = useState(0);
   const [showWallet, setShowWallet] = useState(false);
   const [locks, setLocks] = useState({ public_leagues: false, bracket_contests: false, create_season_league: false, create_bracket: false });
   const [showIntro, setShowIntro] = useState(false);
@@ -62,9 +63,6 @@ export default function HomePage() {
       if (session?.user) {
         setUser(session.user);
         loadLeagues(session.user.id);
-        fetch('/api/wallet').then(r => r.json()).then(d => {
-          setWalletBalance(d.wallet?.available ?? d.wallet?.balance ?? 0);
-        }).catch(() => {});
         checkCompliance(session.user.id);
       }
     });
@@ -73,9 +71,6 @@ export default function HomePage() {
         setUser(session.user);
         loadLeagues(session.user.id);
         checkCompliance(session.user.id);
-        fetch('/api/wallet').then(r => r.json()).then(d => {
-          setWalletBalance(d.wallet?.available ?? d.wallet?.balance ?? 0);
-        }).catch(() => {});
       } else {
         setUser(null);
         setView('landing');
@@ -388,7 +383,7 @@ export default function HomePage() {
 
     </div>
 
-    <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} onBalanceChange={setWalletBalance} />
+    <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} />
 
     {/* COMPLIANCE MODALS */}
     {showTermsModal && (

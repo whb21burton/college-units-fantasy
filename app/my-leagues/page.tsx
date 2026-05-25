@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import WalletDrawer from '@/components/wallet/WalletDrawer';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
+import { useWallet } from '@/context/WalletContext';
 
 const C = {
   bg:    '#070a12',
@@ -112,6 +113,7 @@ function InlineBracketDashboard({ contestId, leagueData, userId }: {
 function MyLeaguesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { balance: walletBalance } = useWallet();
   const [user,            setUser]            = useState<any>(null);
   const [loading,         setLoading]         = useState(true);
   const [leagues,         setLeagues]         = useState<LeagueData[]>([]);
@@ -127,7 +129,6 @@ function MyLeaguesContent() {
   const [editingProfile,  setEditingProfile]  = useState(false);
   const [newDisplayName,  setNewDisplayName]  = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [walletBalance,      setWalletBalance]      = useState<number | null>(null);
   const [showWallet,         setShowWallet]         = useState(false);
   const [standaloneBrackets, setStandaloneBrackets] = useState<LeagueData[]>([]);
   const fileInputRef    = useRef<HTMLInputElement>(null);
@@ -178,23 +179,20 @@ function MyLeaguesContent() {
       setUser(u);
       setAvatarUrl(u.user_metadata?.avatar_url ?? null);
       setDisplayName(u.user_metadata?.display_name ?? u.email?.split('@')[0] ?? 'User');
-      const [{ data: memberships }, walletRes] = await Promise.all([
-        supabase
-          .from('league_members')
-          .select(`
-            team_name,
-            league_id,
-            leagues (
-              id, name, league_type, status, buy_in,
-              league_size, is_public, week, settings,
-              commissioner_id, invite_code, draft_type, conference_filter
-            )
-          `)
-          .eq('user_id', u.id)
-          .eq('is_archived', false)
-          .eq('is_deleted', false),
-        fetch('/api/wallet'),
-      ]);
+      const { data: memberships } = await supabase
+        .from('league_members')
+        .select(`
+          team_name,
+          league_id,
+          leagues (
+            id, name, league_type, status, buy_in,
+            league_size, is_public, week, settings,
+            commissioner_id, invite_code, draft_type, conference_filter
+          )
+        `)
+        .eq('user_id', u.id)
+        .eq('is_archived', false)
+        .eq('is_deleted', false);
       const validLeagues = (memberships ?? [])
         .map((m: any) => m.leagues ? { ...m.leagues, team_name: m.team_name } : null)
         .filter(Boolean) as LeagueData[];
@@ -232,11 +230,6 @@ function MyLeaguesContent() {
         });
 
       setStandaloneBrackets(standaloneItems);
-
-      if (walletRes.ok) {
-        const walletData = await walletRes.json();
-        setWalletBalance(walletData.wallet?.balance ?? null);
-      }
       setLoading(false);
     });
   }, [router]);
@@ -552,17 +545,13 @@ function MyLeaguesContent() {
                 >
                   {displayName}
                 </div>
-                {walletBalance !== null ? (
-                  <div
-                    onClick={() => setShowWallet(true)}
-                    title="Open wallet"
-                    style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, cursor: 'pointer' }}
-                  >
-                    ${(walletBalance / 100).toFixed(2)}
-                  </div>
-                ) : (
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>My Leagues</div>
-                )}
+                <div
+                  onClick={() => setShowWallet(true)}
+                  title="Open wallet"
+                  style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, cursor: 'pointer' }}
+                >
+                  ${(walletBalance / 100).toFixed(2)}
+                </div>
               </div>
             </div>
           ) : (

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import { useWallet } from '@/context/WalletContext'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
@@ -14,15 +15,13 @@ const C = {
 interface WalletDrawerProps {
   isOpen: boolean
   onClose: () => void
-  onBalanceChange?: (cents: number) => void
 }
 
 type Tab = 'overview' | 'deposit' | 'withdraw'
 
-export default function WalletDrawer({ isOpen, onClose, onBalanceChange }: WalletDrawerProps) {
+export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
+  const { balance, pending: pendingBalance, refresh } = useWallet()
   const [tab, setTab] = useState<Tab>('overview')
-  const [balance, setBalance] = useState(0)
-  const [pendingBalance, setPendingBalance] = useState(0)
   const [transactions, setTransactions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [depositAmount, setDepositAmount] = useState<number | null>(null)
@@ -34,7 +33,6 @@ export default function WalletDrawer({ isOpen, onClose, onBalanceChange }: Walle
 
   useEffect(() => {
     if (!isOpen) {
-      // Reset on close
       setTimeout(() => {
         setTab('overview')
         setClientSecret(null)
@@ -44,21 +42,15 @@ export default function WalletDrawer({ isOpen, onClose, onBalanceChange }: Walle
       }, 300)
       return
     }
-    fetchWallet()
+    fetchTransactions()
   }, [isOpen, refreshKey])
 
-  async function fetchWallet() {
+  async function fetchTransactions() {
     setLoading(true)
     try {
       const res = await fetch('/api/wallet')
       const data = await res.json()
-      if (res.ok) {
-        const avail = data.wallet?.available ?? 0
-        setBalance(avail)
-        setPendingBalance(data.wallet?.pending ?? 0)
-        setTransactions(data.transactions ?? [])
-        onBalanceChange?.(avail)
-      }
+      if (res.ok) setTransactions(data.transactions ?? [])
     } finally {
       setLoading(false)
     }
@@ -258,7 +250,7 @@ export default function WalletDrawer({ isOpen, onClose, onBalanceChange }: Walle
               }}>
                 <StripePaymentForm
                   amountCents={pendingCents}
-                  onSuccess={() => setDepositSuccess(true)}
+                  onSuccess={() => { refresh(); setDepositSuccess(true) }}
                   onBack={() => setClientSecret(null)}
                 />
               </Elements>
@@ -310,7 +302,7 @@ export default function WalletDrawer({ isOpen, onClose, onBalanceChange }: Walle
           {tab === 'withdraw' && (
             <WithdrawTab
               balance={balance}
-              onSuccess={() => { setRefreshKey(k => k + 1); setTab('overview') }}
+              onSuccess={() => { refresh(); setRefreshKey(k => k + 1); setTab('overview') }}
             />
           )}
         </div>

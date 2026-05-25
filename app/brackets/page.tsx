@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useWallet } from '@/context/WalletContext'
 
 const C = {
   bg: '#070a12', surf: '#0c1422', surf2: '#131d30', surf3: '#1e2d47',
@@ -18,6 +19,7 @@ const SPORTS = [
 export default function BracketsPage() {
   const router   = useRouter()
   const supabase = createClientComponentClient()
+  const { balance: userBalance, refresh: refreshWallet } = useWallet()
 
   const [pageLocked,      setPageLocked]      = useState<boolean | null>(null)
   const [sportLocks,      setSportLocks]      = useState({ football: false, basketball: false, baseball: false })
@@ -25,7 +27,6 @@ export default function BracketsPage() {
   const [contests,        setContests]        = useState<any[]>([])
   const [loading,         setLoading]         = useState(true)
   const [userId,          setUserId]          = useState<string | null>(null)
-  const [userBalance,     setUserBalance]     = useState(0)
   const [myEntryCounts,   setMyEntryCounts]   = useState<Record<string, number>>({})
   const [isAdmin,         setIsAdmin]         = useState(false)
   const [selectedContest, setSelectedContest] = useState<any>(null)
@@ -74,7 +75,6 @@ export default function BracketsPage() {
       if (!user) { router.push('/'); return }
       setUserId(user.id)
       if (user.email === 'whb21burton@gmail.com') setIsAdmin(true)
-      fetch('/api/wallet').then(r => r.json()).then(d => setUserBalance(d.wallet?.available ?? 0))
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -179,7 +179,7 @@ export default function BracketsPage() {
         setEntering(false)
         return
       }
-      setUserBalance(prev => prev - feeCents)
+      refreshWallet()
     }
 
     // Create entry row
