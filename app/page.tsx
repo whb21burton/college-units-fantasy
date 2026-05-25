@@ -72,6 +72,9 @@ export default function HomePage() {
         setUser(session.user);
         loadLeagues(session.user.id);
         checkCompliance(session.user.id);
+        fetch('/api/wallet').then(r => r.json()).then(d => {
+          setWalletBalance(d.wallet?.available ?? d.wallet?.balance ?? 0);
+        }).catch(() => {});
       } else {
         setUser(null);
         setView('landing');
@@ -383,7 +386,7 @@ export default function HomePage() {
 
     </div>
 
-    <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} />
+    <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} onBalanceChange={setWalletBalance} />
 
     {/* COMPLIANCE MODALS */}
     {showTermsModal && (

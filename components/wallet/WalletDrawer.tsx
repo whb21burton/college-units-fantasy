@@ -14,11 +14,12 @@ const C = {
 interface WalletDrawerProps {
   isOpen: boolean
   onClose: () => void
+  onBalanceChange?: (cents: number) => void
 }
 
 type Tab = 'overview' | 'deposit' | 'withdraw'
 
-export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
+export default function WalletDrawer({ isOpen, onClose, onBalanceChange }: WalletDrawerProps) {
   const [tab, setTab] = useState<Tab>('overview')
   const [balance, setBalance] = useState(0)
   const [pendingBalance, setPendingBalance] = useState(0)
@@ -52,9 +53,11 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       const res = await fetch('/api/wallet')
       const data = await res.json()
       if (res.ok) {
-        setBalance(data.wallet?.available ?? 0)
+        const avail = data.wallet?.available ?? 0
+        setBalance(avail)
         setPendingBalance(data.wallet?.pending ?? 0)
         setTransactions(data.transactions ?? [])
+        onBalanceChange?.(avail)
       }
     } finally {
       setLoading(false)
