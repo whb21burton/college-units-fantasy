@@ -42,17 +42,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
   }
 
-  const body = await req.json().catch(() => ({}))
-  const results = body.results as {
-    regionalWinners: Record<string, string>
-    srWinners: Record<string, string>
-    omahaAWinner: string
-    omahaBWinner: string
-    champion: string
-    seriesResult: string
-  } | undefined
-
   const admin = createAdminClient()
+
+  const { data: resultsSetting } = await admin
+    .from('platform_settings')
+    .select('value')
+    .eq('key', 'bracket_results_2026')
+    .single()
+
+  if (!resultsSetting?.value) {
+    return NextResponse.json({ error: 'No bracket results set' }, { status: 400 })
+  }
+
+  const results = JSON.parse(resultsSetting.value)
 
   const { data: contest } = await admin
     .from('bracket_contests')
@@ -62,56 +64,45 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!contest) return NextResponse.json({ error: 'Contest not found' }, { status: 404 })
   if (contest.status === 'completed') return NextResponse.json({ error: 'Already completed' }, { status: 400 })
 
-  // Get all submitted entries with bracket_data for scoring
   const { data: rawEntries } = await admin
     .from('user_bracket_entries')
     .select('id, user_id, total_score, entry_name, bracket_data')
     .eq('contest_id', contestId)
     .eq('is_submitted', true)
 
-  // Score each entry using bracket_data picks vs results from platform_settings
-  const scored = (rawEntries ?? []).map(entry => {
-    const picks = entry.bracket_data ?? {}
+  function scoreEntry(picks: any): number {
     let score = 0
+    if (!picks) return 0
 
-    if (results) {
-      // Regional picks
-      for (const [regionKey, winnerName] of Object.entries(results.regionalWinners ?? {})) {
-        if (!winnerName) continue
-        const pick = picks.regionals?.[regionKey]
-        if (pick && pick.name === winnerName) score += POINTS.regional
-      }
-      // Super regional picks
-      for (const [idxStr, winnerName] of Object.entries(results.srWinners ?? {})) {
-        if (!winnerName) continue
-        const pick = picks.superRegionals?.[parseInt(idxStr)]
-        if (pick && pick.name === winnerName) score += POINTS.super_regional
-      }
-      // Omaha bracket picks
-      if (results.omahaAWinner && picks.omahaA?.name === results.omahaAWinner) score += POINTS.omaha
-      if (results.omahaBWinner && picks.omahaB?.name === results.omahaBWinner) score += POINTS.omaha
-      // Champion
-      if (results.champion && picks.champion?.name === results.champion) {
-        score += POINTS.championship
-        if (results.seriesResult && picks.seriesResult === results.seriesResult) {
-          score += POINTS.series_bonus
-        }
-      }
-    } else {
-      score = entry.total_score ?? 0
+    for (const [region, team] of Object.entries(picks.regionals ?? {})) {
+      const actual = results.regionalWinners?.[region]
+      if (actual && (team as any)?.name === actual) score += 3
+    }
+    for (const [idx, team] of Object.entries(picks.superRegionals ?? {})) {
+      const actual = results.srWinners?.[parseInt(idx)]
+      if (actual && (team as any)?.name === actual) score += 5
+    }
+    if (picks.omahaA?.name && picks.omahaA.name === results.omahaAWinner) score += 10
+    if (picks.omahaB?.name && picks.omahaB.name === results.omahaBWinner) score += 10
+    if (picks.champion?.name && picks.champion.name === results.champion) {
+      score += 15
+      if (picks.seriesResult && picks.seriesResult === results.seriesResult) score += 5
     }
 
-    return { ...entry, computedScore: score }
-  })
+    return score
+  }
 
-  // Persist computed scores, then rank
+  const scored = (rawEntries ?? [])
+    .map(entry => ({ ...entry, computedScore: scoreEntry(entry.bracket_data) }))
+    .sort((a, b) => b.computedScore - a.computedScore)
+
   for (const entry of scored) {
     await admin.from('user_bracket_entries')
-      .update({ total_score: entry.computedScore, correct_picks: entry.computedScore })
+      .update({ total_score: entry.computedScore })
       .eq('id', entry.id)
   }
 
-  const entries = scored.sort((a, b) => b.computedScore - a.computedScore)
+  const entries = scored
   const totalEntries = entries.length
   const feeCents = contest.entry_fee_cents ?? 0
   const totalPoolCents = feeCents * totalEntries
@@ -216,15 +207,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Record admin stats (requires admin_contest_stats table — create it if missing)
   try {
     await admin.from('admin_contest_stats').insert({
-      contest_id:       contestId,
-      contest_name:     contest.name,
-      contest_type:     'bracket',
-      total_entries:    totalEntries,
-      total_pool_cents: totalPoolCents,
-      rake_cents:       rakeCents,
-      net_pool_cents:   netPoolCents,
-      payout_count:     payouts.length,
-      completed_at:     new Date().toISOString(),
+      contest_name:      contest.name,
+      contest_type:      'bracket',
+      total_entries:     totalEntries,
+      gross_pool_cents:  feeCents * totalEntries,
+      net_pool_cents:    netPoolCents,
+      rake_cents:        rakeCents,
+      completed_at:      new Date().toISOString(),
     })
   } catch {
     // table may not exist yet; non-fatal

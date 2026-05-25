@@ -747,7 +747,8 @@ export default function BracketPage() {
   const chatEndRef = useRef<HTMLDivElement>(null)
   const [isMobile,  setIsMobile]  = useState(false)
   const [dbTeams,   setDbTeams]   = useState<any[]>([])
-  const swipeTouchStart = useRef<number>(0)
+  const swipeTouchStart  = useRef<number>(0)
+  const swipeTouchStartY = useRef<number>(0)
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -796,17 +797,20 @@ export default function BracketPage() {
   const BRACKET_MSECTIONS: MSection[] = ['left', 'super-left', 'cws', 'super-right', 'right']
 
   function handleBracketTouchStart(e: React.TouchEvent) {
-    swipeTouchStart.current = e.touches[0].clientX
+    swipeTouchStart.current  = e.touches[0].clientX
+    swipeTouchStartY.current = e.touches[0].clientY
   }
 
   function handleBracketTouchEnd(e: React.TouchEvent) {
     const dx = e.changedTouches[0].clientX - swipeTouchStart.current
-    if (Math.abs(dx) < 50) return
+    const dy = Math.abs(e.changedTouches[0].clientY - swipeTouchStartY.current)
+    if (Math.abs(dx) < 80) return
+    if (dy > Math.abs(dx) * 0.5) return
     const currentIdx = BRACKET_MSECTIONS.indexOf(mSection)
-    if (dx < -50 && currentIdx < BRACKET_MSECTIONS.length - 1) {
+    if (dx < -80 && currentIdx < BRACKET_MSECTIONS.length - 1) {
       setMSection(BRACKET_MSECTIONS[currentIdx + 1])
     }
-    if (dx > 50 && currentIdx > 0) {
+    if (dx > 80 && currentIdx > 0) {
       setMSection(BRACKET_MSECTIONS[currentIdx - 1])
     }
   }
