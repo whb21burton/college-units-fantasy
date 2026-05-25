@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Team } from '@/lib/bracketTypes'
 import { useWallet } from '@/context/WalletContext'
+import { REGIONS_2026, LEFT_SR_2026, RIGHT_SR_2026, CWS_SEMIS_2026 } from '@/data/cws2026'
 
 const C = {
   bg: '#070a12', surf: '#0c1422', surf2: '#131d30', surf3: '#1e2d47',
@@ -19,52 +20,36 @@ function seedColor(seed: number): string {
 }
 
 /* ── Static team data ──────────────────────────────────── */
-const REGIONS: Record<string, { display: string; teams: Team[] }> = {
-  nashville:   { display: 'Nashville',   teams: [{ id: 'vand',    name: 'Vanderbilt',       seed: 1, record: '45-12' }, { id: 'etsu',   name: 'E. Tennessee St',  seed: 2, record: '42-15' }, { id: 'wst',    name: 'Wright State',     seed: 3, record: '36-19' }, { id: 'lou',    name: 'Louisville',       seed: 4, record: '39-18' }] },
-  hattiesburg: { display: 'Hattiesburg', teams: [{ id: 'smiss',   name: 'Southern Miss',    seed: 1, record: '43-14' }, { id: 'ala',    name: 'Alabama',           seed: 2, record: '40-16' }, { id: 'col',    name: 'Columbia',         seed: 3, record: '34-22' }, { id: 'mia',    name: 'Miami (FL)',        seed: 4, record: '38-20' }] },
-  tallahassee: { display: 'Tallahassee', teams: [{ id: 'fsu',     name: 'Florida State',    seed: 1, record: '44-14' }, { id: 'bcu',    name: 'Bethune-Cookman',   seed: 2, record: '38-22' }, { id: 'neu',    name: 'Northeastern',     seed: 3, record: '35-21' }, { id: 'miss',   name: 'Mississippi St',   seed: 4, record: '37-20' }] },
-  corvallis:   { display: 'Corvallis',   teams: [{ id: 'orst',    name: 'Oregon State',     seed: 1, record: '42-16' }, { id: 'tcu',    name: 'TCU',               seed: 2, record: '40-17' }, { id: 'mich',   name: 'Michigan',         seed: 3, record: '36-19' }, { id: 'usc',    name: 'USC',              seed: 4, record: '35-21' }] },
-  austin:      { display: 'Austin',      teams: [{ id: 'tex',     name: 'Texas',            seed: 1, record: '44-13' }, { id: 'uconn',  name: 'UConn',             seed: 2, record: '39-18' }, { id: 'kst',    name: 'Kansas State',     seed: 3, record: '35-22' }, { id: 'utsa',   name: 'UTSA',             seed: 4, record: '33-24' }] },
-  los_angeles: { display: 'Los Angeles', teams: [{ id: 'ucla',    name: 'UCLA',             seed: 1, record: '42-15' }, { id: 'fres',   name: 'Fresno State',      seed: 2, record: '38-19' }, { id: 'asu',    name: 'Arizona State',    seed: 3, record: '36-20' }, { id: 'uci',    name: 'UC Irvine',        seed: 4, record: '34-23' }] },
-  oxford:      { display: 'Oxford',      teams: [{ id: 'olemiss', name: 'Ole Miss',          seed: 1, record: '45-12' }, { id: 'wku',    name: 'Western Kentucky',  seed: 2, record: '38-20' }, { id: 'gtech',  name: 'Georgia Tech',     seed: 3, record: '35-21' }, { id: 'murr',   name: 'Murray State',     seed: 4, record: '32-25' }] },
-  athens:      { display: 'Athens',      teams: [{ id: 'uga',     name: 'Georgia',           seed: 1, record: '44-14' }, { id: 'bing',   name: 'Binghamton',        seed: 2, record: '37-21' }, { id: 'okst',   name: 'Oklahoma State',   seed: 3, record: '36-20' }, { id: 'duke',   name: 'Duke',             seed: 4, record: '34-23' }] },
-}
+const REGIONS: Record<string, { display: string; teams: Team[] }> = Object.fromEntries(
+  Object.entries(REGIONS_2026).map(([k, v]) => [k, { display: v.display, teams: v.teams }])
+)
 
 function getRegions(dbTeams: any[]): Record<string, { display: string; teams: Team[] }> {
-  if (dbTeams.length === 0) return REGIONS
+  if (dbTeams.length === 0) {
+    return Object.fromEntries(
+      Object.entries(REGIONS_2026).map(([k, v]) => [k, { display: v.display, teams: v.teams }])
+    )
+  }
   const result: Record<string, { display: string; teams: Team[] }> = {}
-  const regionKeys = ['nashville','hattiesburg','tallahassee','corvallis','austin','los_angeles','oxford','athens']
+  const regionKeys = Object.keys(REGIONS_2026)
   for (const key of regionKeys) {
     const regionTeams = dbTeams
       .filter(t => t.region_key === key && t.team_name)
       .sort((a: any, b: any) => a.seed - b.seed)
       .map((t: any) => ({ id: t.team_id || `${t.region_key}_${t.seed}`, name: t.team_name, seed: t.seed, record: t.record || '' }))
     if (regionTeams.length > 0) {
-      const display = dbTeams.find((t: any) => t.region_key === key)?.region_display ?? key
+      const display = dbTeams.find((t: any) => t.region_key === key)?.region_display ?? REGIONS_2026[key].display
       result[key] = { display, teams: regionTeams }
     } else {
-      result[key] = REGIONS[key]
+      result[key] = { display: REGIONS_2026[key].display, teams: REGIONS_2026[key].teams }
     }
   }
   return result
 }
 
-// SR pairings: two left-side regionals → one SR in col 2
-// Two right-side regionals → one SR in col 4
-const LEFT_SR: Array<{ idx: number; label: string; top: string; bot: string }> = [
-  { idx: 0, label: 'Super Regional 1', top: 'nashville',   bot: 'hattiesburg' },
-  { idx: 1, label: 'Super Regional 2', top: 'tallahassee', bot: 'corvallis'   },
-]
-const RIGHT_SR: Array<{ idx: number; label: string; top: string; bot: string }> = [
-  { idx: 2, label: 'Super Regional 3', top: 'austin',      bot: 'los_angeles' },
-  { idx: 3, label: 'Super Regional 4', top: 'oxford',      bot: 'athens'      },
-]
-// CWS semi pairings: SR idx → semi slot
-// Semi 0: SR0 winner vs SR2 winner   Semi 1: SR1 winner vs SR3 winner
-const CWS_SEMIS: Array<{ semiIdx: number; leftSR: number; rightSR: number }> = [
-  { semiIdx: 0, leftSR: 0, rightSR: 2 },
-  { semiIdx: 1, leftSR: 1, rightSR: 3 },
-]
+const LEFT_SR = LEFT_SR_2026
+const RIGHT_SR = RIGHT_SR_2026
+const CWS_SEMIS = CWS_SEMIS_2026
 
 type BracketPicks = {
   regionals:      Record<string, Team>
@@ -86,7 +71,7 @@ function countPicks(p: BracketPicks): number {
     + (p.seriesResult ? 1 : 0)
 }
 
-const TOTAL = 16 // 8 reg + 4 SR + 2 semi + 1 champ + 1 series
+const TOTAL = 30 // 16 reg + 8 SR + 4 semi + 1 champ + 1 series
 
 type Tab = 'bracket' | 'leaderboard' | 'chat' | 'invite'
 type MSection = 'left' | 'super-left' | 'cws' | 'super-right' | 'right'
@@ -490,7 +475,7 @@ function LeaderboardTab({ contestId, userId, contest, isLocked, matchupResults }
   const [viewingEntry, setViewingEntry] = useState<any>(null)
 
   const POINTS = { regional: 3, super_regional: 5, cws_semifinal: 10, championship: 15, series_bonus: 5 }
-  const MAX_SCORE = (8 * POINTS.regional) + (4 * POINTS.super_regional) + (2 * POINTS.cws_semifinal) + POINTS.championship + POINTS.series_bonus
+  const MAX_SCORE = (16 * POINTS.regional) + (8 * POINTS.super_regional) + (4 * POINTS.cws_semifinal) + POINTS.championship + POINTS.series_bonus
 
   useEffect(() => {
     supabase
@@ -1120,7 +1105,7 @@ export default function BracketPage() {
   /* ── Resubmit (picks changed after submission — no name change, no payment) ── */
   async function handleResubmit() {
     if (totalPicks < TOTAL) {
-      alert(`⚠️ Your bracket is incomplete (${totalPicks}/16 picks). Please fill out all picks before resubmitting. Your original bracket has been kept.`)
+      alert(`⚠️ Your bracket is incomplete (${totalPicks}/${TOTAL} picks). Please fill out all picks before resubmitting. Your original bracket has been kept.`)
       return
     }
     setSubmitting(true)
@@ -1191,8 +1176,14 @@ export default function BracketPage() {
   const semi0t2 = cwsT(CWS_SEMIS[0].rightSR)
   const semi1t1 = cwsT(CWS_SEMIS[1].leftSR)
   const semi1t2 = cwsT(CWS_SEMIS[1].rightSR)
+  const semi2t1 = cwsT(CWS_SEMIS[2].leftSR)
+  const semi2t2 = cwsT(CWS_SEMIS[2].rightSR)
+  const semi3t1 = cwsT(CWS_SEMIS[3].leftSR)
+  const semi3t2 = cwsT(CWS_SEMIS[3].rightSR)
   const champT1 = picks.semifinals[0] ?? null
   const champT2 = picks.semifinals[1] ?? null
+  const champT3 = picks.semifinals[2] ?? null
+  const champT4 = picks.semifinals[3] ?? null
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1217,12 +1208,20 @@ export default function BracketPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 10 }}>
       {!isMobile && <ColHeader line1="Regionals" line2="Double Elimination" />}
       <ConnectorPair>
-        <RegionalPod regionKey="nashville"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
-        <RegionalPod regionKey="hattiesburg" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="ucla"          picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="west_virginia" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
       </ConnectorPair>
       <ConnectorPair>
-        <RegionalPod regionKey="tallahassee" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
-        <RegionalPod regionKey="corvallis"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="southern_miss" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="florida"       picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+      </ConnectorPair>
+      <ConnectorPair>
+        <RegionalPod regionKey="north_carolina" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="texas_am"       picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+      </ConnectorPair>
+      <ConnectorPair>
+        <RegionalPod regionKey="nebraska" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="auburn"   picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="right" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
       </ConnectorPair>
     </div>
   )
@@ -1248,6 +1247,36 @@ export default function BracketPage() {
         hasSubmitted={hasSubmitted}
       />
 
+      <CWSMatchupBox
+        label="CWS Semifinal 2"
+        t1={semi1t1} t2={semi1t2}
+        picked={picks.semifinals[1] ?? null}
+        onPick={t => pickSemi(1, t)}
+        isLocked={isLocked}
+        resultWinner={matchupResults['semi_1']?.winner}
+        hasSubmitted={hasSubmitted}
+      />
+
+      <CWSMatchupBox
+        label="CWS Semifinal 3"
+        t1={semi2t1} t2={semi2t2}
+        picked={picks.semifinals[2] ?? null}
+        onPick={t => pickSemi(2, t)}
+        isLocked={isLocked}
+        resultWinner={matchupResults['semi_2']?.winner}
+        hasSubmitted={hasSubmitted}
+      />
+
+      <CWSMatchupBox
+        label="CWS Semifinal 4"
+        t1={semi3t1} t2={semi3t2}
+        picked={picks.semifinals[3] ?? null}
+        onPick={t => pickSemi(3, t)}
+        isLocked={isLocked}
+        resultWinner={matchupResults['semi_3']?.winner}
+        hasSubmitted={hasSubmitted}
+      />
+
       {/* Championship */}
       <div style={{ background: C.surf, border: `2px solid ${C.gold}`, borderRadius: 10, overflow: 'hidden' }}>
         <div style={{
@@ -1259,13 +1288,11 @@ export default function BracketPage() {
           🏆 NATIONAL CHAMPIONSHIP
         </div>
         <div style={{ padding: '10px' }}>
-          <ChampSlot team={champT1} isPicked={picks.champion?.id === champT1?.id} onPick={() => champT1 && pickChampion(champT1)} isLocked={isLocked}
-            result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === champT1?.id && champT1)
-              ? getPickResult(champT1.id, matchupResults['champion'].winner) : undefined} />
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.muted, textAlign: 'center', padding: '6px 0' }}>VS</div>
-          <ChampSlot team={champT2} isPicked={picks.champion?.id === champT2?.id} onPick={() => champT2 && pickChampion(champT2)} isLocked={isLocked}
-            result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === champT2?.id && champT2)
-              ? getPickResult(champT2.id, matchupResults['champion'].winner) : undefined} />
+          {([champT1, champT2, champT3, champT4] as (Team | null)[]).map((team, i) => (
+            <ChampSlot key={i} team={team} isPicked={picks.champion?.id === team?.id} onPick={() => team && pickChampion(team)} isLocked={isLocked}
+              result={(hasSubmitted && matchupResults['champion']?.winner && picks.champion?.id === team?.id && team)
+                ? getPickResult(team.id, matchupResults['champion'].winner) : undefined} />
+          ))}
 
           {picks.champion && (
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.surf3}` }}>
@@ -1307,25 +1334,15 @@ export default function BracketPage() {
         </div>
       </div>
 
-      <CWSMatchupBox
-        label="CWS Semifinal 2"
-        t1={semi1t1} t2={semi1t2}
-        picked={picks.semifinals[1] ?? null}
-        onPick={t => pickSemi(1, t)}
-        isLocked={isLocked}
-        resultWinner={matchupResults['semi_1']?.winner}
-        hasSubmitted={hasSubmitted}
-      />
-
       {/* How to Play */}
       <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '12px 14px' }}>
         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, letterSpacing: 1, marginBottom: 8 }}>
           HOW TO PLAY
         </div>
         <ol style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, lineHeight: 2.1, paddingLeft: 14, margin: 0 }}>
-          <li>Pick 1 team to win each Regional (8 total)</li>
-          <li>Pick 1 team to win each Super Regional (4 total)</li>
-          <li>Pick 1 team to win each CWS Semifinal (2 total)</li>
+          <li>Pick 1 team to win each Regional (16 total)</li>
+          <li>Pick 1 team to win each Super Regional (8 total)</li>
+          <li>Pick 1 team to win each CWS Semifinal (4 total)</li>
           <li>Pick the National Champion + series result</li>
         </ol>
         <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '14px 16px', marginTop: 12 }}>
@@ -1345,8 +1362,8 @@ export default function BracketPage() {
             </div>
           ))}
           <div style={{ borderTop: `1px solid ${C.surf3}`, marginTop: 8, paddingTop: 8, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
-            Max score: {(8 * 3) + (4 * 5) + (2 * 10) + 15 + 5} pts
-            <span style={{ marginLeft: 4 }}>(8 reg + 4 super + 2 semis + champion + series)</span>
+            Max score: {(16 * 3) + (8 * 5) + (4 * 10) + 15 + 5} pts
+            <span style={{ marginLeft: 4 }}>(16 reg + 8 super + 4 semis + champion + series)</span>
           </div>
         </div>
       </div>
@@ -1364,12 +1381,20 @@ export default function BracketPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 14 : 10 }}>
       {!isMobile && <ColHeader line1="Regionals" line2="Double Elimination" align="right" />}
       <ConnectorPairRight>
-        <RegionalPod regionKey="austin"      picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
-        <RegionalPod regionKey="los_angeles" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="georgia_tech" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="kansas"       picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
       </ConnectorPairRight>
       <ConnectorPairRight>
-        <RegionalPod regionKey="oxford"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
-        <RegionalPod regionKey="athens"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="florida_state" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="alabama"       picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+      </ConnectorPairRight>
+      <ConnectorPairRight>
+        <RegionalPod regionKey="texas"  picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="oregon" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+      </ConnectorPairRight>
+      <ConnectorPairRight>
+        <RegionalPod regionKey="mississippi_st" picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
+        <RegionalPod regionKey="georgia"        picks={picks} onPick={pickRegional} isLocked={isLocked} arrow="left" matchupResults={matchupResults} hasSubmitted={hasSubmitted} isMobile={isMobile} regions={activeRegions} />
       </ConnectorPairRight>
     </div>
   )
@@ -1412,7 +1437,7 @@ export default function BracketPage() {
               <button onClick={() => totalPicks >= TOTAL ? handleSubmitDirect() : undefined}
                 disabled={totalPicks < TOTAL || submitting}
                 style={{ padding: '6px 20px', background: totalPicks >= TOTAL && !submitting ? C.gold : C.surf3, border: 'none', borderRadius: 6, cursor: totalPicks >= TOTAL && !submitting ? 'pointer' : 'not-allowed', fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2, color: totalPicks >= TOTAL && !submitting ? C.bg : C.muted, textTransform: 'uppercase' as const }}>
-                {submitting ? 'Submitting...' : totalPicks >= TOTAL ? 'Submit' : `${TOTAL - totalPicks}/16 picks`}
+                {submitting ? 'Submitting...' : totalPicks >= TOTAL ? 'Submit' : `${TOTAL - totalPicks} picks left`}
               </button>
             )}
           </div>
