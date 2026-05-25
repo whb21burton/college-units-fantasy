@@ -29,7 +29,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { refresh() }, [refresh])
+  useEffect(() => {
+    refresh()
+
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+
+    const interval = setInterval(refresh, 30000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      clearInterval(interval)
+    }
+  }, [refresh])
 
   return (
     <WalletContext.Provider value={{ balance, pending, loading, refresh }}>
