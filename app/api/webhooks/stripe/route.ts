@@ -62,13 +62,28 @@ export async function POST(req: Request) {
         } else {
           const amountCents = deposit?.amount_cents ?? pi.amount;
 
-          // Get user_available ledger account for this wallet
-          const { data: availAcct } = await admin
+          // Get or create user_available ledger account for this wallet
+          let availAcct = await admin
             .from('ledger_accounts')
             .select('id')
             .eq('wallet_id', walletId)
             .eq('type', 'user_available')
-            .single();
+            .maybeSingle()
+            .then(r => r.data);
+
+          if (!availAcct) {
+            await admin.from('ledger_accounts').insert([
+              { wallet_id: walletId, type: 'user_available', name: 'Available' },
+              { wallet_id: walletId, type: 'user_pending',   name: 'Pending' },
+            ]);
+            availAcct = await admin
+              .from('ledger_accounts')
+              .select('id')
+              .eq('wallet_id', walletId)
+              .eq('type', 'user_available')
+              .single()
+              .then(r => r.data);
+          }
 
           if (availAcct) {
             // Find or create transaction
