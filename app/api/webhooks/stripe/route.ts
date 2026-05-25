@@ -29,7 +29,26 @@ export async function POST(req: Request) {
     .single();
 
   if (existing?.processed) {
-    return NextResponse.json({ received: true });
+    // Double-check the wallet was actually credited before skipping
+    const { data: creditedTx } = await admin
+      .from('transactions')
+      .select('id')
+      .eq('idempotency_key', `deposit_${(event.data.object as any).id}`)
+      .eq('status', 'completed')
+      .maybeSingle();
+
+    // Only skip if ledger entry exists for this transaction
+    if (creditedTx) {
+      const { count } = await admin
+        .from('ledger_entries')
+        .select('id', { count: 'exact', head: true })
+        .eq('transaction_id', creditedTx.id);
+
+      if (count && count > 0) {
+        return NextResponse.json({ received: true });
+      }
+    }
+    // Otherwise fall through and reprocess
   }
 
   if (!existing) {
@@ -83,6 +102,10 @@ export async function POST(req: Request) {
 
           if (creditError) {
             console.error('[webhook] credit_wallet failed:', creditError.message, creditError.code);
+            // Mark as NOT processed so Stripe will retry
+            await admin.from('stripe_webhook_events')
+              .update({ processed: false })
+              .eq('stripe_event_id', event.id);
           } else {
             console.log('[webhook] credit_wallet SUCCESS — credited', amountCents, 'to wallet', walletId);
           }
