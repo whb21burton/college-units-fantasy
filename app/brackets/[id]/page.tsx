@@ -1073,8 +1073,8 @@ export default function BracketPage() {
           })
           if (!payRes.ok) { const d = await payRes.json(); alert(d.error ?? 'Payment failed'); setSubmitting(false); return }
         }
-        refreshWallet()
         setHasPaid(true)
+        refreshWallet()
       }
 
       const { error } = await supabase
