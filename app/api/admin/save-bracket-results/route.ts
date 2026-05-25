@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     if (!winner) continue
     upserts.push({
       contest_id: 'global',
-      round_type: 'regional',
+      round: 'regional',
       regional_name: region,
       matchup_index: 0,
       winner: { name: winner, id: winner.toLowerCase().replace(/\s+/g, '_') },
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     if (!winner) continue
     upserts.push({
       contest_id: 'global',
-      round_type: 'super_regional',
+      round: 'super_regional',
       regional_name: null,
       matchup_index: parseInt(idx),
       winner: { name: winner, id: winner.toLowerCase().replace(/\s+/g, '_') },
@@ -42,20 +42,20 @@ export async function POST(req: Request) {
   }
 
   if (omahaAWinner) upserts.push({
-    contest_id: 'global', round_type: 'omaha_a', matchup_index: 0,
+    contest_id: 'global', round: 'omaha_a', matchup_index: 0,
     winner: { name: omahaAWinner, id: omahaAWinner.toLowerCase().replace(/\s+/g, '_') },
     game_status: 'final', updated_at: new Date().toISOString(),
   })
 
   if (omahaBWinner) upserts.push({
-    contest_id: 'global', round_type: 'omaha_b', matchup_index: 0,
+    contest_id: 'global', round: 'omaha_b', matchup_index: 0,
     winner: { name: omahaBWinner, id: omahaBWinner.toLowerCase().replace(/\s+/g, '_') },
     game_status: 'final', updated_at: new Date().toISOString(),
   })
 
   if (champion) upserts.push({
     contest_id: 'global',
-    round_type: 'national_championship',
+    round: 'national_championship',
     matchup_index: 0,
     winner: { name: champion, id: champion.toLowerCase().replace(/\s+/g, '_') },
     championship_series_result: seriesResult || null,
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
 
   const { error } = await admin
     .from('tournament_matchups')
-    .upsert(upserts, { onConflict: 'contest_id,round_type,matchup_index' })
+    .upsert(upserts, { onConflict: 'contest_id,round,matchup_index' })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true, saved: upserts.length })

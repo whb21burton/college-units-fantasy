@@ -907,23 +907,23 @@ export default function BracketPage() {
     if (!isLocked || !contestId) return
     supabase
       .from('tournament_matchups')
-      .select('round_type, regional_name, matchup_index, winner, championship_series_result')
+      .select('round, regional_name, matchup_index, winner, championship_series_result')
       .eq('contest_id', contestId)
       .then(({ data }) => {
         if (!data) return
         const results: Record<string, any> = {}
         for (const m of data) {
           if (!m.winner) continue
-          if (m.round_type === 'regional') {
+          if (m.round === 'regional') {
             const key = `regional_${(m.regional_name ?? '').toLowerCase().replace(/[\s-]+/g, '_')}`
             results[key] = { winner: m.winner }
-          } else if (m.round_type === 'super_regional') {
+          } else if (m.round === 'super_regional') {
             results[`super_${m.matchup_index}`] = { winner: m.winner }
-          } else if (m.round_type === 'omaha_a') {
+          } else if (m.round === 'omaha_a') {
             results['omaha_a'] = { winner: m.winner }
-          } else if (m.round_type === 'omaha_b') {
+          } else if (m.round === 'omaha_b') {
             results['omaha_b'] = { winner: m.winner }
-          } else if (m.round_type === 'national_championship') {
+          } else if (m.round === 'national_championship') {
             results['champion'] = { winner: m.winner }
             if (m.championship_series_result) results['series_result'] = { result: m.championship_series_result }
           }

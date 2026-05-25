@@ -820,11 +820,11 @@ function BracketAdminPanel() {
     const regWinners: Record<string, string> = {}
     const srW: Record<number, string> = {}
     for (const m of data) {
-      if (m.round_type === 'regional' && m.winner) regWinners[m.regional_name] = m.winner.name
-      if (m.round_type === 'super_regional' && m.winner) srW[m.matchup_index] = m.winner.name
-      if (m.round_type === 'omaha_a' && m.winner) setOmahaAWinner(m.winner.name)
-      if (m.round_type === 'omaha_b' && m.winner) setOmahaBWinner(m.winner.name)
-      if (m.round_type === 'national_championship' && m.winner) {
+      if (m.round === 'regional' && m.winner) regWinners[m.regional_name] = m.winner.name
+      if (m.round === 'super_regional' && m.winner) srW[m.matchup_index] = m.winner.name
+      if (m.round === 'omaha_a' && m.winner) setOmahaAWinner(m.winner.name)
+      if (m.round === 'omaha_b' && m.winner) setOmahaBWinner(m.winner.name)
+      if (m.round === 'national_championship' && m.winner) {
         setChampion(m.winner.name)
         if (m.championship_series_result) setSeriesResult(m.championship_series_result)
       }
