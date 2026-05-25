@@ -983,16 +983,21 @@ function AdminStats() {
   const [completedStats,     setCompletedStats]     = useState<any[]>([])
   const [activeContests,     setActiveContests]     = useState<any[]>([])
   const [pendingWithdrawals, setPendingWithdrawals] = useState<any[]>([])
+  const [paidIds,            setPaidIds]            = useState<Set<string>>(new Set())
   const [loading,            setLoading]            = useState(true)
   const [tab,                setTab]                = useState<'active' | 'completed' | 'withdrawals'>('active')
 
   useEffect(() => {
     supabase.from('transactions')
-      .select('id, user_id, amount_cents, description, created_at')
+      .select('id, user_id, amount_cents, description, status, created_at')
       .eq('type', 'withdrawal')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true })
-      .then(({ data }) => setPendingWithdrawals(data ?? []))
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        setPendingWithdrawals(data ?? [])
+        const alreadyPaid = new Set((data ?? []).filter(w => w.status === 'completed').map(w => w.id as string))
+        setPaidIds(alreadyPaid)
+      })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1123,32 +1128,47 @@ function AdminStats() {
         )
       ) : (
         pendingWithdrawals.length === 0 ? (
-          <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center' as const, padding: 20 }}>No pending withdrawals</div>
+          <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center' as const, padding: 20 }}>No withdrawals</div>
         ) : (
           <div>
-            {pendingWithdrawals.map(w => (
-              <div key={w.id} style={{ background: C.surf2, borderRadius: 8, padding: '12px 16px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold }}>${(w.amount_cents / 100).toFixed(2)}</div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>{w.description}</div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{new Date(w.created_at).toLocaleDateString()}</div>
+            {pendingWithdrawals.map(w => {
+              const isPaid = paidIds.has(w.id)
+              return (
+                <div key={w.id} style={{ background: C.surf2, borderRadius: 8, padding: '12px 16px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold }}>${(w.amount_cents / 100).toFixed(2)}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>{w.description}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{new Date(w.created_at).toLocaleDateString()}</div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (isPaid) return
+                      const { error } = await supabase
+                        .from('transactions')
+                        .update({ status: 'completed', completed_at: new Date().toISOString() })
+                        .eq('id', w.id)
+                      if (error) { alert('Error: ' + error.message); return }
+                      setPaidIds(prev => new Set([...prev, w.id]))
+                    }}
+                    style={{
+                      padding: '10px 20px',
+                      background: isPaid ? 'rgba(21,198,120,.15)' : 'rgba(100,100,100,.15)',
+                      border: `1px solid ${isPaid ? '#15c678' : '#555'}`,
+                      borderRadius: 8,
+                      cursor: isPaid ? 'default' : 'pointer',
+                      fontFamily: 'Oswald,sans-serif',
+                      fontSize: 11,
+                      letterSpacing: 1,
+                      color: isPaid ? '#15c678' : '#888',
+                      transition: 'all 0.2s ease',
+                      minWidth: 100,
+                      textAlign: 'center' as const,
+                    }}>
+                    {isPaid ? '✓ Paid' : 'Not Paid'}
+                  </button>
                 </div>
-                <button
-                  onClick={async () => {
-                    if (!confirm('Mark as paid and complete this withdrawal?')) return
-                    const { error } = await supabase
-                      .from('transactions')
-                      .update({ status: 'completed', completed_at: new Date().toISOString() })
-                      .eq('id', w.id)
-                    if (error) { alert('Error: ' + error.message); return }
-                    setPendingWithdrawals(prev => prev.filter(x => x.id !== w.id))
-                    alert(`✓ Withdrawal ${w.id.slice(0, 8)}... marked as paid`)
-                  }}
-                  style={{ padding: '8px 16px', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.green }}>
-                  ✓ Mark Paid
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )
       )}
