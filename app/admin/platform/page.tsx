@@ -1143,12 +1143,17 @@ function AdminStats() {
                   <button
                     onClick={async () => {
                       if (isPaid) return
-                      const { error } = await supabase
-                        .from('transactions')
-                        .update({ status: 'completed', completed_at: new Date().toISOString() })
-                        .eq('id', w.id)
-                      if (error) { alert('Error: ' + error.message); return }
-                      setPaidIds(prev => new Set(Array.from(prev).concat(w.id)))
+                      const res = await fetch('/api/admin/mark-withdrawal-paid', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ transactionId: w.id }),
+                      })
+                      const data = await res.json()
+                      if (data.success) {
+                        setPaidIds(prev => new Set(Array.from(prev).concat(w.id)))
+                      } else {
+                        alert('Error: ' + (data.error ?? 'Failed to mark paid'))
+                      }
                     }}
                     style={{
                       padding: '10px 20px',
