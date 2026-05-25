@@ -4,6 +4,14 @@ import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { useWallet } from '@/context/WalletContext'
 
+function calculateStripeFee(amountCents: number): number {
+  return Math.ceil(amountCents * 0.029) + 30
+}
+
+function calculateTotal(amountCents: number): number {
+  return amountCents + calculateStripeFee(amountCents)
+}
+
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 const C = {
@@ -273,27 +281,56 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                     onChange={e => { setCustomAmount(e.target.value); setDepositAmount(null) }}
                     style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: 'Anton,sans-serif', fontSize: 24, color: C.text, padding: '14px 0' }} />
                 </div>
-                <button onClick={async () => {
-                  const cents = customAmount ? Math.round(parseFloat(customAmount) * 100) : (depositAmount ?? 0)
-                  if (cents < 100) return
-                  setPendingCents(cents)
-                  try {
-                    const res = await fetch('/api/wallet/deposit/create', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ amountCents: cents }),
-                    })
-                    const data = await res.json()
-                    if (data.clientSecret) setClientSecret(data.clientSecret)
-                    else alert(data.error ?? 'Failed')
-                  } catch { alert('Network error') }
-                }}
-                  style={{ width: '100%', padding: '16px', background: '#f5a623', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 2, color: '#070a12', textTransform: 'uppercase' as const }}>
-                  {customAmount ? `Deposit $${parseFloat(customAmount || '0').toFixed(2)}` : depositAmount ? `Deposit $${(depositAmount / 100).toFixed(0)}` : 'Select Amount'}
-                </button>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center' as const, marginTop: 12 }}>
-                  🔒 Secured by Stripe · Card &amp; Link accepted
-                </div>
+                {(() => {
+                  const depositCents = customAmount ? Math.round(parseFloat(customAmount || '0') * 100) : (depositAmount ?? 0)
+                  return (
+                    <>
+                      {depositCents >= 100 && (
+                        <div style={{ padding: '12px 14px', background: 'rgba(245,166,35,.06)', border: '1px solid rgba(245,166,35,.15)', borderRadius: 10, marginBottom: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>Wallet credit</span>
+                            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.green }}>+${(depositCents / 100).toFixed(2)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>Stripe processing fee</span>
+                            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.muted }}>+${(calculateStripeFee(depositCents) / 100).toFixed(2)}</span>
+                          </div>
+                          <div style={{ height: 1, background: C.surf3, marginBottom: 8 }} />
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, fontWeight: 700 }}>Total charged to card</span>
+                            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold }}>${(calculateTotal(depositCents) / 100).toFixed(2)}</span>
+                          </div>
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 6 }}>
+                            Your wallet will be credited ${(depositCents / 100).toFixed(2)}. The processing fee covers Stripe payment costs.
+                          </div>
+                        </div>
+                      )}
+                      <button onClick={async () => {
+                        const cents = depositCents
+                        if (cents < 100) return
+                        setPendingCents(cents)
+                        try {
+                          const res = await fetch('/api/wallet/deposit/create', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ amountCents: cents, chargeAmountCents: calculateTotal(cents) }),
+                          })
+                          const data = await res.json()
+                          if (data.clientSecret) setClientSecret(data.clientSecret)
+                          else alert(data.error ?? 'Failed')
+                        } catch { alert('Network error') }
+                      }}
+                        style={{ width: '100%', padding: '16px', background: '#f5a623', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 2, color: '#070a12', textTransform: 'uppercase' as const }}>
+                        {depositCents >= 100
+                          ? `Pay $${(calculateTotal(depositCents) / 100).toFixed(2)} → Get $${(depositCents / 100).toFixed(2)}`
+                          : 'Select Amount'}
+                      </button>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center' as const, marginTop: 12 }}>
+                        🔒 Secured by Stripe · Card accepted
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
             )
           )}

@@ -14,10 +14,11 @@ export async function POST(req: Request) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { amountCents } = body as { amountCents?: number };
+    const { amountCents, chargeAmountCents } = body as { amountCents?: number; chargeAmountCents?: number };
     if (!amountCents || amountCents < 100) {
       return NextResponse.json({ error: 'Minimum deposit is $1 (100 cents)' }, { status: 400 });
     }
+    const chargeAmount = chargeAmountCents ?? amountCents;
 
     const admin = createAdminClient();
 
@@ -66,13 +67,13 @@ export async function POST(req: Request) {
       user_agent: req.headers.get('user-agent') ?? 'unknown',
     }).then(() => {})
 
-    // Create Stripe PaymentIntent
+    // Create Stripe PaymentIntent — charge card full amount (deposit + fee), credit only deposit amount
     const paymentIntent = await stripe.paymentIntents.create({
-      amount:               amountCents,
+      amount:               chargeAmount,
       currency:             'usd',
       customer:             stripeCustomerId,
       payment_method_types: ['card'],
-      metadata:             { user_id: user.id, wallet_id: wallet.id },
+      metadata:             { user_id: user.id, wallet_id: wallet.id, credit_amount_cents: String(amountCents) },
     });
 
     // Insert deposit row (non-fatal if it fails — PaymentIntent already created)
@@ -98,7 +99,7 @@ export async function POST(req: Request) {
         status:                   'pending',
         amount_cents:             amountCents,
         stripe_payment_intent_id: paymentIntent.id,
-        description:              `Deposit $${(amountCents / 100).toFixed(2)}`,
+        description:              `Deposit via Stripe`,
         idempotency_key:          `deposit_${paymentIntent.id}`,
       })
       .select('id')

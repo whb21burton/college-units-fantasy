@@ -60,14 +60,17 @@ export async function POST(req: Request) {
         if (deposit?.status === 'succeeded') {
           console.log('[webhook] deposit already succeeded, skipping:', pi.id);
         } else {
-          const amountCents = deposit?.amount_cents ?? pi.amount;
+          // Use credit_amount_cents from metadata (deposit amount, not charge amount)
+          const amountCents = pi.metadata?.credit_amount_cents
+            ? parseInt(pi.metadata.credit_amount_cents)
+            : (deposit?.amount_cents ?? pi.amount);
 
           // Atomic credit via postgres function — creates ledger accounts if missing, idempotent
           const { error: rpcError } = await admin.rpc('credit_wallet', {
-            p_user_id:        userId,
-            p_amount_cents:   amountCents,
-            p_type:           'deposit',
-            p_description:    `Stripe deposit ${pi.id}`,
+            p_user_id:         userId,
+            p_amount_cents:    amountCents,
+            p_type:            'deposit',
+            p_description:     `Deposit via Stripe`,
             p_idempotency_key: `deposit_${pi.id}`,
           });
 
