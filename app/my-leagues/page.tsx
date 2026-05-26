@@ -254,9 +254,10 @@ function MyLeaguesContent() {
         .eq('status', 'completed'),
 
       supabase.from('user_bracket_entries')
-        .select('contest_id, entry_name, total_score, rank, submitted_at, bracket_contests(id, name, sport, entry_fee_cents, status)')
+        .select('contest_id, entry_name, total_score, rank, submitted_at, archived_at, bracket_contests(id, name, sport, entry_fee_cents, status)')
         .eq('user_id', userId)
-        .eq('is_submitted', true),
+        .eq('is_archived', true)
+        .order('archived_at', { ascending: false }),
     ]).then(([{ data: archived }, { data: txs }, { data: bracketEntries }]) => {
       const txMap: Record<string, { paid: number; won: number }> = {};
       for (const tx of txs ?? []) {
@@ -288,39 +289,60 @@ function MyLeaguesContent() {
         };
       }).filter(Boolean);
 
-      const completedBrackets = (bracketEntries ?? [])
-        .filter((e: any) => (e.bracket_contests as any)?.status === 'completed')
-        .map((e: any) => {
-          const contest = e.bracket_contests as any;
-          return {
-            id: contest?.id,
-            name: contest?.name,
-            type: 'bracket',
-            is_public: true,
-            buy_in: (contest?.entry_fee_cents ?? 0) / 100,
-            status: 'completed',
-            team_name: e.entry_name,
-            archived_at: e.submitted_at,
-            net: 0,
-            result: 'completed',
-          };
-        });
+      const archivedBrackets = (bracketEntries ?? []).map((e: any) => {
+        const contest = e.bracket_contests as any;
+        const paid = (contest?.entry_fee_cents ?? 0);
+        return {
+          id: contest?.id,
+          name: contest?.name,
+          type: 'bracket',
+          sport: contest?.sport,
+          team_name: e.entry_name,
+          status: contest?.status,
+          buy_in: paid / 100,
+          paid,
+          net: 0,
+          result: contest?.status === 'completed' ? 'completed' : 'free',
+          archived_at: e.archived_at ?? e.submitted_at,
+        };
+      });
 
-      setArchivedLeagues([...historyItems, ...completedBrackets]);
+      setArchivedLeagues([...historyItems, ...archivedBrackets]);
       setLoadingHistory(false);
     });
   }, [selected?.type, userId]);
 
   useEffect(() => {
-    if (!userId || leagues.length === 0) return;
+    if (!userId) return;
+
+    // Auto-archive completed/cancelled leagues
     const completedLeagues = leagues.filter(l => l.status === 'completed' || l.status === 'cancelled');
-    if (completedLeagues.length === 0) return;
-    supabase.from('league_members')
-      .update({ is_archived: true, archived_at: new Date().toISOString() })
+    if (completedLeagues.length > 0) {
+      supabase.from('league_members')
+        .update({ is_archived: true, archived_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .in('league_id', completedLeagues.map(l => l.id))
+        .eq('is_archived', false)
+        .then(() => {});
+    }
+
+    // Auto-archive completed bracket contests
+    supabase
+      .from('user_bracket_entries')
+      .select('contest_id, bracket_contests(id, status)')
       .eq('user_id', userId)
-      .in('league_id', completedLeagues.map(l => l.id))
       .eq('is_archived', false)
-      .then(() => {});
+      .then(async ({ data }) => {
+        const completedContestIds = (data ?? [])
+          .filter(e => (e.bracket_contests as any)?.status === 'completed')
+          .map(e => e.contest_id);
+        if (completedContestIds.length === 0) return;
+        await supabase
+          .from('user_bracket_entries')
+          .update({ is_archived: true, archived_at: new Date().toISOString() })
+          .eq('user_id', userId)
+          .in('contest_id', completedContestIds);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, leagues.length]);
 
@@ -457,23 +479,29 @@ function MyLeaguesContent() {
                     {league.status === 'active' ? '🟢' : league.status === 'completed' ? '✓' : '○'}
                   </span>
                 </button>
-                {!league.isStandalone && (
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (!confirm(`Move "${league.name}" to League History?`)) return;
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!confirm(`Move "${league.name}" to League History?`)) return;
+                    if (league.isStandalone) {
+                      await supabase.from('user_bracket_entries')
+                        .update({ is_archived: true, archived_at: new Date().toISOString() })
+                        .eq('contest_id', league.id)
+                        .eq('user_id', userId);
+                      setStandaloneBrackets(prev => prev.filter(b => b.id !== league.id));
+                    } else {
                       await supabase.from('league_members')
                         .update({ is_archived: true, archived_at: new Date().toISOString() })
                         .eq('league_id', league.id)
                         .eq('user_id', userId);
                       setLeagues(prev => prev.filter(l => l.id !== league.id));
-                    }}
-                    style={{ padding: '3px 6px', paddingRight: 12, background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 11, flexShrink: 0 }}
-                    title="Move to history"
-                  >
-                    →
-                  </button>
-                )}
+                    }
+                  }}
+                  style={{ padding: '3px 6px', paddingRight: 12, background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 11, flexShrink: 0 }}
+                  title="Move to history"
+                >
+                  →
+                </button>
               </div>
             );
           })
