@@ -1052,26 +1052,22 @@ export default function BracketPage() {
     if (!userId || !contestId || totalPicks < TOTAL) return
     setSubmitting(true)
     try {
-      if (!hasPaid && entryFeeCents > 0 && !isPublicLeague) {
+      if (entryFeeCents > 0) {
         if (walletBalance < entryFeeCents) {
           alert(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
           setSubmitting(false)
           return
         }
-        if (leagueId) {
-          const payRes = await fetch('/api/wallet/join-contest', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ league_id: leagueId, team_name: bracketName }),
-          })
-          if (!payRes.ok) { const d = await payRes.json(); alert(d.error ?? 'Payment failed'); setSubmitting(false); return }
-        } else {
-          const payRes = await fetch('/api/wallet/bracket-entry', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contestId, buyInCents: entryFeeCents, entryNumber: activeEntryNum }),
-          })
-          if (!payRes.ok) { const d = await payRes.json(); alert(d.error ?? 'Payment failed'); setSubmitting(false); return }
+        const payRes = await fetch('/api/wallet/bracket-entry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contestId, buyInCents: entryFeeCents, entryNumber: activeEntryNum }),
+        })
+        if (!payRes.ok) {
+          const d = await payRes.json()
+          alert(d.error ?? 'Payment failed')
+          setSubmitting(false)
+          return
         }
         setHasPaid(true)
         refreshWallet()
