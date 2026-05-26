@@ -1069,7 +1069,7 @@ export default function BracketPage() {
           const payRes = await fetch('/api/wallet/bracket-entry', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contestId, buyInCents: entryFeeCents }),
+            body: JSON.stringify({ contestId, buyInCents: entryFeeCents, entryNumber: activeEntryNum }),
           })
           if (!payRes.ok) { const d = await payRes.json(); alert(d.error ?? 'Payment failed'); setSubmitting(false); return }
         }
