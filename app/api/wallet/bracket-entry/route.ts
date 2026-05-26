@@ -11,6 +11,8 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { contestId, buyInCents, entryNumber = 1 } = await req.json()
+  console.log('[bracket-entry] contestId:', contestId, 'entryNumber:', entryNumber, 'userId:', user.id)
+  console.log('[bracket-entry] idempotency key:', `bracket_entry_${contestId}_${user.id}_${entryNumber}`)
   if (!contestId || !buyInCents) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
   const admin = createAdminClient()

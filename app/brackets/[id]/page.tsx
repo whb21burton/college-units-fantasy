@@ -1131,12 +1131,14 @@ export default function BracketPage() {
   async function handleAddEntry() {
     if (myEntries.length >= maxPerAccount || isLocked) return
     const nextNum = myEntries.length + 1
+    console.log('[handleAddEntry] nextNum:', nextNum, 'myEntries.length:', myEntries.length)
 
     if (entryFeeCents > 0) {
       if (walletBalance < entryFeeCents) {
         alert(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
         return
       }
+      console.log('[handleAddEntry] sending entryNumber:', nextNum, 'to bracket-entry')
       const payRes = await fetch('/api/wallet/bracket-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
