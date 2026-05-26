@@ -1123,7 +1123,7 @@ function AdminStats() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
             {activeContests.map(c => (
-              <div key={c.id} style={{ background: C.surf2, borderRadius: 8, padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 12, alignItems: 'center' }}>
+              <div key={c.id} style={{ background: C.surf2, borderRadius: 8, padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: 12, alignItems: 'center' }}>
                 <div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 2 }}>{c.name}</div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>
@@ -1145,6 +1145,25 @@ function AdminStats() {
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.green }}>${(c.rake / 100).toFixed(2)}</div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted }}>rake</div>
                 </div>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Delete "${c.name}" and refund all ${c.members} entries?`)) return
+                    const res = await fetch('/api/admin/delete-contest', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ contestId: c.id, contestType: c.type }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                      alert(`✓ Deleted. ${data.refundCount} entries refunded.`)
+                      setActiveContests(prev => prev.filter(x => x.id !== c.id))
+                    } else {
+                      alert('Error: ' + (data.error ?? 'Delete failed'))
+                    }
+                  }}
+                  style={{ padding: '6px 10px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red }}>
+                  🗑️ Delete
+                </button>
               </div>
             ))}
           </div>
