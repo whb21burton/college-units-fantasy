@@ -6,11 +6,13 @@ interface WalletContextType {
   pending: number
   loading: boolean
   refresh: () => Promise<void>
+  deductBalance: (cents: number) => void
 }
 
 const WalletContext = createContext<WalletContextType>({
   balance: 0, pending: 0, loading: true,
   refresh: async () => {},
+  deductBalance: () => {},
 })
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -29,13 +31,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     finally { setLoading(false) }
   }, [])
 
+  const deductBalance = useCallback((cents: number) => {
+    setBalance(prev => Math.max(0, prev - cents))
+    setPending(prev => prev + cents)
+  }, [])
+
   useEffect(() => {
     refresh()
 
     const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
     document.addEventListener('visibilitychange', onVisible)
 
-    const interval = setInterval(refresh, 30000)
+    const interval = setInterval(refresh, 5000)
 
     return () => {
       document.removeEventListener('visibilitychange', onVisible)
@@ -44,7 +51,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [refresh])
 
   return (
-    <WalletContext.Provider value={{ balance, pending, loading, refresh }}>
+    <WalletContext.Provider value={{ balance, pending, loading, refresh, deductBalance }}>
       {children}
     </WalletContext.Provider>
   )
