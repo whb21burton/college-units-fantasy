@@ -718,7 +718,7 @@ export default function BracketPage() {
   const contestId     = params.id as string
   const isEmbed       = searchParams.get('embed') === '1'
   const supabase      = createClientComponentClient()
-  const { balance: walletBalance, refresh: refreshWallet, deductBalance } = useWallet()
+  const { balance: walletBalance, refresh: refreshWallet } = useWallet()
 
   const [userId,         setUserId]         = useState<string | null>(null)
   const [contest,        setContest]        = useState<any>(null)
@@ -1053,26 +1053,34 @@ export default function BracketPage() {
     setSubmitting(true)
     try {
       if (entryFeeCents > 0) {
-        if (walletBalance < entryFeeCents) {
-          alert(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
-          setSubmitting(false)
-          return
+        const { data: existingTx } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('type', 'contest_entry')
+          .eq('status', 'completed')
+          .eq('idempotency_key', `bracket_entry_${contestId}_${userId}_${activeEntryNum}`)
+          .maybeSingle()
+
+        if (!existingTx) {
+          if (walletBalance < entryFeeCents) {
+            alert(`Not enough funds. Need $${(entryFeeCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`)
+            setSubmitting(false)
+            return
+          }
+          const payRes = await fetch('/api/wallet/bracket-entry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contestId, buyInCents: entryFeeCents, entryNumber: activeEntryNum }),
+          })
+          if (!payRes.ok) {
+            const d = await payRes.json()
+            alert(d.error ?? 'Payment failed')
+            setSubmitting(false)
+            return
+          }
+          refreshWallet()
         }
-        deductBalance(entryFeeCents)
-        const payRes = await fetch('/api/wallet/bracket-entry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contestId, buyInCents: entryFeeCents, entryNumber: activeEntryNum }),
-        })
-        if (!payRes.ok) {
-          deductBalance(-entryFeeCents)
-          const d = await payRes.json()
-          alert(d.error ?? 'Payment failed')
-          setSubmitting(false)
-          return
-        }
-        setHasPaid(true)
-        refreshWallet()
       }
 
       const { error } = await supabase
@@ -1137,14 +1145,12 @@ export default function BracketPage() {
         return
       }
       console.log('[handleAddEntry] sending entryNumber:', nextNum, 'to bracket-entry')
-      deductBalance(entryFeeCents)
       const payRes = await fetch('/api/wallet/bracket-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contestId, buyInCents: entryFeeCents, entryNumber: nextNum }),
       })
       if (!payRes.ok) {
-        deductBalance(-entryFeeCents)
         const d = await payRes.json()
         alert(d.error ?? 'Payment failed')
         return
