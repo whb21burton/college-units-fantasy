@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient()
 
-  // Atomic debit — idempotent, blocks overdrafts, auto-creates ledger accounts
-  const { error: rpcError } = await admin.rpc('debit_wallet', {
+  console.log('[bracket-entry] calling debit_wallet', { contestId, userId: user.id, entryNumber, buyInCents })
+  const { error: debitError } = await admin.rpc('debit_wallet', {
     p_user_id:         user.id,
     p_amount_cents:    buyInCents,
     p_type:            'contest_entry',
@@ -26,15 +26,11 @@ export async function POST(req: NextRequest) {
     p_idempotency_key: `bracket_entry_${contestId}_${user.id}_${entryNumber}`,
   })
 
-  if (rpcError) {
-    if (rpcError.message.includes('Insufficient balance')) {
-      return NextResponse.json({ error: 'Not enough funds' }, { status: 400 })
-    }
-    if (rpcError.message.includes('Wallet not found')) {
-      return NextResponse.json({ error: 'Wallet not found' }, { status: 404 })
-    }
-    return NextResponse.json({ error: rpcError.message }, { status: 500 })
+  if (debitError) {
+    console.error('[bracket-entry] debit_wallet error:', debitError.message, debitError.code, debitError.details)
+    return NextResponse.json({ error: debitError.message ?? 'Payment failed' }, { status: 400 })
   }
 
+  console.log('[bracket-entry] debit_wallet SUCCESS entry', entryNumber)
   return NextResponse.json({ success: true })
 }
