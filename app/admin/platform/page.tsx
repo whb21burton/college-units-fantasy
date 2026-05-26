@@ -464,6 +464,7 @@ function PublicBracketCreator() {
           entry_fee_cents: entryFeeCents,
           max_entries: maxAccounts,
           settings: {
+            scoring: '3pts Regional · 5pts Super Regional · 10pts Omaha · 15pts Champion · +5 Series',
             max_per_account: maxPerAccount,
             payout_structure: payoutStructure,
             description,

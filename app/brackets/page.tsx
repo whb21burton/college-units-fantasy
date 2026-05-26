@@ -554,7 +554,7 @@ export default function BracketsPage() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
                 <span>Scoring</span>
-                <span style={{ color: C.text }}>1 pt per correct pick</span>
+                <span style={{ color: C.text }}>3pts Reg · 5pts SR · 10pts Omaha · 15pts Champ · +5 Series</span>
               </div>
 
               {selectedContest.settings?.payout_structure && (
