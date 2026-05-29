@@ -1049,6 +1049,10 @@ export default function BracketPage() {
 
   /* ── Direct submit (no modal — uses name already saved at join time) ── */
   async function handleSubmitDirect() {
+    if (isLocked) {
+      alert('Brackets are locked. No new entries or changes allowed.')
+      return
+    }
     if (!userId || !contestId || totalPicks < TOTAL) return
     setSubmitting(true)
     try {
@@ -1417,10 +1421,10 @@ export default function BracketPage() {
                 {submitting ? 'Saving...' : 'Resubmit'}
               </button>
             ) : (
-              <button onClick={() => totalPicks >= TOTAL ? handleSubmitDirect() : undefined}
-                disabled={totalPicks < TOTAL || submitting}
-                style={{ padding: '6px 20px', background: totalPicks >= TOTAL && !submitting ? C.gold : C.surf3, border: 'none', borderRadius: 6, cursor: totalPicks >= TOTAL && !submitting ? 'pointer' : 'not-allowed', fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2, color: totalPicks >= TOTAL && !submitting ? C.bg : C.muted, textTransform: 'uppercase' as const }}>
-                {submitting ? 'Submitting...' : totalPicks >= TOTAL ? 'Submit' : `${TOTAL - totalPicks} picks left`}
+              <button onClick={() => !isLocked && totalPicks >= TOTAL ? handleSubmitDirect() : undefined}
+                disabled={isLocked || totalPicks < TOTAL || submitting}
+                style={{ padding: '6px 20px', background: !isLocked && totalPicks >= TOTAL && !submitting ? C.gold : C.surf3, border: 'none', borderRadius: 6, cursor: !isLocked && totalPicks >= TOTAL && !submitting ? 'pointer' : 'not-allowed', fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2, color: !isLocked && totalPicks >= TOTAL && !submitting ? C.bg : C.muted, textTransform: 'uppercase' as const }}>
+                {isLocked ? '🔒 Locked' : submitting ? 'Submitting...' : totalPicks >= TOTAL ? 'Submit' : `${TOTAL - totalPicks} picks left`}
               </button>
             )}
           </div>
@@ -1446,10 +1450,10 @@ export default function BracketPage() {
                 {submitting ? 'Resubmitting...' : 'Resubmit Bracket'}
               </button>
             ) : (
-              <button onClick={() => totalPicks >= TOTAL ? handleSubmitDirect() : undefined}
-                disabled={totalPicks < TOTAL || submitting}
-                style={{ padding: '8px 24px', background: totalPicks >= TOTAL && !submitting ? C.gold : C.surf3, border: 'none', borderRadius: 8, cursor: totalPicks >= TOTAL && !submitting ? 'pointer' : 'not-allowed', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: totalPicks >= TOTAL && !submitting ? C.bg : C.muted, textTransform: 'uppercase' as const }}>
-                {submitting ? 'Submitting...' : totalPicks >= TOTAL ? 'Submit Bracket' : `${TOTAL - totalPicks} picks left`}
+              <button onClick={() => !isLocked && totalPicks >= TOTAL ? handleSubmitDirect() : undefined}
+                disabled={isLocked || totalPicks < TOTAL || submitting}
+                style={{ padding: '8px 24px', background: !isLocked && totalPicks >= TOTAL && !submitting ? C.gold : C.surf3, border: 'none', borderRadius: 8, cursor: !isLocked && totalPicks >= TOTAL && !submitting ? 'pointer' : 'not-allowed', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: !isLocked && totalPicks >= TOTAL && !submitting ? C.bg : C.muted, textTransform: 'uppercase' as const }}>
+                {isLocked ? '🔒 Brackets Locked' : submitting ? 'Submitting...' : totalPicks >= TOTAL ? 'Submit Bracket' : `${TOTAL - totalPicks} picks left`}
               </button>
             )}
           </div>

@@ -22,6 +22,7 @@ export default function BracketsPage() {
   const { balance: userBalance, refresh: refreshWallet } = useWallet()
 
   const [pageLocked,      setPageLocked]      = useState<boolean | null>(null)
+  const [bracketsLocked,  setBracketsLocked]  = useState(false)
   const [sportLocks,      setSportLocks]      = useState({ football: false, basketball: false, baseball: false })
   const [sport,           setSport]           = useState<'football' | 'basketball' | 'baseball'>('baseball')
   const [contests,        setContests]        = useState<any[]>([])
@@ -56,11 +57,12 @@ export default function BracketsPage() {
     supabase
       .from('platform_settings')
       .select('key, value')
-      .in('key', ['active_bracket_sport', 'bracket_contests_locked', 'bracket_sport_football_locked', 'bracket_sport_basketball_locked', 'bracket_sport_baseball_locked'])
+      .in('key', ['active_bracket_sport', 'bracket_contests_locked', 'brackets_locked', 'bracket_sport_football_locked', 'bracket_sport_basketball_locked', 'bracket_sport_baseball_locked'])
       .then(({ data }) => {
         const map = Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value]))
         if (map['active_bracket_sport']) setSport(map['active_bracket_sport'] as any)
         setPageLocked(map['bracket_contests_locked'] === 'true')
+        setBracketsLocked(map['brackets_locked'] === 'true')
         setSportLocks({
           football:   map['bracket_sport_football_locked']   === 'true',
           basketball: map['bracket_sport_basketball_locked'] === 'true',
@@ -437,11 +439,17 @@ export default function BracketsPage() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          onClick={e => { e.stopPropagation(); handleClick() }}
-                          style={{ flex: 1, padding: '10px', background: alreadyEntered ? 'rgba(21,198,120,.1)' : C.gold, border: alreadyEntered ? '1px solid rgba(21,198,120,.3)' : 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: alreadyEntered ? C.green : C.bg }}>
-                          {alreadyEntered ? '✓ Entered' : 'Enter'}
-                        </button>
+                        {bracketsLocked ? (
+                          <div style={{ flex: 1, padding: '10px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: '#f03a5a', textTransform: 'uppercase' as const, textAlign: 'center' as const }}>
+                            🔒 Locked
+                          </div>
+                        ) : (
+                          <button
+                            onClick={e => { e.stopPropagation(); handleClick() }}
+                            style={{ flex: 1, padding: '10px', background: alreadyEntered ? 'rgba(21,198,120,.1)' : C.gold, border: alreadyEntered ? '1px solid rgba(21,198,120,.3)' : 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: alreadyEntered ? C.green : C.bg }}>
+                            {alreadyEntered ? '✓ Entered' : 'Enter'}
+                          </button>
+                        )}
                         {isAdmin && (
                           <>
                             <button onClick={e => { e.stopPropagation(); handleCompleteContest(contest.id, contest.name) }} style={{ padding: '8px 10px', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.green }} title="Complete & pay out">✓</button>
@@ -477,11 +485,17 @@ export default function BracketsPage() {
                       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, lineHeight: 1.3, textAlign: 'center' }}>
                         When first<br />game starts
                       </div>
-                      <button
-                        onClick={e => { e.stopPropagation(); handleClick() }}
-                        style={{ padding: '8px 16px', background: alreadyEntered ? 'rgba(21,198,120,.1)' : C.gold, border: alreadyEntered ? '1px solid rgba(21,198,120,.3)' : 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: alreadyEntered ? C.green : C.bg, whiteSpace: 'nowrap' as const }}>
-                        {alreadyEntered ? '✓ Entered' : 'Enter'}
-                      </button>
+                      {bracketsLocked ? (
+                        <div style={{ padding: '8px 16px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: '#f03a5a', textTransform: 'uppercase' as const }}>
+                          🔒 Locked
+                        </div>
+                      ) : (
+                        <button
+                          onClick={e => { e.stopPropagation(); handleClick() }}
+                          style={{ padding: '8px 16px', background: alreadyEntered ? 'rgba(21,198,120,.1)' : C.gold, border: alreadyEntered ? '1px solid rgba(21,198,120,.3)' : 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1, color: alreadyEntered ? C.green : C.bg, whiteSpace: 'nowrap' as const }}>
+                          {alreadyEntered ? '✓ Entered' : 'Enter'}
+                        </button>
+                      )}
                       {isAdmin && (
                         <>
                           <button onClick={e => { e.stopPropagation(); handleCompleteContest(contest.id, contest.name) }} style={{ padding: '8px 10px', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 8, cursor: 'pointer', fontSize: 14, color: C.green }} title="Complete & pay out">✓</button>
