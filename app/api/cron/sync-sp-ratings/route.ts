@@ -13,12 +13,21 @@ export async function GET(req: Request) {
   try {
     const admin = createAdminClient()
     const season = new Date().getFullYear()
-    const CFBD_KEY = process.env.CFBD_API_KEY!
+    console.log('[sync-sp-ratings] admin client created, season:', season)
 
+    const CFBD_KEY = process.env.CFBD_API_KEY
+    console.log('[sync-sp-ratings] CFBD_KEY present:', !!CFBD_KEY, 'length:', CFBD_KEY?.length ?? 0)
+
+    if (!CFBD_KEY) {
+      return NextResponse.json({ error: 'CFBD_API_KEY not set' }, { status: 500 })
+    }
+
+    console.log('[sync-sp-ratings] fetching SP+ from CFBD...')
     const spRes = await fetch(
       `https://api.collegefootballdata.com/ratings/sp?year=${season}`,
       { headers: { Authorization: `Bearer ${CFBD_KEY}` } }
     )
+    console.log('[sync-sp-ratings] SP+ response status:', spRes.status)
 
     if (!spRes.ok) {
       const errText = await spRes.text()
@@ -27,6 +36,7 @@ export async function GET(req: Request) {
     }
 
     const spData = await spRes.json()
+    console.log('[sync-sp-ratings] SP+ teams received:', Array.isArray(spData) ? spData.length : typeof spData)
 
     if (!Array.isArray(spData) || spData.length === 0) {
       console.log('[sync-sp-ratings] No SP+ data available yet for', season)
@@ -40,15 +50,18 @@ export async function GET(req: Request) {
 
     // Fetch Elo rankings
     const eloRankMap: Record<string, number> = {}
+    console.log('[sync-sp-ratings] fetching Elo from CFBD...')
     const eloRes = await fetch(
       `https://api.collegefootballdata.com/ratings/elo?year=${season}`,
       { headers: { Authorization: `Bearer ${CFBD_KEY}` } }
     )
+    console.log('[sync-sp-ratings] Elo response status:', eloRes.status)
     if (eloRes.ok) {
       const eloData = await eloRes.json()
       if (Array.isArray(eloData) && eloData.length > 0) {
         const sorted = [...eloData].sort((a: any, b: any) => (b.elo ?? 0) - (a.elo ?? 0))
         sorted.forEach((t: any, i: number) => { if (t.team) eloRankMap[t.team] = i + 1 })
+        console.log('[sync-sp-ratings] Elo teams ranked:', Object.keys(eloRankMap).length)
       }
     }
 
@@ -72,6 +85,7 @@ export async function GET(req: Request) {
       }
     }
 
+    console.log('[sync-sp-ratings] upserting', ratings.length, 'ratings...')
     const { error } = await admin
       .from('sp_ratings')
       .upsert(ratings, { onConflict: 'school,season' })
