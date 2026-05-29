@@ -145,12 +145,13 @@ export async function syncStats(
   const db = createAdminClient()
   let total = 0
 
-  // 1. Fetch games, player stats, team stats, elo — all in parallel
-  const [games, playerStats, teamStats, eloData] = await Promise.all([
+  // 1. Fetch games, player stats, team stats, elo + SP+ ratings — all in parallel
+  const [games, playerStats, teamStats, eloData, spData] = await Promise.all([
     cfbdGet('/games',         { year: season, week }),
     cfbdGet('/games/players', { year: season, week }).catch(() => []),
     cfbdGet('/games/teams',   { year: season, week }).catch(() => []),
     cfbdGet('/ratings/elo',   { year: season, week }).catch(() => []),
+    cfbdGet('/ratings/sp',    { year: season }).catch(() => []),
   ])
 
   const completedGames = games.filter((g: any) =>
@@ -162,6 +163,27 @@ export async function syncStats(
   const eloRank: Record<string, number> = {}
   ;[...eloData].sort((a: any, b: any) => (b.elo ?? 0) - (a.elo ?? 0))
     .forEach((t: any, i: number) => { if (t.team) eloRank[t.team] = i + 1 })
+
+  // SP+ defensive and offensive rank maps
+  const defRankMap: Record<string, number> = {}
+  const offRankMap: Record<string, number> = {}
+  for (const t of spData as any[]) {
+    if (t.team) {
+      if (t.defense?.ranking != null) defRankMap[t.team] = t.defense.ranking
+      else if (t.defense?.rank != null) defRankMap[t.team] = t.defense.rank
+      if (t.offense?.ranking != null) offRankMap[t.team] = t.offense.ranking
+      else if (t.offense?.rank != null) offRankMap[t.team] = t.offense.rank
+    }
+  }
+
+  function getOdrMultForUnit(position: string, opponent: string): number {
+    if (position === 'DEF') {
+      const offRank = offRankMap[opponent] ?? eloRank[opponent] ?? 999
+      return odrMult(offRank)
+    }
+    const defRank = defRankMap[opponent] ?? eloRank[opponent] ?? 999
+    return odrMult(defRank)
+  }
 
   // 3. Team stats map: school → { category: value }
   const teamStatMap: Record<string, Record<string, number>> = {}
@@ -247,9 +269,10 @@ export async function syncStats(
     for (const school of [game.homeTeam, game.awayTeam] as string[]) {
       if (schoolsFilter?.length && !schoolsFilter.includes(school)) continue
 
-      const opponent = school === game.homeTeam ? game.awayTeam : game.homeTeam
-      const oppRank  = eloRank[opponent] ?? 999
-      const mult = odrMult(oppRank)
+      const opponent  = school === game.homeTeam ? game.awayTeam : game.homeTeam
+      const offMult   = getOdrMultForUnit('QB',  opponent)  // skill units vs opponent defense
+      const defMult   = getOdrMultForUnit('DEF', opponent)  // DEF unit vs opponent offense
+      const mult      = odrMult(eloRank[opponent] ?? 999)   // general Elo mult (stored for display)
       const ts = teamStatMap[school] ?? {}
       const entries = Object.values(playerStatMap)
         .filter((e: any) => e.gameId === gameId && e.school === school)
@@ -328,25 +351,25 @@ export async function syncStats(
 
       // QB — top scorer only
       units.QB.sort((a, b) => b.pts - a.pts)
-      add(null, 'unit_QB', units.QB[0] ? Math.round(units.QB[0].pts * mult * 10) / 10 : 0)
+      add(null, 'unit_QB', units.QB[0] ? Math.round(units.QB[0].pts * offMult * 10) / 10 : 0)
 
       // RB
       units.RB.sort((a, b) => b.pts - a.pts)
       let rbRaw = 0
       for (let i = 0; i < Math.min(units.RB.length, RB_WEIGHTS.length); i++) rbRaw += units.RB[i].pts * RB_WEIGHTS[i]
-      add(null, 'unit_RB', Math.round(rbRaw * mult * 10) / 10)
+      add(null, 'unit_RB', Math.round(rbRaw * offMult * 10) / 10)
 
       // WR
       units.WR.sort((a, b) => b.pts - a.pts)
       let wrRaw = 0
       for (let i = 0; i < Math.min(units.WR.length, WR_WEIGHTS.length); i++) wrRaw += units.WR[i].pts * WR_WEIGHTS[i]
-      add(null, 'unit_WR', Math.round(wrRaw * mult * 10) / 10)
+      add(null, 'unit_WR', Math.round(wrRaw * offMult * 10) / 10)
 
       // TE
       units.TE.sort((a, b) => b.pts - a.pts)
       let teRaw = 0
       for (let i = 0; i < Math.min(units.TE.length, TE_WEIGHTS.length); i++) teRaw += units.TE[i].pts * TE_WEIGHTS[i]
-      add(null, 'unit_TE', Math.round(teRaw * mult * 10) / 10)
+      add(null, 'unit_TE', Math.round(teRaw * offMult * 10) / 10)
 
       // DEF — fallback field names handle CFBD's inconsistent casing
       const defSacks  = ts['sacks']             ?? ts['Sacks']             ?? 0
@@ -355,7 +378,7 @@ export async function syncStats(
       const defTDs    = (ts['interceptionTDs']  ?? 0) + (ts['fumbleReturnTDs'] ?? 0) + (ts['defensiveTDs'] ?? 0)
       const defSafety = ts['safeties']          ?? 0
       const defRaw    = defSacks*1 + defInts*2 + defFumRec*2 + defTDs*6 + defSafety*2
-      add(null, 'unit_DEF',    Math.round(defRaw * mult * 10) / 10)
+      add(null, 'unit_DEF',    Math.round(defRaw * defMult * 10) / 10)
       add(null, 'def_sacks',   defSacks)
       add(null, 'def_ints',    defInts)
       add(null, 'def_fum_rec', defFumRec)
@@ -364,7 +387,7 @@ export async function syncStats(
 
       // K
       units.K.sort((a, b) => b.pts - a.pts)
-      add(null, 'unit_K', units.K[0] ? Math.round(units.K[0].pts * mult * 10) / 10 : 0)
+      add(null, 'unit_K', units.K[0] ? Math.round(units.K[0].pts * offMult * 10) / 10 : 0)
 
       // ── Persist: delete old rows for this school+game, insert fresh ───────
       await db.from('cached_stats').delete().eq('game_id', gameId).eq('school', school)

@@ -61,6 +61,17 @@ function autoStarters(picks: any[]): any[] {
   return slots.filter(Boolean);
 }
 
+function getRankForUnit(
+  unitType:    string,
+  opponent:    string,
+  rankMap:     Record<string, number>,
+  defRankMap:  Record<string, number>,
+  offRankMap:  Record<string, number>,
+): number {
+  if (unitType === 'DEF') return offRankMap[opponent] ?? rankMap[opponent] ?? 999;
+  return defRankMap[opponent] ?? rankMap[opponent] ?? 999;
+}
+
 function scoreStarters(
   starters:         any[],
   lineupIds:        string[] | undefined,
@@ -69,9 +80,10 @@ function scoreStarters(
   schoolPoints:     Record<string, Record<string, number>>,
   opponentMap:      Record<string, string>,
   rankMap:          Record<string, number>,
+  defRankMap:       Record<string, number>,
+  offRankMap:       Record<string, number>,
   hasOpponentData:  boolean,
 ): number {
-  // If a lineup is saved for this week, resolve those specific picks
   const effectiveStarters = lineupIds?.length === 9
     ? lineupIds.map((id: string) => allPicksForTeam.find((p: any) => p.id === id)).filter(Boolean)
     : starters;
@@ -83,11 +95,10 @@ function scoreStarters(
     const seasonPts = pick.player_data?.projectedPoints ?? 0;
 
     const opponent = opponentMap[school] ?? null;
-    // BYE = 0 (only apply when we actually have opponent data for the week)
     if (hasOpponentData && !opponent) continue;
 
-    const relevantRank = opponent ? (rankMap[opponent] ?? 999) : 999;
-    const mult = rankMult(relevantRank);
+    const rank = opponent ? getRankForUnit(unitType, opponent, rankMap, defRankMap, offRankMap) : 999;
+    const mult = rankMult(rank);
 
     const pts = completedSchools.includes(school)
       ? (schoolPoints[school]?.[unitType] ?? 0)   // mult already baked in by syncStats
@@ -199,6 +210,8 @@ export async function POST(req: Request) {
       const schoolPoints:     Record<string, Record<string, number>> = gs.schoolPoints      ?? {};
       const opponentMap:      Record<string, string>                 = ctx.opponentMap      ?? {};
       const rankMap:          Record<string, number>                 = ctx.rankMap          ?? {};
+      const defRankMap:       Record<string, number>                 = ctx.defRankMap       ?? {};
+      const offRankMap:       Record<string, number>                 = ctx.offRankMap       ?? {};
       const hasOpponentData   = Object.keys(opponentMap).length > 0;
 
       for (const team of teams) {
@@ -206,7 +219,7 @@ export async function POST(req: Request) {
         const lineupIds  = team.roster?.lineups?.[String(week)];
         const score      = scoreStarters(
           starters, lineupIds, team.picks,
-          completedSchools, schoolPoints, opponentMap, rankMap, hasOpponentData,
+          completedSchools, schoolPoints, opponentMap, rankMap, defRankMap, offRankMap, hasOpponentData,
         );
 
         if (team.type === 'human' && team.userId) {

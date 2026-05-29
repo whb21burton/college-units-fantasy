@@ -41,6 +41,16 @@ export function odrLabelFromMult(mult: number | null | undefined): string {
   return 'Super Weenie Hut Jr.'
 }
 
+export function odrMultForUnit(
+  position: string,
+  opponentDefRank: number,
+  opponentOffRank: number,
+  fallbackRank = 999
+): number {
+  if (position === 'DEF') return odrMult(opponentOffRank || fallbackRank)
+  return odrMult(opponentDefRank || fallbackRank)
+}
+
 export function getODRColor(mult: number | null | undefined): string {
   if (mult == null) return '#4a5d7a'
   if (mult >= 1.3) return '#39ff14'   // Elite — bright highlighter green
