@@ -360,6 +360,10 @@ export default function CreateLeaguePage() {
   }
 
   async function handleSubmit() {
+    if (leagueType !== 'bracket' && (!entries || entries < 4)) {
+      setError('Minimum 4 managers required');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -561,6 +565,50 @@ export default function CreateLeaguePage() {
               )}
             </div>
 
+            {/* Number of Managers — first field for non-bracket leagues */}
+            {leagueType !== 'bracket' && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
+                  Number of Managers
+                </label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={4}
+                  placeholder="Enter number of managers"
+                  value={entries === 0 ? '' : entries}
+                  onChange={e => {
+                    const val = e.target.value
+                    if (val === '') { setEntries(0); return }
+                    setEntries(parseInt(val))
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    background: C.surf,
+                    border: `2px solid ${entries > 0 && entries < 4 ? C.red : entries >= 4 ? C.green : C.surf3}`,
+                    borderRadius: 10,
+                    color: C.text,
+                    fontFamily: 'Anton,sans-serif',
+                    fontSize: '24px',
+                    outline: 'none',
+                    boxSizing: 'border-box' as const,
+                    transition: 'border-color .15s',
+                  }}
+                />
+                {entries > 0 && entries < 4 && (
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, marginTop: 6 }}>
+                    ⚠️ Minimum 4 managers required
+                  </div>
+                )}
+                {(!entries || entries === 0) && (
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 6 }}>
+                    Minimum 4 managers
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* League Name */}
             <div style={{ marginBottom: 20 }}>
               <Label>League Name</Label>
@@ -589,18 +637,6 @@ export default function CreateLeaguePage() {
                 <LogoUpload bucket="league-logos" userId={userId} label="League Logo" preview={leagueLogo} onUpload={setLeagueLogo} />
               )}
             </div>
-
-            {/* Entries — hidden for bracket leagues */}
-            {leagueType !== 'bracket' && (
-              <div style={{ marginBottom: 20 }}>
-                <Label>Number of Entries (min 4)</Label>
-                <input
-                  type="number" min={4} value={entries}
-                  onChange={e => setEntries(Math.max(4, parseInt(e.target.value) || 4))}
-                  style={{ width: '100%', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk', sans-serif", fontSize: 14, padding: '11px 14px', outline: 'none', boxSizing: 'border-box' }}
-                />
-              </div>
-            )}
 
             {/* Entry Fee */}
             <div style={{ marginBottom: effectiveBuyIn > 0 ? 0 : 20 }}>
