@@ -38,16 +38,31 @@ function snakeTeam(pickNum: number, numTeams: number): number {
   return round % 2 === 0 ? posInRound : (numTeams - 1 - posInRound);
 }
 
-function aiPickUnit(available: DraftUnit[], roster: RosterCount): DraftUnit | null {
+const ROSTER_REQUIREMENTS: Partial<Record<UnitType, number>> = { QB: 1, RB: 2, WR: 2, TE: 1, DEF: 1, K: 1 };
+const DRAFT_PRIORITY_BY_ROUND: Record<number, UnitType[]> = {
+  1: ['QB', 'RB', 'WR'],
+  2: ['RB', 'WR', 'TE'],
+  3: ['WR', 'RB', 'TE'],
+  4: ['RB', 'WR', 'TE'],
+  5: ['WR', 'RB', 'TE'],
+  6: ['DEF', 'RB', 'WR'],
+  7: ['TE', 'RB', 'WR'],
+  8: ['K', 'DEF', 'WR'],
+};
+
+function getCpuPick(available: DraftUnit[], roster: RosterCount, round: number): DraftUnit | null {
+  const needs = (Object.entries(ROSTER_REQUIREMENTS) as [UnitType, number][])
+    .filter(([pos, req]) => (roster[pos] ?? 0) < req)
+    .map(([pos]) => pos);
+
+  const priority = DRAFT_PRIORITY_BY_ROUND[Math.min(round + 1, 8)] ?? ['RB', 'WR', 'TE'];
+  const targets = priority.filter(pos => needs.includes(pos));
+  const targetPositions = targets.length > 0 ? targets : needs;
+
   const sorted = [...available].sort((a, b) => b.projectedPoints - a.projectedPoints);
-  const topN = sorted.slice(0, Math.min(5, sorted.length));
-  const rand = Math.random();
-  const candidates = rand < 0.65 ? [topN[0]] : rand < 0.85 ? topN.slice(0, 2) : topN.slice(0, 3);
-  const pick = candidates[Math.floor(Math.random() * candidates.length)] || topN[0];
-  for (const unit of [pick, ...sorted]) {
-    if ((roster[unit.unitType] || 0) < POSITION_CAPS[unit.unitType]) return unit;
-  }
-  return sorted[0] || null;
+  const candidates = sorted.filter(u => targetPositions.includes(u.unitType));
+  const pick = candidates[0] ?? sorted.find(u => (roster[u.unitType] ?? 0) < POSITION_CAPS[u.unitType]) ?? sorted[0];
+  return pick ?? null;
 }
 
 // ── Setup Screen ──────────────────────────────────────────────────────────────
@@ -305,7 +320,9 @@ export default function MockDraftPage() {
     const t = setTimeout(() => {
       const avail = availableRef.current;
       if (!avail || avail.length === 0) return;
-      const best = avail[0]; // sorted by projectedPoints desc
+      const curRound = Math.floor(currentPickNum / leagueSize);
+      const cpuRoster = rostersRef.current[curTeam] ?? emptyRoster();
+      const best = getCpuPick(avail, cpuRoster, curRound);
       if (best) makePick(best);
     }, delay);
 
