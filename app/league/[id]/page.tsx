@@ -5,7 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 import DraftOrderEditor from '@/components/league/DraftOrderEditor';
-import { odrLabelFromMult, getODRColor } from '@/lib/odr';
+function odrLabelFromMult(m: number) { return m >= 1.15 ? 'Elite' : m >= 1.05 ? 'Good' : m >= 0.95 ? 'Avg' : m >= 0.85 ? 'Weak' : 'Poor' }
+function getODRColor(m: number) { return m >= 1.15 ? '#15c678' : m >= 1.05 ? '#7fc97f' : m >= 0.95 ? '#f5a623' : m >= 0.85 ? '#f08030' : '#f03a5a' }
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
