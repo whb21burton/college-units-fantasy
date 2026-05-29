@@ -985,9 +985,46 @@ function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCom
   onDeleteLeague: () => void; onRequestKick: (member: { userId: string; teamName: string }) => void;
 }) {
   const size = league?.league_size || 0;
+  const [draftCountdown, setDraftCountdown] = useState('');
+  useEffect(() => {
+    const draftAt = league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at;
+    if (!draftAt) return;
+    const tick = () => {
+      const diff = new Date(draftAt).getTime() - Date.now();
+      if (diff <= 0) { setDraftCountdown('Draft time has arrived!'); return; }
+      const days  = Math.floor(diff / 86400000);
+      const hours = Math.floor((diff % 86400000) / 3600000);
+      const mins  = Math.floor((diff % 3600000) / 60000);
+      const secs  = Math.floor((diff % 60000) / 1000);
+      if (days > 0)        setDraftCountdown(`${days}d ${hours}h ${mins}m ${secs}s`);
+      else if (hours > 0)  setDraftCountdown(`${hours}h ${mins}m ${secs}s`);
+      else                 setDraftCountdown(`${mins}m ${secs}s`);
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [league?.settings?.draft_time, league?.settings?.draft_scheduled_at]);
 
   return (
     <div style={{ maxWidth: 680 }}>
+
+      {/* Draft countdown banner */}
+      {(league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at) && draftCountdown && (
+        <div style={{ background: 'linear-gradient(135deg,rgba(245,166,35,.12),rgba(245,166,35,.06))', border: '1px solid rgba(245,166,35,.3)', borderRadius: 10, padding: '14px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' as const, gap: 8 }}>
+          <div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.gold, textTransform: 'uppercase', marginBottom: 3 }}>🏈 Draft Starts In</div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: C.gold, letterSpacing: 1, lineHeight: 1 }}>{draftCountdown}</div>
+          </div>
+          <div style={{ textAlign: 'right' as const }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+              {new Date(league.settings.draft_time ?? league.settings.draft_scheduled_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+            </div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginTop: 2 }}>
+              {new Date(league.settings.draft_time ?? league.settings.draft_scheduled_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Invite friends banner */}
       {!isEmbed && league?.status === 'forming' && (
@@ -4304,10 +4341,13 @@ function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId
   const [benchSpots, setBenchSpots]     = useState<number>(league?.settings?.bench_spots ?? 7);
 
   // ── Draft Settings ───────────────────────────────────────────
-  const [draftType,  setDraftType]  = useState<string>(league?.draft_type ?? 'snake');
-  const [pickTimer,  setPickTimer]  = useState<number>(league?.settings?.pick_timer ?? 60);
-  const [salaryCap,  setSalaryCap]  = useState<number>(league?.salary_cap ?? 200);
-  const [draftDate,  setDraftDate]  = useState<string>(league?.settings?.draft_scheduled_at ?? '');
+  const [draftType,       setDraftType]       = useState<string>(league?.draft_type ?? 'snake');
+  const [pickTimer,       setPickTimer]       = useState<number>(league?.settings?.pick_timer ?? league?.settings?.seconds_per_pick ?? 60);
+  const [salaryCap,       setSalaryCap]       = useState<number>(league?.salary_cap ?? 200);
+  const [rosterSize,      setRosterSize]      = useState<number>(league?.settings?.roster_size ?? 8);
+  const _existingDraftAt = league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at ?? '';
+  const [draftDate,  setDraftDate]  = useState<string>(_existingDraftAt ? _existingDraftAt.slice(0, 10) : '');
+  const [draftTime,  setDraftTime]  = useState<string>(_existingDraftAt ? _existingDraftAt.slice(11, 16) : '');
 
   // Build teams list for DraftOrderEditor, sorted by existing draft_order if set
   const existingDraftOrder: any[] = league?.settings?.draft_order ?? [];
@@ -4386,11 +4426,21 @@ function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId
           .eq('id', league.id);
       }
       if (section === 'draft' && isCommissioner) {
+        const draftTimestamp = (draftDate && draftTime)
+          ? new Date(`${draftDate}T${draftTime}:00`).toISOString()
+          : (draftDate ? new Date(`${draftDate}T00:00:00`).toISOString() : null);
         await supabase.from('leagues')
           .update({
             draft_type: draftType,
             salary_cap: salaryCap,
-            settings: { ...(league.settings ?? {}), pick_timer: pickTimer, draft_scheduled_at: draftDate || null },
+            settings: {
+              ...(league.settings ?? {}),
+              pick_timer: pickTimer,
+              seconds_per_pick: pickTimer,
+              roster_size: rosterSize,
+              draft_time: draftTimestamp,
+              draft_scheduled_at: draftTimestamp,
+            },
           })
           .eq('id', league.id);
       }
@@ -4810,20 +4860,47 @@ function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId
                   )}
                 </div>
 
+                {/* Roster Size */}
+                <div>
+                  <label style={labelStyle}>Roster Size (picks per manager)</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[6, 7, 8, 9, 10, 12, 14, 16].map(s => (
+                      <OptionBtn key={s} value={s} current={rosterSize} onClick={() => isCommissioner && setRosterSize(s)}>{s}</OptionBtn>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Schedule Draft */}
                 {isCommissioner && (
                   <div>
                     <label style={labelStyle}>📅 Schedule Draft</label>
                     <input
-                      type="datetime-local"
+                      type="date"
                       value={draftDate}
+                      min={new Date().toISOString().split('T')[0]}
                       onChange={e => setDraftDate(e.target.value)}
-                      min={new Date().toISOString().slice(0, 16)}
-                      style={{ ...inputStyle, width: '100%' }}
+                      style={{ ...inputStyle, width: '100%', colorScheme: 'dark' }}
                     />
-                    {draftDate && (
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, letterSpacing: .5, marginTop: 6 }}>
-                        Draft starts: {new Date(draftDate).toLocaleString()}
+                    <div style={{ marginTop: 12 }}>
+                      <label style={{ ...labelStyle, marginTop: 8 }}>Draft Time (ET)</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 8 }}>
+                        {['12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','20:30','21:00','21:30'].map(t => {
+                          const [h, m] = t.split(':'); const hr = parseInt(h);
+                          const label = `${hr > 12 ? hr - 12 : hr}:${m} ${hr >= 12 ? 'PM' : 'AM'}`;
+                          return (
+                            <button key={t} onClick={() => setDraftTime(t)}
+                              style={{ padding: '7px 4px', border: `1px solid ${draftTime === t ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: draftTime === t ? 'rgba(212,168,40,.1)' : C.bg, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: draftTime === t ? C.gold : C.sub, textAlign: 'center' as const }}>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <input type="time" value={draftTime} onChange={e => setDraftTime(e.target.value)}
+                        style={{ ...inputStyle, colorScheme: 'dark' }} />
+                    </div>
+                    {draftDate && draftTime && (
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, letterSpacing: .5, marginTop: 8 }}>
+                        Draft starts: {new Date(`${draftDate}T${draftTime}:00`).toLocaleString()}
                       </div>
                     )}
                   </div>
