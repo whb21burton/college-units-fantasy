@@ -521,7 +521,18 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
         <div style={{ background: 'linear-gradient(180deg, #0d1827 0%, #0c1422 100%)', borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
           <div className="mob-header-pad" style={{ padding: '16px 24px 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-              <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 0.3, color: C.text, textTransform: 'uppercase', margin: 0 }}>{league?.name}</h1>
+              {isCommissioner ? (
+                <button
+                  onClick={() => setShowSettings(true)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: 0 }}
+                  title="Edit league settings"
+                >
+                  <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 0.3, color: C.text, textTransform: 'uppercase', margin: 0 }}>{league?.name}</h1>
+                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.gold, letterSpacing: 2, textTransform: 'uppercase' as const }}>✏️ Edit</span>
+                </button>
+              ) : (
+                <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 0.3, color: C.text, textTransform: 'uppercase', margin: 0 }}>{league?.name}</h1>
+              )}
               <span style={{
                 fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 600, letterSpacing: 1.5,
                 color: C.gold, background: 'rgba(245,166,35,.12)', border: '1px solid rgba(245,166,35,.28)',
