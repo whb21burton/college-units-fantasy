@@ -145,13 +145,14 @@ export async function syncStats(
   const db = createAdminClient()
   let total = 0
 
-  // 1. Fetch games, player stats, team stats, elo + SP+ ratings — all in parallel
-  const [games, playerStats, teamStats, eloData, spData] = await Promise.all([
+  // 1. Fetch games, player stats, team stats, elo — all in parallel
+  // SP+ comes from sp_ratings table (updated by cron); fall back to live CFBD only if empty
+  const [games, playerStats, teamStats, eloData, storedRatings] = await Promise.all([
     cfbdGet('/games',         { year: season, week }),
     cfbdGet('/games/players', { year: season, week }).catch(() => []),
     cfbdGet('/games/teams',   { year: season, week }).catch(() => []),
     cfbdGet('/ratings/elo',   { year: season, week }).catch(() => []),
-    cfbdGet('/ratings/sp',    { year: season }).catch(() => []),
+    db.from('sp_ratings').select('school, def_rank, off_rank').eq('season', season),
   ])
 
   const completedGames = games.filter((g: any) =>
@@ -164,15 +165,23 @@ export async function syncStats(
   ;[...eloData].sort((a: any, b: any) => (b.elo ?? 0) - (a.elo ?? 0))
     .forEach((t: any, i: number) => { if (t.team) eloRank[t.team] = i + 1 })
 
-  // SP+ defensive and offensive rank maps
+  // SP+ defensive and offensive rank maps — stored table first, live CFBD fallback
   const defRankMap: Record<string, number> = {}
   const offRankMap: Record<string, number> = {}
-  for (const t of spData as any[]) {
-    if (t.team) {
-      if (t.defense?.ranking != null) defRankMap[t.team] = t.defense.ranking
-      else if (t.defense?.rank != null) defRankMap[t.team] = t.defense.rank
-      if (t.offense?.ranking != null) offRankMap[t.team] = t.offense.ranking
-      else if (t.offense?.rank != null) offRankMap[t.team] = t.offense.rank
+  if (storedRatings.data && storedRatings.data.length > 0) {
+    for (const r of storedRatings.data) {
+      defRankMap[r.school] = r.def_rank
+      offRankMap[r.school] = r.off_rank
+    }
+  } else {
+    const spData = await cfbdGet('/ratings/sp', { year: season }).catch(() => [])
+    for (const t of spData as any[]) {
+      if (t.team) {
+        if (t.defense?.ranking != null) defRankMap[t.team] = t.defense.ranking
+        else if (t.defense?.rank != null) defRankMap[t.team] = t.defense.rank
+        if (t.offense?.ranking != null) offRankMap[t.team] = t.offense.ranking
+        else if (t.offense?.rank != null) offRankMap[t.team] = t.offense.rank
+      }
     }
   }
 
