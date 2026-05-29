@@ -3,6 +3,26 @@
  * server code and client components (no Supabase imports).
  */
 
+export const POWER_5_TEAMS = new Set([
+  // SEC
+  'Alabama','Arkansas','Auburn','Florida','Georgia','Kentucky',
+  'LSU','Mississippi State','Missouri','Ole Miss','South Carolina',
+  'Tennessee','Texas','Texas A&M','Vanderbilt',
+  // Big Ten
+  'Illinois','Indiana','Iowa','Maryland','Michigan','Michigan State',
+  'Minnesota','Nebraska','Northwestern','Ohio State','Oregon',
+  'Penn State','Purdue','Rutgers','UCLA','USC','Washington','Wisconsin',
+  // Big 12
+  'Arizona','Arizona State','Baylor','BYU','Cincinnati','Colorado',
+  'Houston','Iowa State','Kansas','Kansas State','Oklahoma State',
+  'TCU','Texas Tech','UCF','Utah','West Virginia',
+  // ACC
+  'Boston College','California','Clemson','Duke','Florida State',
+  'Georgia Tech','Louisville','Miami','NC State','North Carolina',
+  'Pittsburgh','SMU','Stanford','Syracuse','Virginia','Virginia Tech',
+  'Wake Forest',
+])
+
 export function odrLabel(rank: number): string {
   if (rank <=   5) return 'Elite'
   if (rank <=  10) return 'Hard'
@@ -39,6 +59,12 @@ export function odrLabelFromMult(mult: number | null | undefined): string {
   if (mult >= 0.7) return 'Really Bad'
   if (mult >= 0.6) return 'Weenie Hut Jr.'
   return 'Super Weenie Hut Jr.'
+}
+
+export function odrMultSafe(rank: number, school: string): number {
+  const mult = odrMult(rank)
+  if (POWER_5_TEAMS.has(school)) return Math.max(mult, 0.7)
+  return mult
 }
 
 export function odrMultForUnit(

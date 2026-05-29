@@ -5,18 +5,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase-server'
-
-function odrMult(rank: number): number {
-  if (rank <=   5) return 1.3
-  if (rank <=  10) return 1.2
-  if (rank <=  15) return 1.1
-  if (rank <=  25) return 1.0
-  if (rank <=  35) return 0.9
-  if (rank <=  50) return 0.8
-  if (rank <=  80) return 0.7
-  if (rank <= 100) return 0.6
-  return 0.5
-}
+import { odrMultSafe } from '@/lib/odr'
 
 
 const BASE_URL = 'https://apinext.collegefootballdata.com'
@@ -185,13 +174,13 @@ export async function syncStats(
     }
   }
 
-  function getOdrMultForUnit(position: string, opponent: string): number {
+  function getOdrMultForUnit(position: string, opponent: string, school: string): number {
     if (position === 'DEF') {
       const offRank = offRankMap[opponent] ?? eloRank[opponent] ?? 999
-      return odrMult(offRank)
+      return odrMultSafe(offRank, school)
     }
     const defRank = defRankMap[opponent] ?? eloRank[opponent] ?? 999
-    return odrMult(defRank)
+    return odrMultSafe(defRank, school)
   }
 
   // 3. Team stats map: school → { category: value }
@@ -279,9 +268,9 @@ export async function syncStats(
       if (schoolsFilter?.length && !schoolsFilter.includes(school)) continue
 
       const opponent  = school === game.homeTeam ? game.awayTeam : game.homeTeam
-      const offMult   = getOdrMultForUnit('QB',  opponent)  // skill units vs opponent defense
-      const defMult   = getOdrMultForUnit('DEF', opponent)  // DEF unit vs opponent offense
-      const mult      = odrMult(eloRank[opponent] ?? 999)   // general Elo mult (stored for display)
+      const offMult   = getOdrMultForUnit('QB',  opponent, school)  // skill units vs opponent defense
+      const defMult   = getOdrMultForUnit('DEF', opponent, school)  // DEF unit vs opponent offense
+      const mult      = odrMultSafe(eloRank[opponent] ?? 999, school)  // general Elo mult (stored for display)
       const ts = teamStatMap[school] ?? {}
       const entries = Object.values(playerStatMap)
         .filter((e: any) => e.gameId === gameId && e.school === school)

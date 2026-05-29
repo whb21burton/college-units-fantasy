@@ -29,50 +29,51 @@ export async function GET(req: Request) {
     initCfbdClient();
     const admin = createAdminClient();
 
-    // Fetch schedule from Supabase + Elo from CFBD in parallel
-    const [scheduleRes, eloData, storedRatings] = await Promise.all([
+    // Fetch schedule + stored ratings in parallel; avoid live Elo/SP+ calls when cached
+    const [scheduleRes, storedRatings] = await Promise.all([
       admin
         .from('cached_schedule')
         .select('home_team, away_team, game_date')
         .eq('week', week)
         .eq('season', season),
-      getElo({ query: { year: season, week } }).then((r: any) => r.data || []).catch(() => []),
       admin
         .from('sp_ratings')
-        .select('school, def_rank, off_rank, overall_rank')
+        .select('school, def_rank, off_rank, overall_rank, elo_rank')
         .eq('season', season),
     ]);
 
-    // ── Elo rank map (general team strength, used for display) ──
-    const eloSorted: any[] = [...(eloData as any[])].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
-    const rankMap: Record<string, number> = {};
-    eloSorted.forEach((t, idx) => { rankMap[t.team] = idx + 1; });
-
-    // ── SP+ rank maps: use stored sp_ratings table first, fall back to live CFBD ──
+    const rankMap:    Record<string, number> = {};
     const defRankMap: Record<string, number> = {};
     const offRankMap: Record<string, number> = {};
 
     if (storedRatings.data && storedRatings.data.length > 0) {
+      // Use cached ratings — elo_rank for general strength, SP+ for unit-specific
       for (const r of storedRatings.data) {
+        const elo = r.elo_rank !== 999 ? r.elo_rank : r.overall_rank;
+        rankMap[r.school]    = elo;
         defRankMap[r.school] = r.def_rank;
         offRankMap[r.school] = r.off_rank;
-        if (r.overall_rank && r.overall_rank !== 999) rankMap[r.school] = r.overall_rank;
       }
     } else {
-      // Fall back to live CFBD SP+ fetch
-      const spList: any[] = await getSp({ query: { year: season } }).then((r: any) => r.data || []).catch(() => []);
-      for (const t of spList) {
+      // Fall back to live CFBD fetch if sp_ratings table is empty
+      const [eloData, spList] = await Promise.all([
+        getElo({ query: { year: season, week } }).then((r: any) => r.data || []).catch(() => []),
+        getSp({ query: { year: season } }).then((r: any) => r.data || []).catch(() => []),
+      ]);
+      [...(eloData as any[])].sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0))
+        .forEach((t: any, idx: number) => { if (t.team) rankMap[t.team] = idx + 1; });
+      for (const t of spList as any[]) {
         if (!t.team) continue;
         if (t.defense?.rank != null) defRankMap[t.team] = t.defense.rank;
         if (t.offense?.rank != null) offRankMap[t.team] = t.offense.rank;
       }
       if (Object.keys(defRankMap).length === 0) {
-        [...spList].filter(t => t.team && t.defense?.rating != null)
+        [...(spList as any[])].filter(t => t.team && t.defense?.rating != null)
           .sort((a, b) => (b.defense.rating ?? 0) - (a.defense.rating ?? 0))
           .forEach((t, i) => { defRankMap[t.team] = i + 1; });
       }
       if (Object.keys(offRankMap).length === 0) {
-        [...spList].filter(t => t.team && t.offense?.rating != null)
+        [...(spList as any[])].filter(t => t.team && t.offense?.rating != null)
           .sort((a, b) => (b.offense.rating ?? 0) - (a.offense.rating ?? 0))
           .forEach((t, i) => { offRankMap[t.team] = i + 1; });
       }

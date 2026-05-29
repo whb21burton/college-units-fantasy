@@ -11,6 +11,7 @@
  */
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-server';
+import { odrMultSafe } from '@/lib/odr';
 
 const TOTAL_WEEKS = 14; // 11 regular season + 3 playoff weeks
 
@@ -98,7 +99,7 @@ function scoreStarters(
     if (hasOpponentData && !opponent) continue;
 
     const rank = opponent ? getRankForUnit(unitType, opponent, rankMap, defRankMap, offRankMap) : 999;
-    const mult = rankMult(rank);
+    const mult = odrMultSafe(rank, school);
 
     const pts = completedSchools.includes(school)
       ? (schoolPoints[school]?.[unitType] ?? 0)   // mult already baked in by syncStats
