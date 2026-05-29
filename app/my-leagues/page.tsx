@@ -101,7 +101,7 @@ function InlineBracketDashboard({ contestId, leagueData, userId }: {
       <iframe
         key={contestId}
         src={`/brackets/${contestId}?embed=1`}
-        style={{ flex: 1, border: 'none', width: '100%' }}
+        style={{ flex: 1, border: 'none', width: '100%', height: '100%', display: 'block' }}
         title="Bracket"
       />
     </div>
@@ -512,7 +512,7 @@ function MyLeaguesContent() {
 
   return (
     <>
-    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: 'sans-serif', position: 'relative' as const }}>
+    <div style={{ display: 'flex', height: '100vh', background: C.bg, fontFamily: 'sans-serif', position: 'relative' as const, overflow: 'hidden' }}>
 
       {/* LEFT SIDEBAR */}
       <div
@@ -679,6 +679,7 @@ function MyLeaguesContent() {
         onTouchEnd={handleTouchEnd}
         style={{
           flex: 1,
+          height: '100vh',
           overflowY: 'auto' as const,
           ...(isMobile ? {
             width: '100%',
