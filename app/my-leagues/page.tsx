@@ -52,11 +52,12 @@ type HistoryEntry = {
 
 // ── Iframe panel components ───────────────────────────────────────────────────
 
-function InlineLeagueDashboard({ leagueId, nonce }: { leagueId: string; nonce?: number }) {
+function InlineLeagueDashboard({ leagueId, nonce, onLoad }: { leagueId: string; nonce?: number; onLoad?: () => void }) {
   return (
     <iframe
       key={`${leagueId}-${nonce ?? 0}`}
       src={`/league/${leagueId}?embed=1`}
+      onLoad={onLoad}
       style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
       title="League Dashboard"
     />
@@ -119,6 +120,7 @@ function MyLeaguesContent() {
   const [leagues,         setLeagues]         = useState<LeagueData[]>([]);
   const [selected,        setSelected]        = useState<Selection>(null);
   const [iframeNonce,     setIframeNonce]     = useState(0);
+  const rightPanelRef = useRef<HTMLDivElement>(null);
   const [archivedLeagues, setArchivedLeagues] = useState<any[]>([]);
   const [historyFilter,   setHistoryFilter]   = useState<'all' | 'season' | 'weekly' | 'bracket'>('all');
   const [loadingHistory,  setLoadingHistory]  = useState(false);
@@ -164,6 +166,11 @@ function MyLeaguesContent() {
   function toggleSection(key: string) {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
   }
+
+  // Scroll right panel to top whenever selection changes
+  useEffect(() => {
+    rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' })
+  }, [selected])
 
   // Listen for NAVIGATE messages from embedded iframes (e.g. league page guard, mock draft exit)
   useEffect(() => {
@@ -685,6 +692,7 @@ function MyLeaguesContent() {
 
       {/* RIGHT PANEL — inline content */}
       <div
+        ref={rightPanelRef}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         style={{
@@ -778,7 +786,7 @@ function MyLeaguesContent() {
                 </div>
               </div>
             )}
-            <InlineLeagueDashboard leagueId={selected.id} nonce={iframeNonce} />
+            <InlineLeagueDashboard leagueId={selected.id} nonce={iframeNonce} onLoad={() => rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' })} />
           </>
         )}
 
