@@ -268,7 +268,8 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const [chatInput,     setChatInput]     = useState('');
   const [kickTarget,    setKickTarget]    = useState<{ userId: string; teamName: string } | null>(null);
   const [kickRefund,    setKickRefund]    = useState(true);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatEndRef        = useRef<HTMLDivElement>(null);
+  const chatInitialMount  = useRef(true);
   const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
   async function loadData(uid?: string) {
@@ -324,6 +325,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   }, [params.id]);
 
   useEffect(() => {
+    if (chatInitialMount.current) { chatInitialMount.current = false; return; }
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
