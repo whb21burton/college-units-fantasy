@@ -483,7 +483,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   );
 
   return (
-    <div className="layout-root" style={{ display: 'flex', height: '100vh', background: C.bg, overflowY: 'auto' as const }}>
+    <div className="layout-root" style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
 
       {showSettings && (
         <LeagueSettingsModal

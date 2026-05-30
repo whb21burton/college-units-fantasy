@@ -715,7 +715,10 @@ function MyLeaguesContent() {
           flex: 1,
           height: '100vh',
           overflowY: 'auto' as const,
+          overflowX: 'hidden' as const,
           overscrollBehavior: 'contain',
+          isolation: 'isolate' as const,
+          contain: 'strict' as const,
           ...(isMobile ? {
             width: '100%',
             minHeight: '100vh',
@@ -803,7 +806,9 @@ function MyLeaguesContent() {
                 </div>
               </div>
             )}
-            <InlineLeagueDashboard leagueId={selected.id} nonce={iframeNonce} onLoad={() => rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' })} />
+            <div style={{ height: '100vh', overflow: 'hidden', position: 'relative', contain: 'strict' as const }}>
+              <InlineLeagueDashboard leagueId={selected.id} nonce={iframeNonce} onLoad={() => rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' })} />
+            </div>
           </>
         )}
 
