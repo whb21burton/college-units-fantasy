@@ -348,10 +348,12 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   useEffect(() => {
     if (league?.league_type === 'weekly') {
       setActiveTab('lineup');
+      window.scrollTo(0, 0);
     } else if (league?.status === 'active' && activeTab === 'draft') {
       setActiveTab('matchup');
+      window.scrollTo(0, 0);
     }
-  }, [league?.league_type, league?.status]);
+  }, [league?.league_type, league?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isCommissioner = userId === league?.commissioner_id;
   const myMember       = members.find((m: any) => m.user_id === userId);
