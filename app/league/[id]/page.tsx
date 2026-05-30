@@ -329,6 +329,9 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'SCROLL_TOP' }, '*');
+    }
   }, []);
 
   useEffect(() => {
@@ -349,9 +352,11 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     if (league?.league_type === 'weekly') {
       setActiveTab('lineup');
       window.scrollTo(0, 0);
+      if (window.parent !== window) window.parent.postMessage({ type: 'SCROLL_TOP' }, '*');
     } else if (league?.status === 'active' && activeTab === 'draft') {
       setActiveTab('matchup');
       window.scrollTo(0, 0);
+      if (window.parent !== window) window.parent.postMessage({ type: 'SCROLL_TOP' }, '*');
     }
   }, [league?.league_type, league?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 

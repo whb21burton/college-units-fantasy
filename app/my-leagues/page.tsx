@@ -182,6 +182,10 @@ function MyLeaguesContent() {
   // Listen for NAVIGATE messages from embedded iframes (e.g. league page guard, mock draft exit)
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
+      if (e.data?.type === 'SCROLL_TOP') {
+        rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+        return;
+      }
       if (e.data?.type === 'NAVIGATE') {
         const url: string = e.data.url ?? e.data.path ?? '';
         const leagueMatch = url.match(/\/league\/([^/?]+)/);
