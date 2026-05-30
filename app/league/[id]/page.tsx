@@ -403,9 +403,25 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   }
 
   async function startDraft() {
-    if (!isCommissioner || !isFull || !league) return;
-    // Navigate to real draft room — the draft page handles slot assignment and status change
-    router.push(`/league/${params.id}/draft`);
+    if (!isCommissioner || !league) return;
+    if (members.length < 2) { alert('Need at least 2 managers to start the draft.'); return; }
+
+    // Auto-fill any empty slots with CPU teams before navigating
+    const existingCpus = (league.settings?.cpu_teams as string[]) ?? [];
+    const totalFilled  = members.length + existingCpus.length;
+    const leagueSize   = league.league_size ?? 8;
+    const slotsToFill  = Math.max(0, leagueSize - totalFilled);
+
+    if (slotsToFill > 0) {
+      const newCpus = Array.from({ length: slotsToFill }, (_, i) =>
+        `CPU Team ${existingCpus.length + i + 1}`
+      );
+      await supabase.from('leagues')
+        .update({ settings: { ...league.settings, cpu_teams: [...existingCpus, ...newCpus] } })
+        .eq('id', league.id);
+    }
+
+    router.push(`/league/${params.id}/draft${isEmbed ? '?embed=1' : ''}`);
   }
 
   async function resetDraft() {
@@ -1008,23 +1024,56 @@ function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCom
   return (
     <div style={{ maxWidth: 680 }}>
 
-      {/* Draft countdown banner */}
-      {(league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at) && draftCountdown && (
-        <div style={{ background: 'linear-gradient(135deg,rgba(245,166,35,.12),rgba(245,166,35,.06))', border: '1px solid rgba(245,166,35,.3)', borderRadius: 10, padding: '14px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' as const, gap: 8 }}>
-          <div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.gold, textTransform: 'uppercase', marginBottom: 3 }}>🏈 Draft Starts In</div>
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: C.gold, letterSpacing: 1, lineHeight: 1 }}>{draftCountdown}</div>
-          </div>
-          <div style={{ textAlign: 'right' as const }}>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
-              {new Date(league.settings.draft_time ?? league.settings.draft_scheduled_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+      {/* Draft countdown banner — premium */}
+      {draftCountdown && (() => {
+        const draftAt = league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at;
+        if (!draftAt || new Date(draftAt) <= new Date()) return null;
+        const diff = Math.max(0, new Date(draftAt).getTime() - Date.now());
+        const days  = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        const mins  = Math.floor((diff % 3600000) / 60000);
+        const secs  = Math.floor((diff % 60000) / 1000);
+        const units = days > 0
+          ? [{ val: days, label: 'Days' }, { val: hours, label: 'Hrs' }, { val: mins, label: 'Min' }, { val: secs, label: 'Sec' }]
+          : hours > 0
+          ? [{ val: hours, label: 'Hrs' }, { val: mins, label: 'Min' }, { val: secs, label: 'Sec' }]
+          : [{ val: mins, label: 'Min' }, { val: secs, label: 'Sec' }];
+        return (
+          <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg,#0a1628 0%,#0f1e35 50%,#0a1628 100%)', border: '1px solid rgba(245,166,35,.4)', borderRadius: 12, padding: '20px 24px', marginBottom: 20 }}>
+            <style>{`@keyframes draft-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }`}</style>
+            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center,rgba(245,166,35,.08) 0%,transparent 70%)', pointerEvents: 'none' }} />
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 4, color: C.gold, textTransform: 'uppercase', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: C.gold, boxShadow: `0 0 6px ${C.gold}`, animation: 'draft-pulse 1.5s infinite' }} />
+              Draft Starting In
             </div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginTop: 2 }}>
-              {new Date(league.settings.draft_time ?? league.settings.draft_scheduled_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 12 }}>
+              {units.map(({ val, label }, i) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  {i > 0 && <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: 'rgba(245,166,35,.4)', marginBottom: 8 }}>:</span>}
+                  <div style={{ textAlign: 'center' as const }}>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 42, color: C.gold, letterSpacing: 2, lineHeight: 1, textShadow: '0 0 20px rgba(245,166,35,.5)' }}>{String(val).padStart(2, '0')}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 3, color: C.muted, textTransform: 'uppercase', marginTop: 3 }}>{label}</div>
+                  </div>
+                </div>
+              ))}
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
+                {new Date(draftAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+              </div>
+              <div style={{ padding: '4px 12px', background: 'rgba(245,166,35,.1)', border: '1px solid rgba(245,166,35,.3)', borderRadius: 20, fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold, letterSpacing: 1 }}>
+                {new Date(draftAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
+              </div>
+            </div>
+            {members.length < size && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(245,166,35,.15)', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>👥</span>
+                <span>{members.length}/{size} managers joined</span>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Invite friends banner */}
       {!isEmbed && league?.status === 'forming' && (
@@ -1126,14 +1175,21 @@ function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCom
 
       {/* Commissioner controls — forming */}
       {isCommissioner && league?.status === 'forming' && (
-        isFull ? (
-          <button
-            onClick={onStartDraft}
-            style={{ width: '100%', padding: 17, background: 'linear-gradient(135deg,#d4a828,#f0c94a)', border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 3, textTransform: 'uppercase', color: C.bg }}
-          >🏈 Enter Draft Room</button>
+        members.length >= 2 ? (
+          <div>
+            <button
+              onClick={onStartDraft}
+              style={{ width: '100%', padding: 17, background: 'linear-gradient(135deg,#d4a828,#f0c94a)', border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 16, letterSpacing: 3, textTransform: 'uppercase', color: C.bg }}
+            >🏈 Enter Draft Room</button>
+            {!isFull && (
+              <div style={{ marginTop: 8, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, textAlign: 'center', letterSpacing: 1 }}>
+                {spotsLeft} empty slot{spotsLeft !== 1 ? 's' : ''} will be auto-filled with CPU teams
+              </div>
+            )}
+          </div>
         ) : (
           <div style={{ padding: '13px 18px', background: 'rgba(212,168,40,.05)', border: '1px solid rgba(212,168,40,.18)', borderRadius: 10, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, textAlign: 'center' }}>
-            Fill <strong style={{ color: C.text }}>{spotsLeft}</strong> more spot{spotsLeft !== 1 ? 's' : ''} (invite managers or add CPUs) to start the draft.
+            Need at least 2 managers to start the draft.
           </div>
         )
       )}
