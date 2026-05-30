@@ -54,21 +54,30 @@ type HistoryEntry = {
 
 function InlineLeagueDashboard({ leagueId, nonce, onLoad }: { leagueId: string; nonce?: number; onLoad?: () => void }) {
   return (
-    <iframe
-      key={`${leagueId}-${nonce ?? 0}`}
-      src={`/league/${leagueId}?embed=1&t=${nonce ?? 0}`}
-      tabIndex={-1}
-      {...{ scrolling: 'no' } as any}
-      onLoad={(e) => {
-        onLoad?.()
-        try {
-          (e.target as HTMLIFrameElement).contentWindow?.scrollTo(0, 0);
-        } catch {}
-        ;(document.activeElement as HTMLElement)?.blur?.()
-      }}
-      style={{ width: '100%', height: '100vh', border: 'none', display: 'block', overflow: 'hidden' }}
-      title="League Dashboard"
-    />
+    <div style={{ width: '100%', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+      <iframe
+        key={`league-${leagueId}-${nonce ?? 0}`}
+        src={`/league/${leagueId}?embed=1&t=${nonce ?? 0}`}
+        tabIndex={-1}
+        {...{ scrolling: 'no' } as any}
+        onLoad={(e) => {
+          const iframeEl = e.target as HTMLIFrameElement;
+          try {
+            iframeEl.contentWindow?.scrollTo(0, 0);
+            iframeEl.contentDocument?.documentElement?.scrollTo(0, 0);
+            iframeEl.contentDocument?.body?.scrollTo(0, 0);
+            if (iframeEl.contentDocument) {
+              iframeEl.contentDocument.documentElement.scrollTop = 0;
+              iframeEl.contentDocument.body.scrollTop = 0;
+            }
+          } catch {}
+          onLoad?.();
+          ;(document.activeElement as HTMLElement)?.blur?.();
+        }}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', display: 'block' }}
+        title="League Dashboard"
+      />
+    </div>
   );
 }
 

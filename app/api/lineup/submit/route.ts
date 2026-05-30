@@ -69,6 +69,27 @@ export async function POST(req: NextRequest) {
 
     if (!member) return NextResponse.json({ error: 'Not a member of this league' }, { status: 403 });
 
+    // Server-side lineup lock: check first kickoff for schools in this lineup
+    const schools = [...new Set(picks.map(p => p.player_data?.school).filter(Boolean))] as string[];
+    if (schools.length > 0) {
+      const { data: games } = await admin
+        .from('cached_schedule')
+        .select('game_date')
+        .eq('season', new Date().getFullYear())
+        .eq('week', week)
+        .or(schools.map(s => `home_team.eq.${s},away_team.eq.${s}`).join(','))
+        .order('game_date', { ascending: true })
+        .limit(1);
+
+      if (games && games.length > 0 && games[0].game_date) {
+        if (new Date() >= new Date(games[0].game_date)) {
+          return NextResponse.json({
+            error: 'Lineup is locked — the first game with one of your units has already started',
+          }, { status: 403 });
+        }
+      }
+    }
+
     // Validate picks count
     if (picks.length !== TOTAL_STARTERS) {
       return NextResponse.json({
