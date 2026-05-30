@@ -56,13 +56,17 @@ function InlineLeagueDashboard({ leagueId, nonce, onLoad }: { leagueId: string; 
   return (
     <iframe
       key={`${leagueId}-${nonce ?? 0}`}
-      src={`/league/${leagueId}?embed=1`}
+      src={`/league/${leagueId}?embed=1&t=${nonce ?? 0}`}
       tabIndex={-1}
-      onLoad={() => {
+      {...{ scrolling: 'no' } as any}
+      onLoad={(e) => {
         onLoad?.()
+        try {
+          (e.target as HTMLIFrameElement).contentWindow?.scrollTo(0, 0);
+        } catch {}
         ;(document.activeElement as HTMLElement)?.blur?.()
       }}
-      style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
+      style={{ width: '100%', height: '100vh', border: 'none', display: 'block', overflow: 'hidden' }}
       title="League Dashboard"
     />
   );
