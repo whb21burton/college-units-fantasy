@@ -404,7 +404,8 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
 
   async function startDraft() {
     if (!isCommissioner || !league) return;
-    if (members.length < 2) { alert('Need at least 2 managers to start the draft.'); return; }
+    const isAdmin = userEmail === 'whb21burton@gmail.com';
+    if (members.length < (isAdmin ? 1 : 2)) { alert(`Need at least ${isAdmin ? 1 : 2} manager${isAdmin ? '' : 's'} to start the draft.`); return; }
 
     // Auto-fill any empty slots with CPU teams before navigating
     const existingCpus = (league.settings?.cpu_teams as string[]) ?? [];
@@ -1001,6 +1002,8 @@ function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCom
   onDeleteLeague: () => void; onRequestKick: (member: { userId: string; teamName: string }) => void;
 }) {
   const size = league?.league_size || 0;
+  const isAdmin = userEmail === 'whb21burton@gmail.com';
+  const minMembers = isAdmin ? 1 : 2;
   const [draftCountdown, setDraftCountdown] = useState('');
   useEffect(() => {
     const draftAt = league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at;
@@ -1175,7 +1178,7 @@ function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCom
 
       {/* Commissioner controls — forming */}
       {isCommissioner && league?.status === 'forming' && (
-        members.length >= 2 ? (
+        members.length >= minMembers ? (
           <div>
             <button
               onClick={onStartDraft}
@@ -1189,7 +1192,7 @@ function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCom
           </div>
         ) : (
           <div style={{ padding: '13px 18px', background: 'rgba(212,168,40,.05)', border: '1px solid rgba(212,168,40,.18)', borderRadius: 10, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, textAlign: 'center' }}>
-            Need at least 2 managers to start the draft.
+            Need at least {minMembers} manager{minMembers === 1 ? '' : 's'} to start the draft.
           </div>
         )
       )}
