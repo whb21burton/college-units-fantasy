@@ -52,10 +52,10 @@ type HistoryEntry = {
 
 // ── Iframe panel components ───────────────────────────────────────────────────
 
-function InlineLeagueDashboard({ leagueId }: { leagueId: string }) {
+function InlineLeagueDashboard({ leagueId, nonce }: { leagueId: string; nonce?: number }) {
   return (
     <iframe
-      key={leagueId}
+      key={`${leagueId}-${nonce ?? 0}`}
       src={`/league/${leagueId}?embed=1`}
       style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
       title="League Dashboard"
@@ -118,6 +118,7 @@ function MyLeaguesContent() {
   const [loading,         setLoading]         = useState(true);
   const [leagues,         setLeagues]         = useState<LeagueData[]>([]);
   const [selected,        setSelected]        = useState<Selection>(null);
+  const [iframeNonce,     setIframeNonce]     = useState(0);
   const [archivedLeagues, setArchivedLeagues] = useState<any[]>([]);
   const [historyFilter,   setHistoryFilter]   = useState<'all' | 'season' | 'weekly' | 'bracket'>('all');
   const [loadingHistory,  setLoadingHistory]  = useState(false);
@@ -164,10 +165,19 @@ function MyLeaguesContent() {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
-  // Listen for NAVIGATE messages from embedded iframes (e.g. league page guard)
+  // Listen for NAVIGATE messages from embedded iframes (e.g. league page guard, mock draft exit)
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
-      if (e.data?.type === 'NAVIGATE') router.push(e.data.path);
+      if (e.data?.type === 'NAVIGATE') {
+        const url: string = e.data.url ?? e.data.path ?? '';
+        const leagueMatch = url.match(/\/league\/([^/?]+)/);
+        if (leagueMatch) {
+          // Reload the league iframe back to the league hub (increment nonce to force remount)
+          setIframeNonce(n => n + 1);
+        } else if (url) {
+          router.push(url);
+        }
+      }
     }
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
@@ -768,7 +778,7 @@ function MyLeaguesContent() {
                 </div>
               </div>
             )}
-            <InlineLeagueDashboard leagueId={selected.id} />
+            <InlineLeagueDashboard leagueId={selected.id} nonce={iframeNonce} />
           </>
         )}
 

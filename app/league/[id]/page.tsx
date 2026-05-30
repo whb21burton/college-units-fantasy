@@ -580,7 +580,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               cpuTeams={cpuTeams}
               onCopy={copyLink}
               onStartDraft={startDraft}
-              onMockDraft={() => router.push(`/league/${params.id}/mock-draft`)}
+              onMockDraft={() => router.push(`/league/${params.id}/mock-draft${isEmbed ? '?embed=1' : ''}`)}
               onAddCpu={addCpu}
               onRemoveCpu={removeCpu}
               onResetDraft={resetDraft}

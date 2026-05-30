@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import { POSITION_CAPS, ROSTER_SLOTS, type DraftUnit, type UnitType } from '@/lib/playerPool';
 import type { TeamEfficiency } from '@/types';
@@ -150,7 +150,17 @@ function SetupScreen({ leagueSize, onStart, onBack }: { leagueSize: number; onSt
 export default function MockDraftPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const leagueId = params?.id as string;
+  const isEmbed = searchParams.get('embed') === '1';
+
+  function exitMockDraft() {
+    if (isEmbed || window.parent !== window) {
+      window.parent.postMessage({ type: 'NAVIGATE', url: `/league/${leagueId}` }, '*');
+    } else {
+      exitMockDraft();
+    }
+  }
 
   const [setupDone,        setSetupDone]        = useState(false);
   const [leagueSize,       setLeagueSize]       = useState(8);
@@ -357,7 +367,7 @@ export default function MockDraftPage() {
       <SetupScreen
         leagueSize={leagueSize}
         onStart={(position) => { setMockDraftPosition(position); setSetupDone(true); }}
-        onBack={() => router.push(`/league/${leagueId}`)}
+        onBack={() => exitMockDraft()}
       />
     );
   }
@@ -368,7 +378,7 @@ export default function MockDraftPage() {
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
           <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 28, letterSpacing: 2, color: C.gold }}>MOCK DRAFT COMPLETE</div>
-          <button onClick={() => router.push(`/league/${leagueId}`)} style={{ padding: '10px 22px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.sub, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 2 }}>EXIT</button>
+          <button onClick={() => exitMockDraft()} style={{ padding: '10px 22px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.sub, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 2 }}>EXIT</button>
         </div>
         <div style={{ marginBottom: 16, fontSize: 11, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' }}>Your Roster</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
@@ -400,7 +410,7 @@ export default function MockDraftPage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '12px 20px', background: C.surf, borderBottom: `1px solid ${C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button onClick={() => router.push(`/league/${leagueId}`)} style={{ background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '6px 12px', color: C.muted, cursor: 'pointer', fontSize: 11, letterSpacing: 1, fontFamily: "'Oswald', sans-serif" }}>← EXIT MOCK</button>
+            <button onClick={() => exitMockDraft()} style={{ background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '6px 12px', color: C.muted, cursor: 'pointer', fontSize: 11, letterSpacing: 1, fontFamily: "'Oswald', sans-serif" }}>← EXIT MOCK</button>
             <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 16, letterSpacing: 2, color: C.gold }}>MOCK DRAFT</div>
             <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1 }}>Round {round + 1} · Pick {pickInRound} of {numTeams}</div>
           </div>
