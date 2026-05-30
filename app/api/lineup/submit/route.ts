@@ -70,7 +70,8 @@ export async function POST(req: NextRequest) {
     if (!member) return NextResponse.json({ error: 'Not a member of this league' }, { status: 403 });
 
     // Server-side lineup lock: check first kickoff for schools in this lineup
-    const schools = [...new Set(picks.map(p => p.player_data?.school).filter(Boolean))] as string[];
+    const schoolSet = new Set(picks.map(p => p.player_data?.school).filter(Boolean));
+    const schools = Array.from(schoolSet) as string[];
     if (schools.length > 0) {
       const { data: games } = await admin
         .from('cached_schedule')
