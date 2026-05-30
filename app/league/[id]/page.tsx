@@ -324,6 +324,13 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
+  // Force scroll to top on mount — prevents iframe from starting scrolled to bottom
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, []);
+
   useEffect(() => {
     if (chatInitialMount.current) { chatInitialMount.current = false; return; }
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
