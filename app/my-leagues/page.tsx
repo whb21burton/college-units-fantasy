@@ -57,7 +57,11 @@ function InlineLeagueDashboard({ leagueId, nonce, onLoad }: { leagueId: string; 
     <iframe
       key={`${leagueId}-${nonce ?? 0}`}
       src={`/league/${leagueId}?embed=1`}
-      onLoad={onLoad}
+      tabIndex={-1}
+      onLoad={() => {
+        onLoad?.()
+        ;(document.activeElement as HTMLElement)?.blur?.()
+      }}
       style={{ width: '100%', height: '100vh', border: 'none', display: 'block' }}
       title="League Dashboard"
     />
@@ -170,6 +174,9 @@ function MyLeaguesContent() {
   // Scroll right panel to top whenever selection changes
   useEffect(() => {
     rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' })
+    const t1 = setTimeout(() => rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' }), 100)
+    const t2 = setTimeout(() => rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' }), 500)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [selected])
 
   // Listen for NAVIGATE messages from embedded iframes (e.g. league page guard, mock draft exit)
@@ -693,12 +700,14 @@ function MyLeaguesContent() {
       {/* RIGHT PANEL — inline content */}
       <div
         ref={rightPanelRef}
+        tabIndex={-1}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         style={{
           flex: 1,
           height: '100vh',
           overflowY: 'auto' as const,
+          overscrollBehavior: 'contain',
           ...(isMobile ? {
             width: '100%',
             minHeight: '100vh',
