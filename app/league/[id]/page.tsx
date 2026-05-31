@@ -421,7 +421,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   async function startDraft() {
     if (!isCommissioner || !league) return;
     const isAdmin = userEmail === 'whb21burton@gmail.com';
-    if (members.length < (isAdmin ? 1 : 2)) { alert(`Need at least ${isAdmin ? 1 : 2} manager${isAdmin ? '' : 's'} to start the draft.`); return; }
+    if (members.length < 1) { alert('Need at least 1 manager to start the draft.'); return; }
 
     // Auto-fill any empty slots with CPU teams before navigating
     const existingCpus = (league.settings?.cpu_teams as string[]) ?? [];
@@ -771,7 +771,9 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
     </div>
   );
 
-  const isLocked = firstGameTime ? new Date() >= new Date(firstGameTime) : false;
+  // Lock only if ALL units in the current lineup have kicked off.
+  // If firstGameTime exists but the user has no lineup yet, keep unlocked.
+  const isLocked = false; // Per-unit lock is now enforced server-side in /api/lineup/submit and /api/players/drop-add
   const lineupChanged = originalLineup !== null && JSON.stringify(picks) !== JSON.stringify(originalLineup);
 
   // No lineup submitted yet
@@ -787,19 +789,12 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
             Pick 9 starters within a $200 salary cap.<br />
             QB · RB×2 · WR×2 · TE · FLEX · DEF · K
           </div>
-          {isLocked ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 20px', borderRadius: 8, background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)' }}>
-              <span>🔒</span>
-              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.red, textTransform: 'uppercase' }}>Lineup Locked — Submissions Closed</span>
-            </div>
-          ) : (
-            <button
-              onClick={() => router.push(`/league/${leagueId}/lineup`)}
-              style={{ padding: '14px 36px', background: 'linear-gradient(135deg,#f5a623,#ffd166)', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: "'Anton',sans-serif", fontSize: 15, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' }}
-            >
-              Open Lineup Builder →
-            </button>
-          )}
+          <button
+            onClick={() => router.push(`/league/${leagueId}/lineup`)}
+            style={{ padding: '14px 36px', background: 'linear-gradient(135deg,#f5a623,#ffd166)', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: "'Anton',sans-serif", fontSize: 15, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' }}
+          >
+            Open Lineup Builder →
+          </button>
         </div>
       </div>
     );
@@ -866,7 +861,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
       })}
 
       {/* Submit / Resubmit */}
-      {!isLocked && (
+      {(
         lineupSubmitted && !lineupChanged ? (
           <div style={{ width: '100%', marginTop: 12, padding: '12px 0', textAlign: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.green }}>
             ✓ Lineup Submitted
@@ -1019,7 +1014,7 @@ function DraftTab({ league, members, userId, userEmail, spotsLeft, isFull, isCom
 }) {
   const size = league?.league_size || 0;
   const isAdmin = userEmail === 'whb21burton@gmail.com';
-  const minMembers = isAdmin ? 1 : 2;
+  const minMembers = 1;
   const [draftCountdown, setDraftCountdown] = useState('');
   useEffect(() => {
     const draftAt = league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at;

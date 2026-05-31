@@ -186,6 +186,8 @@ function MyLeaguesContent() {
 
   // Scroll right panel to top whenever selection changes
   useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
     rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' })
     const t1 = setTimeout(() => rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' }), 100)
     const t2 = setTimeout(() => rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' }), 500)
@@ -206,6 +208,7 @@ function MyLeaguesContent() {
           // Reload the league iframe back to the league hub (increment nonce to force remount)
           setIframeNonce(n => n + 1);
         } else if (url) {
+          window.scrollTo({ top: 0, behavior: 'instant' });
           router.push(url);
         }
       }
@@ -494,7 +497,7 @@ function MyLeaguesContent() {
                 }}
               >
                 <button
-                  onClick={() => selectLeague(league)}
+                  onClick={() => { window.scrollTo({ top: 0, behavior: 'instant' }); selectLeague(league); }}
                   style={{
                     flex: 1, padding: '9px 16px',
                     background: 'none', border: 'none',
