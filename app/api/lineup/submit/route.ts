@@ -69,25 +69,43 @@ export async function POST(req: NextRequest) {
 
     if (!member) return NextResponse.json({ error: 'Not a member of this league' }, { status: 403 });
 
-    // Server-side lineup lock: check first kickoff for schools in this lineup
+    // Server-side lineup lock: reject any pick whose school's game has started.
+    // Units whose school hasn't kicked off yet are still swappable.
     const schoolSet = new Set(picks.map(p => p.player_data?.school).filter(Boolean));
     const schools = Array.from(schoolSet) as string[];
+
     if (schools.length > 0) {
       const { data: games } = await admin
         .from('cached_schedule')
-        .select('game_date')
+        .select('home_team, away_team, game_date')
         .eq('season', new Date().getFullYear())
         .eq('week', week)
-        .or(schools.map(s => `home_team.eq.${s},away_team.eq.${s}`).join(','))
-        .order('game_date', { ascending: true })
-        .limit(1);
+        .or(schools.map(s => `home_team.eq.${s},away_team.eq.${s}`).join(','));
 
-      if (games && games.length > 0 && games[0].game_date) {
-        if (new Date() >= new Date(games[0].game_date)) {
-          return NextResponse.json({
-            error: 'Lineup is locked — the first game with one of your units has already started',
-          }, { status: 403 });
+      // Build a map of school -> game_date
+      const kickoffMap: Record<string, string> = {};
+      for (const g of games ?? []) {
+        if (g.game_date) {
+          if (g.home_team) kickoffMap[g.home_team] = g.game_date;
+          if (g.away_team) kickoffMap[g.away_team] = g.game_date;
         }
+      }
+
+      const now = new Date();
+      const lockedSchools: string[] = [];
+      for (const pick of picks) {
+        const school = pick.player_data?.school;
+        if (!school) continue;
+        const kickoff = kickoffMap[school];
+        if (kickoff && now >= new Date(kickoff)) {
+          lockedSchools.push(school);
+        }
+      }
+
+      if (lockedSchools.length > 0) {
+        return NextResponse.json({
+          error: `Lineup locked — the following units have already kicked off: ${Array.from(new Set(lockedSchools)).join(', ')}`,
+        }, { status: 403 });
       }
     }
 
