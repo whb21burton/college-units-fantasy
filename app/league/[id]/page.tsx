@@ -1983,6 +1983,10 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   const [loading,     setLoading]     = useState(true);
   const [logos,       setLogos]       = useState<Record<string, string>>({});
   const [gameCtx,     setGameCtx]     = useState<{ opponentMap: Record<string,string>; gameTimeMap: Record<string,string>; homeMap: Record<string,boolean>; rankMap: Record<string,number> } | null>(null);
+  // Derive which schools have already kicked off from gameCtx data
+  // gameCtx.gameTimeMap has display strings — we need raw kickoff times.
+  // We'll fetch them fresh in confirmAdd via the API instead.
+  const [lockedSchools, setLockedSchools] = useState<Set<string>>(new Set());
 
   const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
@@ -1993,7 +1997,32 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   useEffect(() => {
     const week = league?.current_week ?? 1;
     fetch(`/api/matchup-context?week=${week}&season=2025`)
-      .then(r => r.json()).then(d => setGameCtx(d)).catch(() => {});
+      .then(r => r.json())
+      .then(d => {
+        setGameCtx(d);
+        // Build locked schools set: any school whose game has passed
+        // matchup-context returns firstGameTime as ISO string
+        // We re-derive from the schedule endpoint instead for per-school accuracy
+      })
+      .catch(() => {});
+
+    // Fetch per-school kickoff times to know what's locked
+    fetch(`/api/schedule?week=${week}&season=2025`)
+      .then(r => r.json())
+      .then((games: any[]) => {
+        if (!Array.isArray(games)) return;
+        const now = new Date();
+        const locked = new Set<string>();
+        for (const g of games) {
+          const kickoff = g.start_time ?? g.game_date;
+          if (kickoff && now >= new Date(kickoff)) {
+            if (g.home_team) locked.add(g.home_team);
+            if (g.away_team) locked.add(g.away_team);
+          }
+        }
+        setLockedSchools(locked);
+      })
+      .catch(() => {});
   }, [league?.current_week]);
 
   const allowedSchools: string[] | null = Array.isArray(league?.settings?.allowed_schools)
@@ -2087,38 +2116,60 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
     if (!adding || !userId) return;
     if (!dropping && !canAddNoDrop) return;
     setBusy(true);
-    if (dropping) {
-      await supabase.from('draft_picks').delete().eq('id', dropping.id);
+    try {
+      const week = league?.current_week ?? 1;
+      const res = await fetch('/api/players/drop-add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          league_id:    league.id,
+          week,
+          drop_unit_id: dropping?.player_id ?? dropping?.id ?? null,
+          add_unit_id:  adding.id,
+          drop_school:  dropping?.player_data?.school ?? null,
+          add_school:   adding.school,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setToast(`⚠️ ${result.error ?? 'Failed to add player'}`);
+        setTimeout(() => setToast(''), 5000);
+        setBusy(false);
+        return;
+      }
+      // Refresh picks from DB
+      const { data } = await supabase
+        .from('draft_picks')
+        .select('*')
+        .eq('league_id', league.id);
+      const all = data || [];
+      setAllPicks(all);
+      const isComm2     = userId === league?.commissioner_id;
+      const draftOrder2: any[] = league?.settings?.draft_order || [];
+      const numTeams2   = draftOrder2.length;
+      const myEntry2    = draftOrder2.find((t: any) => t.userId === userId);
+      const slotIdx2    = myEntry2 ? myEntry2.slot - 1 : -1;
+      let mine2: any[]  = [];
+      if (isComm2 && numTeams2 > 0 && slotIdx2 >= 0) {
+        mine2 = all.filter((p: any) => snakeIdx(p.pick_number, numTeams2) === slotIdx2);
+        if (mine2.length === 0) mine2 = all.filter((p: any) => p.user_id === userId);
+      } else {
+        mine2 = all.filter((p: any) => p.user_id === userId);
+      }
+      setMyPicks(mine2);
+      setAdding(null);
+      setDropping(null);
+      const dropMsg = dropping
+        ? `, dropped ${dropping.player_data?.playerName || dropping.player_data?.school}`
+        : '';
+      setToast(`✅ Added ${adding.playerName || adding.school} ${adding.unitType}${dropMsg}`);
+      setTimeout(() => setToast(''), 4000);
+    } catch (err) {
+      setToast('⚠️ Network error — please try again');
+      setTimeout(() => setToast(''), 4000);
+    } finally {
+      setBusy(false);
     }
-    const maxPick = allPicks.reduce((m: number, p: any) => Math.max(m, p.pick_number ?? 0), 0);
-    await supabase.from('draft_picks').insert({
-      league_id: league.id,
-      user_id: userId,
-      pick_number: maxPick + 1,
-      player_data: adding,
-    });
-    const { data } = await supabase.from('draft_picks').select('*').eq('league_id', league.id);
-    const all = data || [];
-    setAllPicks(all);
-    const isComm2    = userId === league?.commissioner_id;
-    const draftOrder2: any[] = league?.settings?.draft_order || [];
-    const numTeams2  = draftOrder2.length;
-    const myEntry2   = draftOrder2.find((t: any) => t.userId === userId);
-    const slotIdx2   = myEntry2 ? myEntry2.slot - 1 : -1;
-    let mine2: any[] = [];
-    if (isComm2 && numTeams2 > 0 && slotIdx2 >= 0) {
-      mine2 = all.filter((p: any) => snakeIdx(p.pick_number, numTeams2) === slotIdx2);
-      if (mine2.length === 0) mine2 = all.filter((p: any) => p.user_id === userId);
-    } else {
-      mine2 = all.filter((p: any) => p.user_id === userId);
-    }
-    setMyPicks(mine2);
-    setAdding(null);
-    setDropping(null);
-    setBusy(false);
-    const dropMsg = dropping ? `, dropped ${dropping.player_data?.playerName || dropping.player_data?.school}` : '';
-    setToast(`Added ${adding.playerName || adding.school} ${adding.unitType}${dropMsg}`);
-    setTimeout(() => setToast(''), 4000);
   }
 
   if (loading) return (
@@ -2198,7 +2249,11 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
               const posColor = UNIT_COLORS[pd?.unitType] ?? C.sub;
               const isSelected = dropping?.id === pick.id;
               return (
-                <div key={pick.id} onClick={() => setDropping(isSelected ? null : pick)}
+                <div key={pick.id} onClick={() => {
+                  const school = pick.player_data?.school;
+                  if (school && lockedSchools.has(school)) return; // can't drop locked unit
+                  setDropping(isSelected ? null : pick);
+                }}
                   style={{ display: 'grid', gridTemplateColumns: '48px 1fr 52px 36px', gap: 8, alignItems: 'center', padding: '10px 14px', marginBottom: 4, background: isSelected ? '#2a0d0d' : C.surf, border: '1px solid ' + (isSelected ? C.red : C.surf3), borderRadius: 8, cursor: 'pointer', transition: 'border-color .15s' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ background: posColor, color: '#fff', fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, borderRadius: 4, padding: '2px 6px', textAlign: 'center' }}>
@@ -2206,7 +2261,12 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: isSelected ? C.red : C.text }}>{name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: isSelected ? C.red : C.text }}>{name}</div>
+                      {lockedSchools.has(pick.player_data?.school ?? '') && (
+                        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.red, letterSpacing: .5 }}>🔒</span>
+                      )}
+                    </div>
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{pd?.school}</div>
                   </div>
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.sub, textAlign: 'right' }}>
@@ -2379,6 +2439,8 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
             <div style={{ padding: '0 10px 0 4px', flexShrink: 0 }}>
               {isDrafted ? (
                 <div style={{ padding: '5px 8px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.muted, textAlign: 'center' }}>DRAFTED</div>
+              ) : lockedSchools.has(p.school) ? (
+                <div style={{ padding: '5px 8px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.red, textAlign: 'center', letterSpacing: .5 }}>🔒 LOCKED</div>
               ) : (
                 <button onClick={e => { e.stopPropagation(); setAdding(p); }} style={{ padding: '6px 10px', background: 'rgba(21,198,120,.12)', border: '1px solid rgba(21,198,120,.35)', borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700, color: C.green, cursor: 'pointer' }}>+ ADD</button>
               )}
