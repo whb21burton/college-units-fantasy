@@ -164,7 +164,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         .select('id, name, league_type, status, conference_filter, week, buy_in, league_size')
         .eq('id', params.id)
         .single();
-      if (!lg || lg.league_type !== 'weekly') { router.push(`/league/${params.id}`); return; }
+      if (!lg || (lg.league_type !== 'weekly' && lg.league_type !== 'dfs')) { router.push(`/league/${params.id}`); return; }
       setLeague(lg);
 
       const { data: m } = await supabase
@@ -185,6 +185,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       // Player pool
       const confParam = lg.conference_filter && lg.conference_filter !== 'ALL'
         ? `?conference=${encodeURIComponent(lg.conference_filter)}` : '';
+      console.log('[lineup] lg.league_type:', lg.league_type, 'confParam:', confParam);
       try {
         const poolRes = await fetch(`/api/player-pool${confParam}`);
         const d = await poolRes.json();
