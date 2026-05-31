@@ -15,6 +15,9 @@ export interface DraftUnit {
   weeksPlayed?: number;  // number of weeks with a non-zero score
   avgPerWeek?:  number;  // seasonTotal / weeksPlayed (excludes bye weeks)
   badge?: string;        // e.g. '🐎 Workhorse' or '👥 Committee' for RB units
+  vorp?: number;
+  isOutlier?: boolean;
+  replacementPts?: number;
 }
 
 // ── Roster slots & caps ──────────────────────────────────────
@@ -387,4 +390,60 @@ export const SCORING = {
     pointsAllowed1420: 1, pointsAllowed2127: 0, pointsAllowed28plus: -1,
   },
 };
+
+// ── VORP (Value Over Replacement Player) ────────────────────────────────────
+
+const LEAGUE_SIZE = 10;
+
+const REPLACEMENT_RANK: Record<string, number> = {
+  QB:  LEAGUE_SIZE * 1 + 1,
+  RB:  LEAGUE_SIZE * 2 + 2,
+  WR:  LEAGUE_SIZE * 2 + 2,
+  TE:  LEAGUE_SIZE * 1 + 1,
+  DEF: LEAGUE_SIZE * 1 + 1,
+  K:   LEAGUE_SIZE * 1 + 1,
+};
+
+const SCARCITY_MULTIPLIER: Record<string, number> = {
+  QB:  0.85,
+  RB:  1.15,
+  WR:  1.10,
+  TE:  1.20,
+  DEF: 0.90,
+  K:   0.70,
+};
+
+export function calculateVORP(players: DraftUnit[]): DraftUnit[] {
+  const byPos: Record<string, DraftUnit[]> = {};
+  for (const p of players) {
+    if (!byPos[p.unitType]) byPos[p.unitType] = [];
+    byPos[p.unitType].push(p);
+  }
+  for (const pos of Object.keys(byPos)) {
+    byPos[pos].sort((a, b) => (b.projectedPoints ?? 0) - (a.projectedPoints ?? 0));
+  }
+
+  const replacementPts: Record<string, number> = {};
+  for (const [pos, rank] of Object.entries(REPLACEMENT_RANK)) {
+    const group = byPos[pos] ?? [];
+    replacementPts[pos] = (group[rank - 1] ?? group[group.length - 1])?.projectedPoints ?? 0;
+  }
+
+  return players.map(p => {
+    const group = byPos[p.unitType] ?? [];
+    const posAvg = group.reduce((s, x) => s + (x.projectedPoints ?? 0), 0) / (group.length || 1);
+    const posStdDev = Math.sqrt(
+      group.reduce((s, x) => s + Math.pow((x.projectedPoints ?? 0) - posAvg, 2), 0) / (group.length || 1)
+    );
+    const isOutlier = (p.projectedPoints ?? 0) > posAvg + posStdDev * 1.5;
+    const replacement = replacementPts[p.unitType] ?? 0;
+    const rawVORP = (p.projectedPoints ?? 0) - replacement;
+    const vorp = rawVORP * (SCARCITY_MULTIPLIER[p.unitType] ?? 1.0) * (isOutlier ? 1.2 : 1.0);
+    return { ...p, vorp, isOutlier, replacementPts: replacement };
+  });
+}
+
+export function sortByVORP(players: DraftUnit[]): DraftUnit[] {
+  return calculateVORP(players).sort((a, b) => (b.vorp ?? 0) - (a.vorp ?? 0));
+}
 

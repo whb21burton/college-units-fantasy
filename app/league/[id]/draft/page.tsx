@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
-import { POSITION_CAPS, ROSTER_SLOTS, type DraftUnit, type UnitType } from '@/lib/playerPool';
+import { POSITION_CAPS, ROSTER_SLOTS, sortByVORP, type DraftUnit, type UnitType } from '@/lib/playerPool';
 import type { TeamEfficiency } from '@/types';
 
 const C = {
@@ -191,7 +191,7 @@ export default function DraftPage() {
         : rawPool;
       if (!cancelled) setFullPool(livePool); // store original pool for stable salary pricing
       const takenIds = new Set(existingPicks.map((p: any) => p.player_id));
-      setAvail([...livePool].sort((a, b) => b.projectedPoints - a.projectedPoints).filter(u => !takenIds.has(u.id)));
+      setAvail(sortByVORP(livePool).filter(u => !takenIds.has(u.id)));
 
       const season = new Date().getFullYear();
       fetch(`/api/efficiency?week=1&season=${season}`)
@@ -365,7 +365,7 @@ export default function DraftPage() {
         setPicks(prev => prev.filter(p => p.pick_number !== pickNum));
         setAvail(prev => {
           if (prev.some(u => u.id === unit.id)) return prev;
-          return [unit, ...prev].sort((a, b) => b.projectedPoints - a.projectedPoints);
+          return [unit, ...prev].sort((a, b) => (b.vorp ?? 0) - (a.vorp ?? 0));
         });
       } else {
         console.error('Pick insert error:', error);
@@ -924,9 +924,13 @@ export default function DraftPage() {
                   <div style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {unit.school}{unit.playerName && <span style={{ color: C.sub, fontWeight: 400 }}> · {unit.playerName}</span>}
                   </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>VORP: {(unit.vorp ?? 0).toFixed(1)}</div>
                   <div style={{ display: 'flex', gap: 5, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, padding: '1px 5px', background: `${POS_COLORS[unit.unitType]}18`, borderRadius: 3 }}>{unit.tier}</span>
                     <span style={{ fontSize: 9, color: C.muted }}>{unit.projectedPoints} pts</span>
+                    {unit.isOutlier && (
+                      <span style={{ padding: '2px 6px', background: 'rgba(245,166,35,.2)', border: '1px solid rgba(245,166,35,.4)', borderRadius: 4, fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.gold, letterSpacing: 1, textTransform: 'uppercase' as const }}>⭐ OUTLIER</span>
+                    )}
                     {isSalaryDraft && unitPrice != null && (
                       <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, padding: '1px 6px', background: overBudget ? `${C.red}18` : `${C.gold}22`, color: overBudget ? C.red : C.gold, borderRadius: 3 }}>
                         ${unitPrice}
