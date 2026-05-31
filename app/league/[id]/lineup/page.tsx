@@ -82,8 +82,10 @@ function oppLabel(school: string, opponentMap: Record<string, string>, homeMap: 
 }
 
 function fppg(unit: DraftUnit): string {
-  const pts = unit.projectedPoints ?? 0;
-  return (pts / 14).toFixed(1);
+  // Use avgPerWeek directly if available (live data);
+  // fall back to projectedPoints / 14 for projection-only players
+  if ((unit.avgPerWeek ?? 0) > 0) return unit.avgPerWeek!.toFixed(1);
+  return ((unit.projectedPoints ?? 0) / 14).toFixed(1);
 }
 
 function formatCountdown(isoTime: string | null): string {

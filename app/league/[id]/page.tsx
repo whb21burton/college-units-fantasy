@@ -853,7 +853,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub }}>{p.school} · {p.conference}</div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.gold }}>{(p.avgPerWeek ?? 0) > 0 ? p.avgPerWeek.toFixed(1) : (p.projectedPoints ?? 0).toFixed(1)}</div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.gold }}>{(p.avgPerWeek ?? 0) > 0 ? p.avgPerWeek.toFixed(1) : ((p.projectedPoints ?? 0) / 14).toFixed(1)}</div>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1 }}>AVG/WK</div>
               </div>
             </div>
