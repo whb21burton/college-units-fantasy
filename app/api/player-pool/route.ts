@@ -42,7 +42,11 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const confParam    = searchParams.get('conference') ?? null; // "SEC" or "SEC,ACC,Big Ten" or null = all
-    const confList     = confParam ? confParam.split(',').map(c => c.trim()).filter(Boolean) : null;
+    const NO_FILTER_VALUES = ['all', 'ALL', 'All D1', 'all d1', ''];
+    const rawConf = confParam ?? '';
+    const confList = (rawConf && !NO_FILTER_VALUES.includes(rawConf))
+      ? rawConf.split(',').map(c => c.trim()).filter(Boolean)
+      : null;
     const schoolsParam = searchParams.get('schools') ?? null;
     const allowedSchools = schoolsParam ? schoolsParam.split(',').map(s => s.trim()).filter(Boolean) : null;
 

@@ -193,8 +193,11 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         .then(({ count }) => setMemberCount(count ?? 0));
 
       // Player pool
-      const confParam = lg.conference_filter && lg.conference_filter !== 'ALL'
-        ? `?conference=${encodeURIComponent(lg.conference_filter)}` : '';
+      const noFilter = !lg.conference_filter ||
+        lg.conference_filter === 'ALL' ||
+        lg.conference_filter === 'All D1' ||
+        lg.conference_filter === 'all';
+      const confParam = noFilter ? '' : `?conference=${encodeURIComponent(lg.conference_filter)}`;
       console.log('[lineup] lg.league_type:', lg.league_type, 'confParam:', confParam);
       try {
         const poolRes = await fetch(`/api/player-pool${confParam}`);
