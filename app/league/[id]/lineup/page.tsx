@@ -185,10 +185,13 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       // Player pool
       const confParam = lg.conference_filter && lg.conference_filter !== 'ALL'
         ? `?conference=${encodeURIComponent(lg.conference_filter)}` : '';
-      const poolRes = await fetch(`/api/player-pool${confParam}`);
-      if (poolRes.ok) {
+      try {
+        const poolRes = await fetch(`/api/player-pool${confParam}`);
         const d = await poolRes.json();
+        console.log('[lineup] pool fetch status:', poolRes.status, 'count:', Array.isArray(d) ? d.length : 'not array', 'sample:', JSON.stringify(d?.[0]));
         setPool(Array.isArray(d) ? d : []);
+      } catch (err) {
+        console.error('[lineup] pool fetch failed:', err);
       }
 
       // Matchup context for opponent display
