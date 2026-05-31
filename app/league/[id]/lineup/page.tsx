@@ -5,6 +5,15 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 
+function goBack(leagueId: string, router: any) {
+  if (window.parent !== window) {
+    // Inside my-leagues iframe — tell parent to navigate back
+    window.parent.postMessage({ type: 'NAVIGATE', url: `/league/${leagueId}` }, '*');
+  } else {
+    router.push(`/league/${leagueId}`);
+  }
+}
+
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
   bg:      '#05080f',
@@ -154,9 +163,10 @@ export default function LineupPage({ params }: { params: { id: string } }) {
   // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
+      console.log('[lineup] load() started, params.id:', params.id);
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push('/'); return; }
+      if (!user) { console.log('[lineup] no user, redirecting'); router.push('/'); return; }
       setUserId(user.id);
 
       const { data: lg } = await supabase
@@ -384,7 +394,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         body: JSON.stringify({ league_id: params.id, week, picks }),
       });
       if (res.ok) {
-        router.push(`/league/${params.id}`);
+        goBack(params.id, router);
       } else {
         const d = await res.json().catch(() => ({}));
         showToast(d.error ?? 'Failed to submit lineup.');
@@ -412,7 +422,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column' }}>
         <div style={{ background: 'linear-gradient(180deg,#0d1827,#0c1422)', borderBottom: '1px solid ' + C.surf3, padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button onClick={() => router.push(`/league/${params.id}`)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase' }}>← Back</button>
+            <button onClick={() => goBack(params.id, router)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase' }}>← Back</button>
             <div style={{ width: 1, height: 16, background: C.surf3 }} />
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 1 }}>{league?.name}</div>
           </div>
@@ -498,7 +508,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
 
         {/* Left: back + league info */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-          <button onClick={() => router.push(`/league/${params.id}`)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', paddingTop: 3 }}>← Back</button>
+          <button onClick={() => goBack(params.id, router)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', paddingTop: 3 }}>← Back</button>
           <div>
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', lineHeight: 1.1, marginBottom: 5 }}>
               {league?.name ?? 'Weekly Lineup'}
