@@ -54,12 +54,11 @@ type HistoryEntry = {
 
 function InlineLeagueDashboard({ leagueId, nonce, onLoad }: { leagueId: string; nonce?: number; onLoad?: () => void }) {
   return (
-    <div style={{ width: '100%', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100vh', overflow: 'hidden', position: 'relative', pointerEvents: 'auto' }}>
       <iframe
         key={`league-${leagueId}-${nonce ?? 0}`}
         src={`/league/${leagueId}?embed=1&t=${nonce ?? 0}`}
         tabIndex={-1}
-        {...{ scrolling: 'no' } as any}
         onLoad={(e) => {
           const iframeEl = e.target as HTMLIFrameElement;
           try {
@@ -74,7 +73,7 @@ function InlineLeagueDashboard({ leagueId, nonce, onLoad }: { leagueId: string; 
           onLoad?.();
           ;(document.activeElement as HTMLElement)?.blur?.();
         }}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', display: 'block' }}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', display: 'block', overflowY: 'auto' }}
         title="League Dashboard"
       />
     </div>
@@ -186,19 +185,15 @@ function MyLeaguesContent() {
 
   // Scroll right panel to top whenever selection changes
   useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-    rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' })
-    const t1 = setTimeout(() => rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' }), 100)
-    const t2 = setTimeout(() => rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' }), 500)
-    return () => { clearTimeout(t1); clearTimeout(t2) }
+    // Scroll the iframe content to top when selection changes
+    // Done via the iframe's onLoad handler — no parent scroll needed
   }, [selected])
 
   // Listen for NAVIGATE messages from embedded iframes (e.g. league page guard, mock draft exit)
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
       if (e.data?.type === 'SCROLL_TOP') {
-        rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+        // iframe handles its own scroll now
         return;
       }
       if (e.data?.type === 'NAVIGATE') {
@@ -497,7 +492,7 @@ function MyLeaguesContent() {
                 }}
               >
                 <button
-                  onClick={() => { window.scrollTo({ top: 0, behavior: 'instant' }); selectLeague(league); }}
+                  onClick={() => selectLeague(league)}
                   style={{
                     flex: 1, padding: '9px 16px',
                     background: 'none', border: 'none',
@@ -726,11 +721,11 @@ function MyLeaguesContent() {
         style={{
           flex: 1,
           height: '100vh',
-          overflowY: 'auto' as const,
+          overflowY: 'hidden' as const,
           overflowX: 'hidden' as const,
           overscrollBehavior: 'contain',
           isolation: 'isolate' as const,
-          contain: 'strict' as const,
+          contain: 'layout style' as const,
           ...(isMobile ? {
             width: '100%',
             minHeight: '100vh',
@@ -780,9 +775,7 @@ function MyLeaguesContent() {
 
         {/* Season/weekly league — invite strip is handled inside league hub page */}
         {selected?.type === 'league' && selected.data.league_type !== 'bracket' && (
-          <div style={{ height: '100vh', overflow: 'hidden', position: 'relative' }}>
-            <InlineLeagueDashboard leagueId={selected.id} nonce={iframeNonce} onLoad={() => rightPanelRef.current?.scrollTo({ top: 0, behavior: 'instant' })} />
-          </div>
+          <InlineLeagueDashboard leagueId={selected.id} nonce={iframeNonce} onLoad={() => {}} />
         )}
 
         {/* Standalone bracket iframe */}
