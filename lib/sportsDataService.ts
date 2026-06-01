@@ -5,7 +5,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase-server'
-import { odrMultSafe } from '@/lib/odr'
+import { odrMult, odrMultSafe } from '@/lib/odr'
 
 
 const BASE_URL = 'https://apinext.collegefootballdata.com'
@@ -274,7 +274,8 @@ export async function syncStats(
       const opponent  = school === game.homeTeam ? game.awayTeam : game.homeTeam
       const offMult   = getOdrMultForUnit('QB',  opponent, school)  // skill units vs opponent defense
       const defMult   = getOdrMultForUnit('DEF', opponent, school)  // DEF unit vs opponent offense
-      const mult      = odrMultSafe(eloRank[opponent] ?? 130, school)  // general Elo mult (stored for display)
+      const dispRank = defRankMap[opponent] ?? eloRank[opponent] ?? 130
+      const mult = odrMult(dispRank)
       const ts = teamStatMap[school] ?? {}
       const entries = Object.values(playerStatMap)
         .filter((e: any) => e.gameId === gameId && e.school === school)
