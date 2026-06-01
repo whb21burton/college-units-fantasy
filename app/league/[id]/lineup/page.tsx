@@ -740,7 +740,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                           const color = mult >= 1.2 ? '#15c678' : mult >= 1.0 ? '#f5a623'
                             : mult >= 0.8 ? '#f08030' : '#f03a5a';
                           return (
-                            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color, letterSpacing: 0.5 }}>
+                            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, color, letterSpacing: 0.5 }}>
                               ×{mult.toFixed(1)}
                             </div>
                           );
