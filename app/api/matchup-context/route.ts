@@ -22,7 +22,7 @@ const SEASON = 2025;
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const week   = parseInt(searchParams.get('week')   || '1', 10);
+  const week   = parseInt(searchParams.get('week')   || '4', 10);
   const season = parseInt(searchParams.get('season') || String(SEASON), 10);
 
   try {
