@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
         .insert({
           name:            data.name,
           sport:           settings?.bracket_sport ?? 'baseball',
-          season:          new Date().getFullYear(),
+          season:          2025,
           status:          'open',
           entry_fee_cents: Math.round(buyIn * 100),
           max_entries:     leagueSize === 999999 ? null : leagueSize,

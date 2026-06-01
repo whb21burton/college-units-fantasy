@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     const { data: games } = await admin
       .from('cached_schedule')
       .select('home_team, away_team, game_date')
-      .eq('season', new Date().getFullYear())
+      .eq('season', 2025)
       .eq('week', week)
       .or(schoolsToCheck.map(s => `home_team.eq.${s},away_team.eq.${s}`).join(','));
 

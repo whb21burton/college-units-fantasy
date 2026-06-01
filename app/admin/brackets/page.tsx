@@ -237,7 +237,7 @@ export default function AdminBracketsPage() {
       .insert({
         name: newContest.name,
         sport: newContest.sport,
-        season: new Date().getFullYear(),
+        season: 2025,
         status: newContest.status,
         entry_fee_cents: newContest.entry_fee_cents,
         prize_pool_cents: 0,
