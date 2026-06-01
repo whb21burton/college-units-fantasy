@@ -218,6 +218,7 @@ export async function GET(req: Request) {
             .select('player_name, stat_type, value')
             .eq('school', school)
             .eq('season', season)
+            .lte('week', 4)
             .in('stat_type', ['rb1_opportunity', 'rb2_opportunity', 'rb3_opportunity'])
             .not('player_name', 'is', null)
         : Promise.resolve({ data: [] as any[], error: null }),

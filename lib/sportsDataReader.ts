@@ -142,7 +142,7 @@ export async function getSchoolWeekGameLog(
   players: any[];
 }[]> {
   const admin = createAdminClient();
-  const TOTAL_WEEKS = 14;
+  const TOTAL_WEEKS = 4;
 
   // Fetch schedule, stats, and player positions in parallel
   const [scheduleRows, unitStatRows, playerStatRows, rosterRows] = await Promise.all([
@@ -150,12 +150,14 @@ export async function getSchoolWeekGameLog(
       .from('cached_schedule')
       .select('week, home_team, away_team, game_id')
       .or(`home_team.eq.${school},away_team.eq.${school}`)
-      .eq('season', season),
+      .eq('season', season)
+      .lte('week', 4),
     admin
       .from('cached_stats')
       .select('week, stat_type, value')
       .eq('school', school)
       .eq('season', season)
+      .lte('week', 4)
       .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K', 'game_mult',
                         'def_sacks', 'def_ints', 'def_fum_rec', 'def_tds', 'def_safeties'])
       .is('player_name', null),
@@ -164,6 +166,7 @@ export async function getSchoolWeekGameLog(
       .select('week, game_id, player_name, stat_type, value')
       .eq('school', school)
       .eq('season', season)
+      .lte('week', 4)
       .not('player_name', 'is', null),
     admin
       .from('cached_players')
