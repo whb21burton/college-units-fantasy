@@ -1,7 +1,13 @@
 {
-"functions": {
+  "functions": {
     "app/api/cron/sync-stats/route.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/sync-coaching-profiles",
+      "schedule": "0 6 1 9 *"
+    }
+  ]
 }

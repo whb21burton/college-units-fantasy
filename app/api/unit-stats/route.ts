@@ -258,8 +258,15 @@ export async function GET(req: Request) {
       }
     }
 
+    const { data: coachProfile } = await admin
+      .from('team_coaching_profiles')
+      .select('head_coach, hc_philosophy, off_coordinator, pass_rate, rush_rate, explosiveness, tempo, plays_per_game, aggressiveness_score')
+      .eq('school', school)
+      .eq('season', season)
+      .single();
+
     return NextResponse.json(
-      { school, unitType, weeks, jerseyMap, playerRoles },
+      { school, unitType, weeks, jerseyMap, playerRoles, coachProfile: coachProfile ?? null },
       { headers: NO_STORE },
     );
   } catch (err: any) {

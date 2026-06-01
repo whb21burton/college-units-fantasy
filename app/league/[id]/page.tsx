@@ -1653,6 +1653,53 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
         </div>
       </div>
 
+      {/* Coaching Strip */}
+      {stats?.coachProfile && (() => {
+        const cp = stats.coachProfile
+        const passRate = cp.pass_rate ?? 0
+        const isPassHeavy = passRate >= 55
+        const isRunHeavy  = passRate <= 42
+        const agg = cp.aggressiveness_score ?? 0
+        const isAggressive = agg >= 7
+        const isCautious   = agg <= 4
+        const tempo = cp.tempo ?? 'normal'
+        const isFast = tempo === 'fast'
+
+        type Tag = { label: string; positive: boolean }
+        const tags: Tag[] = []
+        if (cp.head_coach)      tags.push({ label: `HC: ${cp.head_coach}`, positive: cp.hc_philosophy === 'offensive' })
+        if (cp.off_coordinator) tags.push({ label: `OC: ${cp.off_coordinator}`, positive: isPassHeavy })
+        if (isPassHeavy)        tags.push({ label: `Pass Heavy (${passRate}%)`, positive: true })
+        else if (isRunHeavy)    tags.push({ label: `Run Heavy (${cp.rush_rate ?? (100 - passRate)}%)`, positive: false })
+        else                    tags.push({ label: `Balanced (${passRate}% pass)`, positive: true })
+        if (isFast)             tags.push({ label: '⚡ Fast Tempo', positive: true })
+        else if (tempo === 'slow') tags.push({ label: 'Slow Tempo', positive: false })
+        if (isAggressive)       tags.push({ label: `Aggressive (${agg}/10)`, positive: true })
+        else if (isCautious)    tags.push({ label: `Conservative (${agg}/10)`, positive: false })
+
+        return (
+          <div style={{ padding: '8px 12px', marginBottom: 8, background: 'rgba(255,255,255,.03)', borderRadius: 8, border: '1px solid ' + C.surf3 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {tags.map((tag, i) => (
+                <span key={i} style={{
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  fontFamily: 'Oswald,sans-serif',
+                  fontSize: 9,
+                  letterSpacing: 0.8,
+                  textTransform: 'uppercase' as const,
+                  background: tag.positive ? 'rgba(21,198,120,.15)' : 'rgba(240,58,90,.15)',
+                  border: '1px solid ' + (tag.positive ? 'rgba(21,198,120,.35)' : 'rgba(240,58,90,.35)'),
+                  color: tag.positive ? C.green : C.red,
+                }}>
+                  {tag.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Top Contributors */}
       {!loading && topContributors.length > 0 && player.unitType !== 'DEF' && (
         <div style={{ marginBottom: 24 }}>
