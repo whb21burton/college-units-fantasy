@@ -14,9 +14,41 @@ export async function GET() {
       .not('logo_url', 'is', null)
 
     if (cached && cached.length > 0) {
+      // Aliases: CONFERENCES canonical name → CFBD school name
+      const LOGO_ALIASES: Record<string, string> = {
+        'Cal':               'California',
+        'UConn':             'Connecticut',
+        'NC State':          'NC State',
+        'Ole Miss':          'Mississippi',
+        'SMU':               'Southern Methodist',
+        'App State':         'Appalachian State',
+        'Miami':             'Miami (FL)',
+        'Miami (Ohio)':      'Miami (OH)',
+        'Pitt':              'Pittsburgh',
+        'Hawaii':            "Hawai'i",
+        'UTSA':              'UT San Antonio',
+        'UMass':             'Massachusetts',
+        'Southern Miss':     'Southern Mississippi',
+        'Louisiana':         'Louisiana Lafayette',
+        'UL Monroe':         'Louisiana Monroe',
+        'FIU':               'Florida International',
+        'FAU':               'Florida Atlantic',
+        'UTEP':              'Texas-El Paso',
+        'USF':               'South Florida',
+        'UAB':               'Alabama-Birmingham',
+        'UNT':               'North Texas',
+      }
+
       const logos: Record<string, string> = {}
       for (const t of cached) {
         if (t.school && t.logo_url) logos[t.school] = t.logo_url
+      }
+
+      // Add aliases so CONFERENCES names resolve to logos
+      for (const [confName, cfbdName] of Object.entries(LOGO_ALIASES)) {
+        if (!logos[confName] && logos[cfbdName]) {
+          logos[confName] = logos[cfbdName]
+        }
       }
       return NextResponse.json({ logos })
     }
@@ -51,6 +83,31 @@ export async function GET() {
     const logos: Record<string, string> = {}
     for (const r of rows) logos[r.school] = r.logo_url
 
+    const LOGO_ALIASES2: Record<string, string> = {
+      'Cal':               'California',
+      'UConn':             'Connecticut',
+      'Ole Miss':          'Mississippi',
+      'SMU':               'Southern Methodist',
+      'App State':         'Appalachian State',
+      'Miami':             'Miami (FL)',
+      'Miami (Ohio)':      'Miami (OH)',
+      'Pitt':              'Pittsburgh',
+      'Hawaii':            "Hawai'i",
+      'UTSA':              'UT San Antonio',
+      'UMass':             'Massachusetts',
+      'Southern Miss':     'Southern Mississippi',
+      'Louisiana':         'Louisiana Lafayette',
+      'UL Monroe':         'Louisiana Monroe',
+      'FIU':               'Florida International',
+      'FAU':               'Florida Atlantic',
+      'UTEP':              'Texas-El Paso',
+      'USF':               'South Florida',
+      'UAB':               'Alabama-Birmingham',
+      'UNT':               'North Texas',
+    }
+    for (const [confName, cfbdName] of Object.entries(LOGO_ALIASES2)) {
+      if (!logos[confName] && logos[cfbdName]) logos[confName] = logos[cfbdName]
+    }
     return NextResponse.json({ logos })
   } catch (err: any) {
     console.error('[team-logos]', err.message)

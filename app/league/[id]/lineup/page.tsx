@@ -87,11 +87,11 @@ function oppLabel(school: string, opponentMap: Record<string, string>, homeMap: 
   return isHome ? `vs ${short}` : `@ ${short}`;
 }
 
-function fppg(unit: DraftUnit): string {
-  // Use avgPerWeek directly if available (live data);
-  // fall back to projectedPoints / 14 for projection-only players
+function fppg(unit: DraftUnit, opponentMap?: Record<string, string>): string {
+  // BYE week = 0 projection
+  if (opponentMap && !opponentMap[unit.school]) return '0.0';
   if ((unit.avgPerWeek ?? 0) > 0) return unit.avgPerWeek!.toFixed(1);
-  return ((unit.projectedPoints ?? 0) / 14).toFixed(1);
+  return ((unit.projectedPoints ?? 0) / 4).toFixed(1);
 }
 
 function formatCountdown(isoTime: string | null): string {
@@ -135,6 +135,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
   const [firstGameTime, setFirstGameTime] = useState<string | null>(null);
   const [opponentMap,   setOpponentMap]   = useState<Record<string, string>>({});
   const [homeMap,       setHomeMap]       = useState<Record<string, boolean>>({});
+  const [defRankMap,    setDefRankMap]    = useState<Record<string, number>>({});
+  const [offRankMap,    setOffRankMap]    = useState<Record<string, number>>({});
 
   const week = league?.week ?? 1;
 
@@ -219,6 +221,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         .then(d => {
           setOpponentMap(d.opponentMap ?? {});
           setHomeMap(d.homeMap ?? {});
+          setDefRankMap(d.defRankMap ?? {});
+          setOffRankMap(d.offRankMap ?? {});
           setFirstGameTime(d.firstGameTime ?? null);
         })
         .catch(() => {});
@@ -321,8 +325,29 @@ export default function LineupPage({ params }: { params: { id: string } }) {
             !u.conference.toLowerCase().includes(q)) return false;
       }
       return true;
+    }).sort((a, b) => {
+      // BYE weeks sort to bottom
+      const aHasGame = !!opponentMap[a.school];
+      const bHasGame = !!opponentMap[b.school];
+      if (aHasGame && !bHasGame) return -1;
+      if (!aHasGame && bHasGame) return 1;
+      if (!aHasGame && !bHasGame) return 0;
+      // Sort by projected points this week: avgPerWeek × upcoming opponent ODR
+      const getProj = (u: DraftUnit) => {
+        const avg = (u.avgPerWeek ?? 0) > 0 ? u.avgPerWeek! : (u.projectedPoints ?? 0) / 4;
+        const opp = opponentMap[u.school];
+        if (!opp) return 0;
+        const oppRank = u.unitType === 'DEF'
+          ? (offRankMap[opp] ?? 50)
+          : (defRankMap[opp] ?? 50);
+        const mult = oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2 : oppRank <= 15 ? 1.1
+          : oppRank <= 25 ? 1.0 : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
+          : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.55;
+        return avg * mult;
+      };
+      return getProj(b) - getProj(a);
     });
-  }, [pool, posFilter, confPillFilter, search]);
+  }, [pool, posFilter, confPillFilter, search, opponentMap, defRankMap, offRankMap]);
 
   // Remaining salary color
   const remColor = remaining < 20 ? C.red : remaining < 50 ? C.orange : C.gold;
@@ -645,7 +670,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                 const canAfford = price <= remaining || picked;
                 const posColor  = POS_COLOR[unit.unitType] ?? C.sub;
                 const opp       = oppLabel(unit.school, opponentMap, homeMap);
-                const fp        = fppg(unit);
+                const fp        = fppg(unit, opponentMap);
                 const rk        = rankByPos[unit.id] ?? '—';
 
                 return (
@@ -700,7 +725,27 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                       </div>
 
                       {/* OPP */}
-                      <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp}</div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp}</div>
+                        {opp !== 'BYE' && (() => {
+                          const opponent = opponentMap[unit.school];
+                          if (!opponent) return null;
+                          const oppRank = unit.unitType === 'DEF'
+                            ? (offRankMap[opponent] ?? 50)
+                            : (defRankMap[opponent] ?? 50);
+                          const mult = oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2
+                            : oppRank <= 15 ? 1.1 : oppRank <= 25 ? 1.0
+                            : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
+                            : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.55;
+                          const color = mult >= 1.2 ? '#15c678' : mult >= 1.0 ? '#f5a623'
+                            : mult >= 0.8 ? '#f08030' : '#f03a5a';
+                          return (
+                            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color, letterSpacing: 0.5 }}>
+                              ×{mult.toFixed(1)}
+                            </div>
+                          );
+                        })()}
+                      </div>
 
                       {/* FPPG */}
                       <div style={{ textAlign: 'right', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: C.gold }}>{fp}</div>
@@ -742,12 +787,23 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                         ) : (
                           <div>
                             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 6 }}>
-                              {(unitStats[unit.id]?.weeks ?? []).map((wk: any) => (
-                                <div key={wk.week} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub }}>
-                                  <span style={{ color: C.muted }}>WK{wk.week} </span>
-                                  <span style={{ color: C.gold, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>{wk.fantasyPoints?.toFixed(1) ?? '—'}</span>
-                                </div>
-                              ))}
+                              {(unitStats[unit.id]?.weeks ?? []).map((wk: any) => {
+                                const wkOpp = wk.opponent ?? '—';
+                                const wkMult = wk.multiplier ?? null;
+                                const multColor = !wkMult ? C.muted
+                                  : wkMult >= 1.2 ? '#15c678' : wkMult >= 1.0 ? '#f5a623'
+                                  : wkMult >= 0.8 ? '#f08030' : '#f03a5a';
+                                return (
+                                  <div key={wk.week} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, minWidth: 28 }}>WK{wk.week}</span>
+                                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wkOpp}</span>
+                                    {wkMult && (
+                                      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: multColor }}>×{wkMult.toFixed(1)}</span>
+                                    )}
+                                    <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.gold, minWidth: 32, textAlign: 'right' }}>{wk.fantasyPoints?.toFixed(1) ?? '—'}</span>
+                                  </div>
+                                );
+                              })}
                             </div>
                             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
                               {(unit.avgPerWeek ?? 0) > 0 ? `${unit.avgPerWeek!.toFixed(1)} avg/wk · ` : ''}
