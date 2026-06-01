@@ -149,10 +149,10 @@ export async function GET(req: Request) {
 
     // Aggregate per-week average from live data, keyed by school||unitType.
     // Track both sum and count so we can compute avgPerWeek = sum / weeksPlayed,
-    // then project to a full 14-week season: projectedSeason = avgPerWeek * TOTAL_WEEKS.
+    // then project to a 4-week season (current): projectedSeason = avgPerWeek * TOTAL_WEEKS.
     // This ensures projectedPoints always reflects actual performance pace rather
     // than the season cumulative total (which grows each week and can't be compared
-    // fairly against the static FULL_POOL 14-week projections).
+    // fairly against the static FULL_POOL 4-week projections).
     const liveSums:   Record<string, number> = {};
     const liveCounts: Record<string, number> = {};
     let debugMisses = 0;

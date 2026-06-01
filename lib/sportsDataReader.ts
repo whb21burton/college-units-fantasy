@@ -377,7 +377,7 @@ export async function getPlayerProjectedPoints(
 
   // Fallback to static FULL_POOL projected points
   const unit = FULL_POOL.find(u => u.school === school && u.unitType === unitType);
-  if (unit) return unit.projectedPoints / 14; // per-week
+  if (unit) return unit.projectedPoints / 4; // per-week
   return 0;
 }
 
