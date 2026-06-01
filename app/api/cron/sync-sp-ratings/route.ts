@@ -11,7 +11,7 @@ export async function GET(req: Request) {
 
   try {
     const admin = createAdminClient()
-    const season = new Date().getFullYear()
+    const season = 2025
     console.log('[sync-sp-ratings] admin client created, season:', season)
 
     const CFBD_KEY = process.env.CFBD_API_KEY
