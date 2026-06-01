@@ -6,6 +6,14 @@ import { supabase } from '@/lib/supabase-browser';
 import { POSITION_CAPS, ROSTER_SLOTS, sortByVORP, type DraftUnit, type UnitType } from '@/lib/playerPool';
 import type { TeamEfficiency } from '@/types';
 
+function goBack(leagueId: string, router: any) {
+  if (typeof window !== 'undefined' && window.parent !== window) {
+    window.parent.postMessage({ type: 'NAVIGATE', url: `/league/${leagueId}` }, '*');
+  } else {
+    router.push(`/league/${leagueId}`);
+  }
+}
+
 const C = {
   bg: '#05080f', surf: '#0c1220', surf2: '#131d30', surf3: '#1e2d47',
   gold: '#d4a828', goldLight: '#f0c94a', text: '#e8edf5', sub: '#7a90b0', muted: '#4a5d7a',
@@ -242,7 +250,7 @@ export default function DraftPage() {
           setAllTeams(updated.settings.draft_order);
         }
         if (updated.status === 'active') {
-          router.push(`/league/${leagueId}`);
+          goBack(leagueId, router);
         }
       })
       .subscribe();
@@ -315,7 +323,7 @@ export default function DraftPage() {
       supabase.from('leagues')
         .update({ status: 'active' })
         .eq('id', leagueId)
-        .then(() => router.push(`/league/${leagueId}`));
+        .then(() => goBack(leagueId, router));
     }
   }, [draftDone, isCommissioner, league?.status, leagueId, router]);
 
@@ -466,7 +474,7 @@ export default function DraftPage() {
             </div>
             <CountdownTimer targetDate={oneHourBefore} />
             <button
-              onClick={() => router.push(`/league/${leagueId}`)}
+              onClick={() => goBack(leagueId, router)}
               style={{ marginTop: 28, padding: '10px 24px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 1, color: C.muted }}
             >← Back to League</button>
           </div>
@@ -536,7 +544,7 @@ export default function DraftPage() {
           )}
 
           <button
-            onClick={() => router.push(`/league/${leagueId}`)}
+            onClick={() => goBack(leagueId, router)}
             style={{ marginTop: 10, width: '100%', padding: '10px', background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 1, color: C.muted }}
           >
             ← Back to League
@@ -555,7 +563,7 @@ export default function DraftPage() {
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
             <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 28, letterSpacing: 2, color: C.gold }}>DRAFT COMPLETE</div>
-            <button onClick={() => router.push(`/league/${leagueId}`)} style={{ padding: '10px 22px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.sub, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 2 }}>
+            <button onClick={() => goBack(leagueId, router)} style={{ padding: '10px 22px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.sub, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 2 }}>
               → VIEW LEAGUE
             </button>
           </div>
@@ -594,7 +602,7 @@ export default function DraftPage() {
         {/* Header */}
         <div style={{ padding: '12px 20px', background: C.surf, borderBottom: `1px solid ${C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button onClick={() => router.push(`/league/${leagueId}`)} style={{ background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '6px 12px', color: C.muted, cursor: 'pointer', fontSize: 11, letterSpacing: 1, fontFamily: "'Oswald', sans-serif" }}>← EXIT</button>
+            <button onClick={() => goBack(leagueId, router)} style={{ background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '6px 12px', color: C.muted, cursor: 'pointer', fontSize: 11, letterSpacing: 1, fontFamily: "'Oswald', sans-serif" }}>← EXIT</button>
             <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 16, letterSpacing: 2, color: C.gold }}>
               {league?.name?.toUpperCase()} · DRAFT
             </div>
