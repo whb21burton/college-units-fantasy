@@ -75,7 +75,7 @@ export async function GET(req: Request) {
       .eq('season', SEASON)
       .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'])
       .is('player_name', null)
-      .gt('value', 0)       // exclude bye weeks (0-score rows) from weeksPlayed count
+      .gte('value', 0)      // include 0-score weeks (bad games count); only true byes have no row
       .lte('week', 4)
       .limit(100000);
 
