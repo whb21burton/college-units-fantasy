@@ -13,7 +13,7 @@ import { createAdminClient } from '@/lib/supabase-server';
 import { CONFERENCES, FULL_POOL, type DraftUnit, type UnitType, type Tier, type Conference } from '@/lib/playerPool';
 
 const SEASON          = 2025;
-const TOTAL_WEEKS     = 14; // regular season length used to project avg → full season
+const TOTAL_WEEKS     = 4; // weeks played so far — update as season progresses
 const UNIT_TYPES: UnitType[] = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
 // Normalize cached_stats school names to match CONFERENCES canonical names.
@@ -68,7 +68,7 @@ export async function GET(req: Request) {
       if (!(key in fullPoolMap)) fullPoolMap[key] = unit.projectedPoints;
     }
 
-    // Fetch all unit-level rows for the season — high limit, no week filter needed
+    // Fetch unit-level rows for the season up to current week
     let query = admin
       .from('cached_stats')
       .select('school, stat_type, value')
@@ -76,6 +76,7 @@ export async function GET(req: Request) {
       .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'])
       .is('player_name', null)
       .gt('value', 0)       // exclude bye weeks (0-score rows) from weeksPlayed count
+      .lte('week', 4)
       .limit(100000);
 
     if (allowedSchools && allowedSchools.length > 0) {
@@ -90,6 +91,7 @@ export async function GET(req: Request) {
       .select('school, game_id, value')
       .eq('season', SEASON)
       .eq('stat_type', 'rb1_opportunity')
+      .lte('week', 4)
       .not('player_name', 'is', null);   // role rows always have player_name set
 
     // Aggregate per-school: CI = avg rb1_opportunity; stability = fraction of weeks where ≥ 0.40
