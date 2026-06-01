@@ -1673,9 +1673,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
         else if (isRunHeavy)    tags.push({ label: `Run Heavy (${cp.rush_rate ?? (100 - passRate)}%)`, positive: false })
         else                    tags.push({ label: `Balanced (${passRate}% pass)`, positive: true })
         if (isFast)             tags.push({ label: '⚡ Fast Tempo', positive: true })
-        else if (tempo === 'slow') tags.push({ label: 'Slow Tempo', positive: false })
         if (isAggressive)       tags.push({ label: `Aggressive (${agg}/10)`, positive: true })
-        else if (isCautious)    tags.push({ label: `Conservative (${agg}/10)`, positive: false })
 
         return (
           <div style={{ padding: '8px 12px', marginBottom: 8, background: 'rgba(255,255,255,.03)', borderRadius: 8, border: '1px solid ' + C.surf3 }}>
