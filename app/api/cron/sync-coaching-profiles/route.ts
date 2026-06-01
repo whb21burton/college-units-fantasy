@@ -38,6 +38,8 @@ export async function GET(req: Request) {
     ])
 
     console.log('[sync-coaching] coaches:', coachData.length, 'advanced:', advancedData.length)
+    console.log('[sync-coaching] coaches[0]:', JSON.stringify(coachData[0] ?? null))
+    console.log('[sync-coaching] advanced[0]:', JSON.stringify(advancedData[0] ?? null))
 
     // Build coach map: school → { headCoach, offCoordinator }
     const coachMap: Record<string, { headCoach: string | null; oc: string | null }> = {}
