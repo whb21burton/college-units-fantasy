@@ -38,25 +38,38 @@ export async function GET(req: Request) {
     ])
 
     console.log('[sync-coaching] coaches:', coachData.length, 'advanced:', advancedData.length)
-    console.log('[sync-coaching] coaches[0]:', JSON.stringify(coachData[0] ?? null))
-    console.log('[sync-coaching] advanced[0]:', JSON.stringify(advancedData[0] ?? null))
 
     // Build coach map: school → { headCoach, offCoordinator }
+    // CFBD /coaches returns one entry per coach with a seasons[] array
+    // Each entry: { firstName, lastName, hireDate, seasons: [{ school, year, ... }] }
+    // We group by school from seasons[0].school for the requested year
     const coachMap: Record<string, { headCoach: string | null; oc: string | null }> = {}
+
+    // First pass: find head coaches (highest spOverall or just first entry per school)
+    // CFBD doesn't return position/title — head coach is identified as the one with
+    // spOverall data (coordinators don't have SP+ ratings)
+    const schoolCoaches: Record<string, Array<{ name: string; hasSP: boolean }>> = {}
     for (const entry of coachData) {
-      const school = entry.school ?? entry.team ?? ''
-      if (!school) continue
-      const coaches: any[] = entry.coaches ?? []
-      const hc = coaches.find((c: any) =>
-        (c.position ?? '').toLowerCase().includes('head')
-      )
-      const oc = coaches.find((c: any) => {
-        const pos = (c.position ?? '').toLowerCase()
-        return pos.includes('offensive coordinator') || pos === 'oc'
-      })
+      const name = `${entry.firstName ?? ''} ${entry.lastName ?? ''}`.trim()
+      if (!name) continue
+      for (const s of entry.seasons ?? []) {
+        if (s.year !== 2025) continue
+        const school = s.school ?? ''
+        if (!school) continue
+        if (!schoolCoaches[school]) schoolCoaches[school] = []
+        const hasSP = s.spOverall != null && s.spOverall !== 0
+        schoolCoaches[school].push({ name, hasSP })
+      }
+    }
+
+    // Head coach = coach with SP+ data (head coaches have team SP ratings)
+    // OC = second coach at the school if exists
+    for (const [school, coaches] of Object.entries(schoolCoaches)) {
+      const hc  = coaches.find(c => c.hasSP) ?? coaches[0] ?? null
+      const oc  = coaches.find(c => c !== hc) ?? null
       coachMap[school] = {
-        headCoach: hc ? `${hc.firstName ?? ''} ${hc.lastName ?? ''}`.trim() : null,
-        oc: oc ? `${oc.firstName ?? ''} ${oc.lastName ?? ''}`.trim() : null,
+        headCoach: hc?.name ?? null,
+        oc:        oc?.name ?? null,
       }
     }
 
@@ -84,9 +97,14 @@ export async function GET(req: Request) {
       const passRate      = off.passingPlays?.rate != null
         ? Math.round(off.passingPlays.rate * 100)
         : null
+      // plays_per_game: total plays / estimated games (drives / ~10 drives per game)
+      const estimatedGames = off.drives != null ? Math.round(off.drives / 10) : null
+      const playsPerGameCalc = (off.plays != null && estimatedGames && estimatedGames > 0)
+        ? Math.round(off.plays / estimatedGames)
+        : null
       const rushRate      = passRate != null ? 100 - passRate : null
       const explosiveness = off.explosiveness ?? null
-      const playsPerGame  = adv.plays != null ? Math.round(adv.plays) : null
+      const playsPerGame  = playsPerGameCalc
 
       // Tempo: fast = >75 plays/game, slow = <65
       let tempo: string | null = null
