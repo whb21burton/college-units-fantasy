@@ -76,14 +76,17 @@ function rankMult(rank: number): number {
  *   DEF:           finalProjection = base × oorMult(opponent offRank)
  */
 function matchupProj(
-  seasonPts: number, school: string, unitType: string, ctx: MatchupCtx
+  avgPerWeek: number, school: string, unitType: string, ctx: MatchupCtx
 ): { pts: number; mult: number; opponent: string | null } {
-  const base     = weeklyProj(seasonPts);
   const opponent = ctx?.opponentMap[school] ?? null;
-  if (!opponent || !ctx) return { pts: base, mult: 1.0, opponent };
+  if (!opponent || !ctx) return { pts: avgPerWeek, mult: 1.0, opponent };
 
-  const mult = ctx.multMap?.[school] ?? 1.0;
-  return { pts: base * mult, mult, opponent };
+  // Use upcoming opponent's defensive rank for skill units, offensive rank for DEF
+  const rank = unitType === 'DEF'
+    ? (ctx.offRankMap[opponent] ?? 999)
+    : (ctx.defRankMap[opponent] ?? 999);
+  const mult = rankMult(rank);
+  return { pts: avgPerWeek * mult, mult, opponent };
 }
 
 /** Higher multiplier = harder opponent (rank 1 defense/offense is toughest). */
@@ -3966,7 +3969,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         const color   = POS_COLORS[label] || C.muted;
         const isTarget = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
         const ep      = effectivePts(pick?.player_data?.school, pick?.player_data?.unitType, pick?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats);
-        const mp      = matchupProj(pick?.player_data?.projectedPoints ?? 0, pick?.player_data?.school ?? '', pick?.player_data?.unitType ?? '', matchupCtx);
+        const mp      = matchupProj(pick?.player_data?.avgPerWeek ?? weeklyProj(pick?.player_data?.projectedPoints ?? 0), pick?.player_data?.school ?? '', pick?.player_data?.unitType ?? '', matchupCtx);
         const pts     = ep.pts.toFixed(1);
         const name    = pick?.player_data?.playerName || pick?.player_data?.school;
         const sub     = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;

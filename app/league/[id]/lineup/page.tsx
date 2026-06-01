@@ -67,18 +67,15 @@ function positionRankPrice(unit: DraftUnit, allUnits: DraftUnit[], isConf: boole
   const peers = allUnits
     .filter(u => u.unitType === unit.unitType)
     .sort((a, b) => (b.seasonTotal ?? b.projectedPoints) - (a.seasonTotal ?? a.projectedPoints));
-  const rank = peers.findIndex(u => u.id === unit.id) + 1;
-  if (isConf) {
-    if (rank <= 3)  return 50;
-    if (rank <= 6)  return 40;
-    if (rank <= 9)  return 30;
-    if (rank <= 12) return 20;
-    return 10;
-  }
-  if (rank <= 10) return 50;
-  if (rank <= 20) return 40;
-  if (rank <= 30) return 30;
-  if (rank <= 40) return 20;
+  const total = peers.length;
+  const rank  = peers.findIndex(u => u.id === unit.id) + 1;
+  if (total === 0) return 10;
+  // Divide pool into fifths — top fifth = $50, bottom fifth = $10
+  const fifth = total / 5;
+  if (rank <= fifth)         return 50;
+  if (rank <= fifth * 2)     return 40;
+  if (rank <= fifth * 3)     return 30;
+  if (rank <= fifth * 4)     return 20;
   return 10;
 }
 
@@ -128,6 +125,9 @@ export default function LineupPage({ params }: { params: { id: string } }) {
   const [memberCount,   setMemberCount]   = useState(0);
   const [userId,        setUserId]        = useState<string | null>(null);
   const [pool,          setPool]          = useState<DraftUnit[]>([]);
+  const [logos,         setLogos]         = useState<Record<string, string>>({});
+  const [expandedUnit,  setExpandedUnit]  = useState<string | null>(null);
+  const [unitStats,     setUnitStats]     = useState<Record<string, any>>({});
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [submitted,     setSubmitted]     = useState(false);
@@ -207,6 +207,10 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       } catch (err) {
         console.error('[lineup] pool fetch failed:', err);
       }
+      fetch('/api/team-logos')
+        .then(r => r.json())
+        .then(d => setLogos(d.logos ?? {}))
+        .catch(() => {});
 
       // Matchup context for opponent display
       const contestWeek = lg.week ?? 1;
@@ -645,56 +649,114 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                 const rk        = rankByPos[unit.id] ?? '—';
 
                 return (
-                  <div
-                    key={unit.id}
-                    onClick={() => { if (!picked && canAfford) addUnit(unit); }}
-                    style={{
-                      display: 'grid', gridTemplateColumns: '50px 1fr 90px 55px 40px 60px 38px',
-                      padding: '9px 16px', alignItems: 'center',
-                      background: idx % 2 === 0 ? C.lPanel : '#0a101c',
-                      borderBottom: '1px solid rgba(30,45,71,.35)',
-                      cursor: picked ? 'default' : canAfford ? 'pointer' : 'not-allowed',
-                      opacity: picked ? 0.45 : canAfford ? 1 : 0.4,
-                      transition: 'background .1s',
-                    }}
-                    onMouseEnter={e => { if (!picked && canAfford) e.currentTarget.style.background = '#131d30'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = idx % 2 === 0 ? C.lPanel : '#0a101c'; }}
-                  >
-                    {/* POS */}
-                    <div><span style={posBadge(posColor)}>{unit.unitType}</span></div>
+                  <div key={unit.id} style={{ borderBottom: '1px solid rgba(30,45,71,.35)' }}>
+                    <div
+                      onClick={() => {
+                        if (expandedUnit === unit.id) {
+                          setExpandedUnit(null);
+                        } else {
+                          setExpandedUnit(unit.id);
+                          if (!unitStats[unit.id]) {
+                            fetch(`/api/unit-stats?school=${encodeURIComponent(unit.school)}&unitType=${unit.unitType}&season=2025`)
+                              .then(r => r.json())
+                              .then(d => setUnitStats(prev => ({ ...prev, [unit.id]: d })))
+                              .catch(() => {});
+                          }
+                        }
+                      }}
+                      style={{
+                        display: 'grid', gridTemplateColumns: '50px 1fr 90px 55px 40px 60px 38px',
+                        padding: '9px 16px', alignItems: 'center',
+                        background: idx % 2 === 0 ? C.lPanel : '#0a101c',
+                        cursor: 'pointer',
+                        opacity: picked ? 0.45 : 1,
+                        transition: 'background .1s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#131d30'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = idx % 2 === 0 ? C.lPanel : '#0a101c'; }}
+                    >
+                      {/* POS */}
+                      <div><span style={posBadge(posColor)}>{unit.unitType}</span></div>
 
-                    {/* Player */}
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {unit.playerName || unit.school}
+                      {/* Player */}
+                      <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
+                        {logos[unit.school] ? (
+                          <img src={logos[unit.school]} alt={unit.school}
+                            style={{ width: 24, height: 24, objectFit: 'contain', flexShrink: 0 }}
+                            onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                        ) : (
+                          <div style={{ width: 24, height: 24, borderRadius: '50%', background: (POS_COLOR[unit.unitType] ?? C.sub) + '33', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 8, color: POS_COLOR[unit.unitType] ?? C.sub, flexShrink: 0 }}>
+                            {unit.school.slice(0,2).toUpperCase()}
+                          </div>
+                        )}
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {unit.playerName || unit.school}
+                          </div>
+                          {unit.playerName && (
+                            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.3 }}>{unit.school}</div>
+                          )}
+                        </div>
                       </div>
-                      {unit.playerName && (
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.3 }}>{unit.school}</div>
-                      )}
+
+                      {/* OPP */}
+                      <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp}</div>
+
+                      {/* FPPG */}
+                      <div style={{ textAlign: 'right', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: C.gold }}>{fp}</div>
+
+                      {/* RK */}
+                      <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>#{rk}</div>
+
+                      {/* Salary */}
+                      <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>${price}</div>
+
+                      {/* ADD button */}
+                      <div style={{ textAlign: 'right' }}>
+                        {picked ? (
+                          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>✓</span>
+                        ) : (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (canAfford && !picked) addUnit(unit);
+                            }}
+                            disabled={!canAfford}
+                            style={{
+                              padding: '4px 8px',
+                              background: canAfford ? 'rgba(46,204,113,.15)' : 'transparent',
+                              border: '1px solid ' + (canAfford ? 'rgba(46,204,113,.4)' : C.surf3),
+                              borderRadius: 4,
+                              fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700,
+                              color: canAfford ? C.green : C.muted,
+                              cursor: canAfford ? 'pointer' : 'not-allowed',
+                            }}
+                          >+</button>
+                        )}
+                      </div>
                     </div>
-
-                    {/* OPP */}
-                    <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp}</div>
-
-                    {/* FPPG */}
-                    <div style={{ textAlign: 'right', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: C.gold }}>{fp}</div>
-
-                    {/* RK */}
-                    <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>#{rk}</div>
-
-                    {/* Salary */}
-                    <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>${price}</div>
-
-                    {/* Add button */}
-                    <div style={{ textAlign: 'right' }}>
-                      {picked ? (
-                        <span style={{ display: 'inline-flex', width: 22, height: 22, borderRadius: '50%', background: 'rgba(46,204,113,.15)', border: '1px solid rgba(46,204,113,.4)', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: C.green }}>✓</span>
-                      ) : canAfford ? (
-                        <span style={{ display: 'inline-flex', width: 22, height: 22, borderRadius: '50%', background: 'rgba(46,204,113,.12)', border: '1px solid rgba(46,204,113,.4)', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: C.green, cursor: 'pointer', lineHeight: 1 }}>+</span>
-                      ) : (
-                        <span style={{ display: 'inline-flex', width: 22, height: 22, borderRadius: '50%', background: 'rgba(74,93,122,.12)', border: '1px solid rgba(74,93,122,.3)', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: C.muted, cursor: 'not-allowed', lineHeight: 1 }}>+</span>
-                      )}
-                    </div>
+                    {expandedUnit === unit.id && (
+                      <div style={{ padding: '10px 16px', background: 'rgba(0,0,0,.3)', borderTop: '1px solid ' + C.surf3 }}>
+                        {!unitStats[unit.id] ? (
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Loading stats…</div>
+                        ) : (
+                          <div>
+                            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 6 }}>
+                              {(unitStats[unit.id]?.weeks ?? []).map((wk: any) => (
+                                <div key={wk.week} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub }}>
+                                  <span style={{ color: C.muted }}>WK{wk.week} </span>
+                                  <span style={{ color: C.gold, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>{wk.fantasyPoints?.toFixed(1) ?? '—'}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
+                              {(unit.avgPerWeek ?? 0) > 0 ? `${unit.avgPerWeek!.toFixed(1)} avg/wk · ` : ''}
+                              {unit.weeksPlayed ?? 0} games played
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })
