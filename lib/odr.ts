@@ -3,7 +3,7 @@
  * server code and client components (no Supabase imports).
  */
 
-export const POWER_5_TEAMS = new Set([
+export const FBS_TEAMS = new Set([
   // SEC
   'Alabama','Arkansas','Auburn','Florida','Georgia','Kentucky',
   'LSU','Mississippi State','Missouri','Ole Miss','South Carolina',
@@ -21,6 +21,9 @@ export const POWER_5_TEAMS = new Set([
   'Georgia Tech','Louisville','Miami','NC State','North Carolina',
   'Pittsburgh','SMU','Stanford','Syracuse','Virginia','Virginia Tech',
   'Wake Forest',
+  // FBS Independents
+  'Army', 'Navy', 'Notre Dame', 'Liberty', 'New Mexico State',
+  'UConn', 'UMass',
 ])
 
 export function odrLabel(rank: number): string {
@@ -44,7 +47,8 @@ export function odrMult(rank: number): number {
   if (rank <=  50) return 0.8
   if (rank <=  80) return 0.7
   if (rank <= 100) return 0.6
-  return 0.5
+  if (rank <= 134) return 0.55  // bottom FBS — weak but still FBS
+  return 0.45                    // FCS/non-FBS — easy game
 }
 
 /** Derive a label directly from the stored multiplier value. */
@@ -63,9 +67,9 @@ export function odrLabelFromMult(mult: number | null | undefined): string {
 
 export function odrMultSafe(rank: number, school: string): number {
   // rank 999 = unknown opponent (FCS or unranked) — treat as easy matchup
-  if (rank >= 999) return POWER_5_TEAMS.has(school) ? 0.6 : 0.5
+  if (rank >= 999) return FBS_TEAMS.has(school) ? 0.6 : 0.5
   const mult = odrMult(rank)
-  if (POWER_5_TEAMS.has(school)) return Math.max(mult, 0.7)
+  if (FBS_TEAMS.has(school)) return Math.max(mult, 0.7)
   return mult
 }
 
