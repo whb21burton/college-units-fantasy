@@ -69,7 +69,7 @@ export async function GET(req: Request) {
       const oc  = coaches.find(c => c !== hc) ?? null
       coachMap[school] = {
         headCoach: hc?.name ?? null,
-        oc:        oc?.name ?? null,
+        oc:        null, // CFBD doesn't expose OC names via API
       }
     }
 
@@ -106,10 +106,11 @@ export async function GET(req: Request) {
       const explosiveness = off.explosiveness ?? null
       const playsPerGame  = playsPerGameCalc
 
-      // Tempo: fast = >75 plays/game, slow = <65
+      // College football avg ~68 plays/game
+      // Fast = 75+, Normal = 65-74, Slow = <65
       let tempo: string | null = null
       if (playsPerGame != null) {
-        tempo = playsPerGame >= 75 ? 'fast' : playsPerGame <= 64 ? 'slow' : 'normal'
+        tempo = playsPerGame >= 75 ? 'fast' : playsPerGame >= 65 ? 'normal' : 'slow'
       }
 
       // HC philosophy: offensive if pass rate > 55, defensive if < 42, else balanced
@@ -136,7 +137,12 @@ export async function GET(req: Request) {
         season,
         head_coach:           coaches.headCoach,
         hc_philosophy:        hcPhilosophy,
-        off_coordinator:      coaches.oc,
+        // CFBD doesn't provide OC names — derive style label from pass rate
+        off_coordinator: passRate != null
+          ? passRate >= 58 ? 'Pass-First OC'
+          : passRate <= 42 ? 'Run-First OC'
+          : 'Balanced OC'
+          : null,
         pass_rate:            passRate,
         rush_rate:            rushRate,
         explosiveness:        explosiveness,
