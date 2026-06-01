@@ -176,10 +176,14 @@ export async function syncStats(
 
   function getOdrMultForUnit(position: string, opponent: string, school: string): number {
     if (position === 'DEF') {
-      const offRank = offRankMap[opponent] ?? eloRank[opponent] ?? 999
+      const offRank = offRankMap[opponent] ?? eloRank[opponent] ?? null
+      // Unknown opponent (FCS/D2) — easy matchup for offense, use low rank
+      if (offRank == null) return odrMultSafe(130, school)
       return odrMultSafe(offRank, school)
     }
-    const defRank = defRankMap[opponent] ?? eloRank[opponent] ?? 999
+    const defRank = defRankMap[opponent] ?? eloRank[opponent] ?? null
+    // Unknown opponent (FCS/D2) — weak defense, good matchup for offense
+    if (defRank == null) return odrMultSafe(130, school)
     return odrMultSafe(defRank, school)
   }
 
@@ -270,7 +274,7 @@ export async function syncStats(
       const opponent  = school === game.homeTeam ? game.awayTeam : game.homeTeam
       const offMult   = getOdrMultForUnit('QB',  opponent, school)  // skill units vs opponent defense
       const defMult   = getOdrMultForUnit('DEF', opponent, school)  // DEF unit vs opponent offense
-      const mult      = odrMultSafe(eloRank[opponent] ?? 999, school)  // general Elo mult (stored for display)
+      const mult      = odrMultSafe(eloRank[opponent] ?? 130, school)  // general Elo mult (stored for display)
       const ts = teamStatMap[school] ?? {}
       const entries = Object.values(playerStatMap)
         .filter((e: any) => e.gameId === gameId && e.school === school)

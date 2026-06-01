@@ -62,6 +62,8 @@ export function odrLabelFromMult(mult: number | null | undefined): string {
 }
 
 export function odrMultSafe(rank: number, school: string): number {
+  // rank 999 = unknown opponent (FCS or unranked) — treat as easy matchup
+  if (rank >= 999) return POWER_5_TEAMS.has(school) ? 0.6 : 0.5
   const mult = odrMult(rank)
   if (POWER_5_TEAMS.has(school)) return Math.max(mult, 0.7)
   return mult
