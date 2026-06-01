@@ -233,7 +233,7 @@ export default function MockDraftPage() {
     loadPool(id);
 
     // Fetch current efficiency data for badges
-    const season = new Date().getFullYear();
+    const season = 2025;
     fetch(`/api/efficiency?week=1&season=${season}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {

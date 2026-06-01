@@ -193,7 +193,7 @@ export default function DraftPage() {
       const takenIds = new Set(existingPicks.map((p: any) => p.player_id));
       setAvail(sortByVORP(livePool).filter(u => !takenIds.has(u.id)));
 
-      const season = new Date().getFullYear();
+      const season = 2025;
       fetch(`/api/efficiency?week=1&season=${season}`)
         .then(r => r.ok ? r.json() : null)
         .then(json => {
