@@ -7,3 +7,6 @@ tsconfig.tsbuildinfo
 .vercel
 [.claude]
 .claude/worktrees/
+
+advanced_sample.json
+coaches_sample.json
