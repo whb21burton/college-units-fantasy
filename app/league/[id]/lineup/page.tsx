@@ -907,7 +907,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                                       ))}
                                                       <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>PTS</th>
                                                       <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>MULT</th>
-                                                      <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>WGTD</th>
+                                                      <th style={{ ...thStyle, textAlign: 'right', width: '10%', color: '#15c678' }}>WPTS</th>
                                                     </tr>
                                                   </thead>
                                                   <tbody>
@@ -936,18 +936,22 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                                       </tr>
                                                     ))}
                                                     {/* Unit total row */}
-                                                    <tr style={{ borderTop: '1px solid rgba(245,166,35,.3)' }}>
-                                                      <td style={{ ...tdBase, textAlign: 'left', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#f5a623', letterSpacing: 1 }}>
+                                                    <tr style={{ borderTop: '1px solid rgba(245,166,35,.3)', background: 'rgba(0,0,0,.2)' }}>
+                                                      <td colSpan={2 + cols.length} style={{ ...tdBase, textAlign: 'left', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#f5a623', letterSpacing: 1, paddingTop: 8 }}>
                                                         UNIT TOTAL
                                                       </td>
-                                                      <td style={{ ...tdBase, textAlign: 'right', color: '#7a90b0', fontFamily: 'Anton,sans-serif', fontSize: 11 }}>
-                                                        {bd?.unitTotal?.toFixed(1) ?? wk.fantasyPoints?.toFixed(1) ?? '—'}
-                                                      </td>
-                                                      <td style={{ ...tdBase, textAlign: 'right', color: '#f5a623', fontFamily: 'Oswald,sans-serif', fontSize: 9 }}>
-                                                        ×{(bd?.odrMult ?? wk.multiplier ?? 1).toFixed(1)}
-                                                      </td>
-                                                      <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
-                                                        {bd?.fpts?.toFixed(1) ?? (wk.fpts ?? wk.fantasyPoints)?.toFixed(1) ?? '—'}
+                                                      <td style={{ ...tdBase, textAlign: 'right', paddingTop: 8 }} colSpan={3}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                                          <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: '#15c678' }}>
+                                                            {bd?.unitTotal?.toFixed(1) ?? '—'} WPTS
+                                                          </span>
+                                                          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: '#f03a5a', letterSpacing: 0.5 }}>
+                                                            × ODR {(bd?.odrMult ?? wk.multiplier ?? 1).toFixed(1)}
+                                                          </span>
+                                                          <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: '#f0c94a', borderTop: '1px solid rgba(245,166,35,.4)', paddingTop: 2 }}>
+                                                            {bd?.fpts?.toFixed(1) ?? '—'} FPTS
+                                                          </span>
+                                                        </div>
                                                       </td>
                                                     </tr>
                                                   </tbody>
