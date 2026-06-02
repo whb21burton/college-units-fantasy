@@ -1895,6 +1895,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                     : wk.opponent != null
                       ? weeklyProj(player.projectedPoints).toFixed(1)
                       : '—';
+                  const isBye = wk.isBye === true
 
                   const statVal = (key: string): string | number => {
                     if (!wk.completed) return '—';
@@ -1919,18 +1920,20 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                           );
                           if (c.key === '_opp') return (
                             <td key={i} style={tdStyle('left')}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
-                                {wk.opponent && logos[wk.opponent] && (
-                                  <img src={logos[wk.opponent]} alt={wk.opponent}
-                                    style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }}
-                                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-                                )}
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {wk.opponent
-                                    ? `vs ${wk.opponent.length > 12 ? wk.opponent.slice(0, 12) + '…' : wk.opponent}`
-                                    : (isPlayoff ? 'PLAYOFF' : '—')}
-                                </span>
-                              </div>
+                              {wk.opponent ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  {logos[wk.opponent] && (
+                                    <img src={logos[wk.opponent]} alt={wk.opponent}
+                                      style={{ width: 16, height: 16, objectFit: 'contain' }}
+                                      onError={e => { (e.currentTarget as HTMLImageElement).style.display='none' }} />
+                                  )}
+                                  <span>
+                                    {isBye ? '🛌 BYE' : (wk.isHome ? 'vs ' : '@ ') + (wk.opponent.length > 12 ? wk.opponent.slice(0,12)+'…' : wk.opponent)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span style={{ color: C.muted }}>—</span>
+                              )}
                             </td>
                           );
                           if (c.key === '_fpts') return (

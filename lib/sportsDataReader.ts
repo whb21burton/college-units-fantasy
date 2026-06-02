@@ -234,8 +234,18 @@ export async function getSchoolWeekGameLog(
     const pts      = unitPtsByWeek[week];
     const completed = pts !== undefined;
 
+    const isBye = !!sched && pts === undefined  // has schedule entry but no stats = bye
     if (!completed) {
-      return { week, opponent, completed: false, fantasyPoints: null, rawPoints: null, multiplier: null, players: [] };
+      return {
+        week,
+        opponent,
+        completed: false,
+        isBye: isBye,
+        fantasyPoints: null,
+        rawPoints: null,
+        multiplier: null,
+        players: []
+      };
     }
 
     // Build per-unit player list from cached stats

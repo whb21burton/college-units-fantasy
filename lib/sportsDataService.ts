@@ -10,6 +10,21 @@ import { odrMult, odrMultSafe } from '@/lib/odr'
 
 const BASE_URL = 'https://apinext.collegefootballdata.com'
 
+// Maps your CONFERENCES display names → CFBD API school names
+// Used when fetching stats so CFBD returns the right data
+// Storage always uses YOUR display name (left side)
+const CFBD_NAME: Record<string, string> = {
+  'UConn':    'Connecticut',
+  'Cal':      'California',
+}
+
+// Reverse map: CFBD name → your display name
+// Used when storing stats so everything uses your canonical name
+const YOUR_NAME: Record<string, string> = {
+  'Connecticut': 'UConn',
+  'California':  'Cal',
+}
+
 const SCORING = {
   passYd: 0.1, passTd: 4, int: -2,
   rushYd: 0.1, rushTd: 6,
@@ -59,7 +74,8 @@ export async function syncSchedule(season: number): Promise<number> {
     .filter((g: any) => g.id && g.homeTeam && g.awayTeam && g.seasonType === 'regular')
     .map((g: any) => ({
       game_id: String(g.id), week: g.week ?? 0, season,
-      home_team: g.homeTeam, away_team: g.awayTeam,
+      home_team: YOUR_NAME[g.homeTeam] ?? g.homeTeam,
+      away_team: YOUR_NAME[g.awayTeam] ?? g.awayTeam,
       game_date: g.startDate ?? null, updated_at: new Date().toISOString(),
     }))
   if (rows.length) await db.from('cached_schedule').upsert(rows, { onConflict: 'game_id' })
@@ -76,7 +92,7 @@ export async function syncScores(week: number, season: number): Promise<number> 
     .map((g: any) => {
       const done = g.homePoints != null && g.awayPoints != null
       return {
-        game_id: String(g.id), home_team: g.homeTeam, away_team: g.awayTeam,
+        game_id: String(g.id), home_team: YOUR_NAME[g.homeTeam] ?? g.homeTeam, away_team: YOUR_NAME[g.awayTeam] ?? g.awayTeam,
         home_score: g.homePoints ?? null, away_score: g.awayPoints ?? null,
         week, season, start_time: g.startDate ?? null,
         status: done ? 'completed' : 'scheduled', updated_at: new Date().toISOString(),
@@ -268,10 +284,13 @@ export async function syncStats(
   for (const game of completedGames) {
     const gameId = String(game.id)
 
-    for (const school of [game.homeTeam, game.awayTeam] as string[]) {
+    for (const rawSchool of [game.homeTeam, game.awayTeam] as string[]) {
+      // Translate CFBD name to your display name if needed
+      const school = YOUR_NAME[rawSchool] ?? rawSchool
       if (schoolsFilter?.length && !schoolsFilter.includes(school)) continue
 
-      const opponent  = school === game.homeTeam ? game.awayTeam : game.homeTeam
+      const opponent = YOUR_NAME[rawSchool === game.homeTeam ? game.awayTeam : game.homeTeam]
+        ?? (rawSchool === game.homeTeam ? game.awayTeam : game.homeTeam)
       const offMult   = getOdrMultForUnit('QB',  opponent, school)  // skill units vs opponent defense
       const defMult   = getOdrMultForUnit('DEF', opponent, school)  // DEF unit vs opponent offense
       const dispRank = defRankMap[opponent] ?? eloRank[opponent] ?? 130
