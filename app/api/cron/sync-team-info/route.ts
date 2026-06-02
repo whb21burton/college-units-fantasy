@@ -61,7 +61,10 @@ export async function GET(req: Request) {
     const { error: infoErr } = await admin
       .from('team_info')
       .upsert(rows, { onConflict: 'school' })
-    if (infoErr) throw infoErr
+    if (infoErr) {
+      console.error('[sync-team-info] team_info upsert error:', infoErr.message, infoErr.code)
+      // Don't throw — cached_teams already updated successfully
+    }
 
     await admin.from('data_refresh_log').insert({
       job_name: 'syncTeamInfo',
