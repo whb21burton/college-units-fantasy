@@ -59,7 +59,7 @@ export async function GET(req: Request) {
       const gameId = schedRow.game_id;
 
       // Fetch all individual player stat rows + game_mult + team DEF stats in parallel
-      const [playerRowsRes, multRes, teamRowsRes, tePlayersRes] = await Promise.all([
+      const [playerRowsRes, multRes, teamRowsRes, allPlayersRes] = await Promise.all([
         admin.from('cached_stats').select('player_name, stat_type, value')
           .eq('game_id', gameId).eq('school', school)
           .not('player_name', 'is', null)
@@ -75,13 +75,29 @@ export async function GET(req: Request) {
         admin.from('cached_stats').select('stat_type, value')
           .eq('game_id', gameId).eq('school', school).is('player_name', null)
           .in('stat_type', ['def_sacks','def_ints','def_fum_rec','def_tds','def_safeties']),
-        admin.from('cached_players').select('player_name')
-          .eq('school', school).eq('position', 'TE').eq('season', season),
+        admin.from('cached_players').select('player_name, position')
+          .eq('school', school).eq('season', season),
       ]);
 
       const odrMult  = multRes.data?.value ?? 1.0;
-      const teNames  = (tePlayersRes.data ?? []).map((p: any) => p.player_name as string);
-      const teNameSet = new Set(teNames);
+
+      // Build position lookup — single source of truth
+      const playerPosMap: Record<string, string> = {};
+      for (const p of allPlayersRes.data ?? []) {
+        if (p.player_name && p.position) playerPosMap[p.player_name] = p.position;
+      }
+      const teNameSet = new Set(
+        Object.entries(playerPosMap).filter(([, pos]) => pos === 'TE').map(([name]) => name)
+      );
+      const rbNameSet = new Set(
+        Object.entries(playerPosMap).filter(([, pos]) => pos === 'RB').map(([name]) => name)
+      );
+      const wrNameSet = new Set(
+        Object.entries(playerPosMap).filter(([, pos]) => pos === 'WR').map(([name]) => name)
+      );
+      const qbNameSet = new Set(
+        Object.entries(playerPosMap).filter(([, pos]) => pos === 'QB').map(([name]) => name)
+      );
 
       // Group player stats by name
       const playerTotals: Record<string, Record<string, number>> = {};
@@ -114,7 +130,11 @@ export async function GET(req: Request) {
 
       } else if (unitType === 'QB') {
         const qbs = Object.entries(playerTotals)
-          .filter(([, s]) => (s['passing_YDS'] ?? 0) > 0 || (s['passing_TD'] ?? 0) > 0)
+          .filter(([name, s]) =>
+            qbNameSet.has(name) ||
+            (!rbNameSet.has(name) && !wrNameSet.has(name) && !teNameSet.has(name) &&
+             ((s['passing_YDS'] ?? 0) > 0 || (s['passing_TD'] ?? 0) > 0))
+          )
           .map(([name, s]) => ({
             name, s,
             rawPts: (s['passing_YDS']||0)*0.1 + (s['passing_TD']||0)*4 + (s['passing_INT']||0)*-3
@@ -140,11 +160,7 @@ export async function GET(req: Request) {
 
       } else if (unitType === 'RB') {
         const rbs = Object.entries(playerTotals)
-          .filter(([name, s]) =>
-            !teNameSet.has(name) &&                           // exclude TEs
-            !(s['passing_YDS'] ?? 0) &&                       // exclude QBs
-            ((s['rushing_YDS'] ?? 0) > 0 || (s['rushing_ATT'] ?? 0) > 0 || (s['rushing_TD'] ?? 0) > 0)
-          )
+          .filter(([name]) => rbNameSet.has(name))
           .map(([name, s]) => ({
             name, s,
             // total yards × 0.1 + any TD × 6 (no reception points)
@@ -161,8 +177,7 @@ export async function GET(req: Request) {
 
       } else if (unitType === 'WR') {
         const wrs = Object.entries(playerTotals)
-          .filter(([name, s]) => !teNameSet.has(name) && !(s['passing_YDS'] ?? 0)
-            && ((s['receiving_YDS'] ?? 0) > 0 || (s['receiving_REC'] ?? 0) > 0))
+          .filter(([name]) => wrNameSet.has(name))
           .map(([name, s]) => ({
             name, s,
             // total yards × 0.1 + TD × 6 (no reception points)
@@ -179,8 +194,7 @@ export async function GET(req: Request) {
 
       } else if (unitType === 'TE') {
         const tes = Object.entries(playerTotals)
-          .filter(([name, s]) => teNameSet.has(name)
-            && ((s['receiving_YDS'] ?? 0) > 0 || (s['receiving_REC'] ?? 0) > 0))
+          .filter(([name]) => teNameSet.has(name))
           .map(([name, s]) => ({
             name, s,
             // total yards × 0.1 + TD × 6 (no reception points)
