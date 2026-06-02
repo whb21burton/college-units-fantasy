@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
@@ -128,6 +128,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
   const [logos,         setLogos]         = useState<Record<string, string>>({});
   const [expandedUnit,  setExpandedUnit]  = useState<string | null>(null);
   const [unitStats,     setUnitStats]     = useState<Record<string, any>>({});
+  const [expandedWeek,  setExpandedWeek]  = useState<Record<string, number | null>>({});
+  const [weekBreakdown, setWeekBreakdown] = useState<Record<string, any>>({});
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [submitted,     setSubmitted]     = useState(false);
@@ -788,6 +790,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                         ) : (() => {
                           const weeks = (unitStats[unit.id]?.weeks ?? []).filter((w: any) => w.completed);
                           const ut = unit.unitType;
+                          const expandKey = unit.id;
+                          const expandedWk = expandedWeek[expandKey] ?? null;
 
                           const colDefs: Record<string, { label: string; key: string }[]> = {
                             QB:  [{ label: 'PASS YDS', key: 'passYd' }, { label: 'TD', key: 'passTd' }, { label: 'INT', key: 'int' }, { label: 'RUSH YDS', key: 'rushYd' }],
@@ -798,72 +802,162 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                             K:   [{ label: 'PTS', key: 'pts' }],
                           };
                           const cols = colDefs[ut] ?? [];
+
                           const thStyle: React.CSSProperties = { fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1.5, color: '#4a5d7a', textTransform: 'uppercase', padding: '4px 6px', fontWeight: 400, whiteSpace: 'nowrap' };
                           const tdBase: React.CSSProperties = { fontFamily: 'Oswald,sans-serif', fontSize: 11, padding: '6px 6px', borderTop: '1px solid rgba(30,45,71,.4)', whiteSpace: 'nowrap' };
 
                           return (
-                            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                              <thead>
-                                <tr>
-                                  <th style={{ ...thStyle, textAlign: 'left', width: '5%' }}>WK</th>
-                                  <th style={{ ...thStyle, textAlign: 'left', width: '22%' }}>OPP</th>
-                                  <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>FPTS</th>
-                                  <th style={{ ...thStyle, textAlign: 'right', width: '12%' }}>ODR</th>
-                                  {cols.map(c => (
-                                    <th key={c.key} style={{ ...thStyle, textAlign: 'right' }}>{c.label}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {weeks.map((wk: any) => {
-                                  const mult = wk.multiplier ?? 1.0;
-                                  const multColor = mult >= 1.2 ? '#15c678' : mult >= 1.0 ? '#f5a623' : mult >= 0.8 ? '#f08030' : '#f03a5a';
-                                  const player0 = wk.players?.[0] ?? {};
-                                  const oppShort = wk.opponent
-                                    ? (wk.opponent.length > 12 ? wk.opponent.slice(0, 12) + '…' : wk.opponent)
-                                    : '—';
-                                  return (
-                                    <tr key={wk.week}>
-                                      <td style={{ ...tdBase, textAlign: 'left', color: '#4a5d7a' }}>{wk.week}</td>
-                                      <td style={{ ...tdBase, textAlign: 'left', color: '#7a90b0', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                          {logos[wk.opponent] && (
-                                            <img src={logos[wk.opponent]} alt={wk.opponent}
-                                              style={{ width: 16, height: 16, objectFit: 'contain', flexShrink: 0 }}
-                                              onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-                                          )}
-                                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            vs {oppShort}
-                                          </span>
-                                        </div>
-                                      </td>
-                                      <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
-                                        {wk.fantasyPoints?.toFixed(1) ?? '—'}
-                                      </td>
-                                      <td style={{ ...tdBase, textAlign: 'right', color: multColor, fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>
-                                        ×{mult.toFixed(1)}
-                                      </td>
-                                      {cols.map(c => (
-                                        <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#7a90b0' }}>
-                                          {player0[c.key] ?? '—'}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  );
-                                })}
-                                {weeks.length === 0 && (
+                            <div>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                                <thead>
                                   <tr>
-                                    <td colSpan={4 + cols.length} style={{ ...tdBase, textAlign: 'center', color: '#4a5d7a' }}>No games played yet</td>
+                                    <th style={{ ...thStyle, textAlign: 'left', width: '5%' }}>WK</th>
+                                    <th style={{ ...thStyle, textAlign: 'left', width: '22%' }}>OPP</th>
+                                    <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>FPTS</th>
+                                    <th style={{ ...thStyle, textAlign: 'right', width: '12%' }}>ODR</th>
+                                    {cols.map(c => (
+                                      <th key={c.key} style={{ ...thStyle, textAlign: 'right' }}>{c.label}</th>
+                                    ))}
+                                    <th style={{ ...thStyle, width: '4%' }}></th>
                                   </tr>
-                                )}
-                              </tbody>
-                            </table>
+                                </thead>
+                                <tbody>
+                                  {weeks.map((wk: any) => {
+                                    const mult = wk.multiplier ?? 1.0;
+                                    const multColor = mult >= 1.2 ? '#15c678' : mult >= 1.0 ? '#f5a623' : mult >= 0.8 ? '#f08030' : '#f03a5a';
+                                    const player0 = wk.players?.[0] ?? {};
+                                    const oppShort = wk.opponent
+                                      ? (wk.opponent.length > 12 ? wk.opponent.slice(0, 12) + '…' : wk.opponent)
+                                      : '—';
+                                    const isExpanded = expandedWk === wk.week;
+                                    const bdKey = `${unit.id}_w${wk.week}`;
+                                    const bd = weekBreakdown[bdKey];
+
+                                    return (
+                                      <React.Fragment key={wk.week}>
+                                        {/* Week summary row — clickable */}
+                                        <tr
+                                          onClick={() => {
+                                            const newWk = isExpanded ? null : wk.week;
+                                            setExpandedWeek(prev => ({ ...prev, [expandKey]: newWk }));
+                                            if (!isExpanded && !bd) {
+                                              // Fetch breakdown for this specific week
+                                              fetch(`/api/unit-stats?school=${encodeURIComponent(unit.school)}&unitType=${unit.unitType}&season=2025&week=${wk.week}`)
+                                                .then(r => r.json())
+                                                .then(d => setWeekBreakdown(prev => ({ ...prev, [bdKey]: d })))
+                                                .catch(() => {});
+                                            }
+                                          }}
+                                          style={{ cursor: 'pointer', background: isExpanded ? 'rgba(245,166,35,.05)' : 'transparent' }}
+                                        >
+                                          <td style={{ ...tdBase, textAlign: 'left', color: '#4a5d7a' }}>{wk.week}</td>
+                                          <td style={{ ...tdBase, textAlign: 'left', color: '#7a90b0' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                              {logos[wk.opponent] && (
+                                                <img src={logos[wk.opponent]} alt={wk.opponent}
+                                                  style={{ width: 16, height: 16, objectFit: 'contain', flexShrink: 0 }}
+                                                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                                              )}
+                                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10 }}>
+                                                {wk.isBye ? '🛌 BYE' : `vs ${oppShort}`}
+                                              </span>
+                                            </div>
+                                          </td>
+                                          <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+                                            {wk.fantasyPoints?.toFixed(1) ?? '—'}
+                                          </td>
+                                          <td style={{ ...tdBase, textAlign: 'right', color: multColor, fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>
+                                            ×{mult.toFixed(1)}
+                                          </td>
+                                          {cols.map(c => (
+                                            <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#7a90b0' }}>
+                                              {player0[c.key] ?? '—'}
+                                            </td>
+                                          ))}
+                                          <td style={{ ...tdBase, textAlign: 'right', color: '#4a5d7a', fontSize: 10 }}>
+                                            {isExpanded ? '▲' : '▼'}
+                                          </td>
+                                        </tr>
+
+                                        {/* Expanded player breakdown */}
+                                        {isExpanded && (
+                                          <tr>
+                                            <td colSpan={4 + cols.length + 1} style={{ padding: 0 }}>
+                                              {!bd ? (
+                                                <div style={{ padding: '8px 12px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Loading breakdown…</div>
+                                              ) : (
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', background: 'rgba(0,0,0,.2)' }}>
+                                                  <thead>
+                                                    <tr>
+                                                      <th style={{ ...thStyle, textAlign: 'left', width: '28%' }}>PLAYER</th>
+                                                      <th style={{ ...thStyle, textAlign: 'left', width: '10%' }}>ROLE</th>
+                                                      {cols.map(c => (
+                                                        <th key={c.key} style={{ ...thStyle, textAlign: 'right' }}>{c.label}</th>
+                                                      ))}
+                                                      <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>PTS</th>
+                                                      <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>MULT</th>
+                                                      <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>WGTD</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {(bd?.bdRows ?? []).map((row: any, i: number) => (
+                                                      <tr key={i}>
+                                                        <td style={{ ...tdBase, textAlign: 'left', color: '#7eb8f7', fontSize: 10 }}>
+                                                          {row.playerName ?? 'Team'}
+                                                        </td>
+                                                        <td style={{ ...tdBase, textAlign: 'left', color: '#4a5d7a', fontSize: 9 }}>
+                                                          {row.role}
+                                                        </td>
+                                                        {cols.map(c => (
+                                                          <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#7a90b0', fontSize: 10 }}>
+                                                            {row.stats?.[c.key] ?? '—'}
+                                                          </td>
+                                                        ))}
+                                                        <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 11 }}>
+                                                          {row.rawPts?.toFixed(1) ?? '—'}
+                                                        </td>
+                                                        <td style={{ ...tdBase, textAlign: 'right', color: '#7a90b0', fontSize: 10 }}>
+                                                          ×{(row.multiplier ?? 1).toFixed(2)}
+                                                        </td>
+                                                        <td style={{ ...tdBase, textAlign: 'right', color: '#15c678', fontFamily: 'Anton,sans-serif', fontSize: 11 }}>
+                                                          {row.weightedPts?.toFixed(1) ?? '—'}
+                                                        </td>
+                                                      </tr>
+                                                    ))}
+                                                    {/* Unit total row */}
+                                                    <tr style={{ borderTop: '1px solid rgba(245,166,35,.3)' }}>
+                                                      <td colSpan={2 + cols.length} style={{ ...tdBase, textAlign: 'left', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#f5a623', letterSpacing: 1 }}>
+                                                        UNIT TOTAL
+                                                      </td>
+                                                      <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+                                                        {wk.fantasyPoints?.toFixed(1) ?? '—'}
+                                                      </td>
+                                                      <td></td>
+                                                      <td></td>
+                                                    </tr>
+                                                  </tbody>
+                                                </table>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                  {weeks.length === 0 && (
+                                    <tr>
+                                      <td colSpan={4 + cols.length + 1} style={{ ...tdBase, textAlign: 'center', color: '#4a5d7a' }}>No games played yet</td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#4a5d7a', marginTop: 6 }}>
+                                {(unit.avgPerWeek ?? 0) > 0 ? `${unit.avgPerWeek!.toFixed(1)} avg/wk · ` : ''}
+                                {unit.weeksPlayed ?? 0} games played
+                              </div>
+                            </div>
                           );
                         })()}
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#4a5d7a', marginTop: 6 }}>
-                          {(unit.avgPerWeek ?? 0) > 0 ? `${unit.avgPerWeek!.toFixed(1)} avg/wk · ` : ''}
-                          {unit.weeksPlayed ?? 0} games played
-                        </div>
                       </div>
                     )}
                   </div>

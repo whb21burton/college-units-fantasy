@@ -39,7 +39,8 @@ export async function GET(req: Request) {
     const admin = createAdminClient();
 
     // ── Breakdown mode: single-week player breakdown ──────────────────────────
-    if (breakdown && weekParam !== null) {
+    // Triggered by ?week=N (breakdown=true optional for backwards compat)
+    if (weekParam !== null) {
       // Resolve game_id
       const { data: schedRow } = await admin
         .from('cached_schedule')
@@ -189,9 +190,11 @@ export async function GET(req: Request) {
         }
       }
 
+      const result = bdRows && bdRows.length > 0 ? bdRows : null;
       return NextResponse.json(
         {
-          breakdown: bdRows && bdRows.length > 0 ? bdRows : null,
+          bdRows: result,
+          breakdown: result,
           teNames,
           odrMult,
           odrLabel: odrLabelFromMult(odrMult),
