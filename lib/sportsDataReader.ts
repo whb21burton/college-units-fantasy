@@ -363,7 +363,7 @@ export async function getSchoolWeekGameLog(
       completed: true,
       isBye: false,
       fantasyPoints: pts,
-      fpts: mult != null ? Math.round(pts * mult * 10) / 10 : pts,
+      fpts: mult != null ? Math.round((pts * mult + Number.EPSILON) * 100) / 100 : pts,
       rawPoints,
       multiplier: mult,
       odrMult: mult,

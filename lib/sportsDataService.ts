@@ -193,14 +193,12 @@ export async function syncStats(
   function getOdrMultForUnit(position: string, opponent: string, school: string): number {
     if (position === 'DEF') {
       const offRank = offRankMap[opponent] ?? eloRank[opponent] ?? null
-      // Unknown opponent (FCS/D2) — easy matchup for offense, use low rank
-      if (offRank == null) return odrMultSafe(130, school)
-      return odrMultSafe(offRank, school)
+      if (offRank == null) return odrMult(999)  // FCS/unknown → 0.40
+      return odrMult(offRank)
     }
     const defRank = defRankMap[opponent] ?? eloRank[opponent] ?? null
-    // Unknown opponent (FCS/D2) — weak defense, good matchup for offense
-    if (defRank == null) return odrMultSafe(130, school)
-    return odrMultSafe(defRank, school)
+    if (defRank == null) return odrMult(999)  // FCS/unknown → 0.40
+    return odrMult(defRank)
   }
 
   // 3. Team stats map: school → { category: value }
@@ -296,18 +294,20 @@ export async function syncStats(
         ?? (rawSchool === game.homeTeam ? game.awayTeam : game.homeTeam)
       const offMult   = getOdrMultForUnit('QB',  opponent, school)  // skill units vs opponent defense
       const defMult   = getOdrMultForUnit('DEF', opponent, school)  // DEF unit vs opponent offense
-      const dispRank = defRankMap[opponent] ?? eloRank[opponent] ?? 130
+      const dispRank = defRankMap[opponent] ?? eloRank[opponent] ?? 999
       const mult = odrMult(dispRank)
       const ts = teamStatMap[school] ?? {}
       const entries = Object.values(playerStatMap)
         .filter((e: any) => e.gameId === gameId && e.school === school)
 
       const rows: any[] = []
+      // Round half up to 2 decimal places
+      const roundHalfUp = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
       const add = (playerName: string | null, statType: string, value: number) => {
         rows.push({
           game_id: gameId, school, player_name: playerName,
           week, season, stat_type: statType,
-          value: Math.round(value * 1000) / 1000,
+          value: roundHalfUp(value),
           updated_at: new Date().toISOString(),
         })
       }
