@@ -26,9 +26,9 @@ const YOUR_NAME: Record<string, string> = {
 }
 
 const SCORING = {
-  passYd: 0.1, passTd: 4, int: -2,
+  passYd: 0.1, passTd: 4, int: -3,       // INT now -3
   rushYd: 0.1, rushTd: 6,
-  recYd: 0.1,  rec: 1.0, recTd: 6,
+  recYd:  0.1, rec:  0,   recTd: 6,      // REC removed, total yds × 0.1 only
   sack: 1, defInt: 2, fumRec: 2, defTd: 6,
 }
 
@@ -361,11 +361,20 @@ export async function syncStats(
               + (rushE ? (rushE.YDS||0)*SCORING.rushYd + (rushE.TD||0)*SCORING.rushTd : 0)
         } else if (unit === 'RB') {
           pts = (rushE ? (rushE.YDS||0)*SCORING.rushYd + (rushE.TD||0)*SCORING.rushTd : 0)
-              + (recvE ? (recvE.YDS||0)*SCORING.recYd  + (recvE.REC||0)*SCORING.rec + (recvE.TD||0)*SCORING.recTd : 0)
+              + (recvE ? (recvE.YDS||0)*SCORING.recYd + (recvE.TD||0)*SCORING.recTd : 0)
         } else if (unit === 'WR' || unit === 'TE') {
-          pts = recvE ? (recvE.YDS||0)*SCORING.recYd + (recvE.REC||0)*SCORING.rec + (recvE.TD||0)*SCORING.recTd : 0
+          pts = recvE ? (recvE.YDS||0)*SCORING.recYd + (recvE.TD||0)*SCORING.recTd : 0
         } else if (unit === 'K') {
-          pts = kickE?.PTS || 0
+          // Base kicking points (FGs + PATs made)
+          const madePts   = kickE?.PTS || 0
+          // Missed kicks penalties
+          const missedFG  = kickE?.['FG_MISS']  ?? kickE?.['XPM_MISS'] ?? 0
+          const missedPAT = kickE?.['PAT_MISS']  ?? kickE?.['XPA_MISS'] ?? 0
+          // Kicker TDs (rare but possible)
+          const kPassTd   = passE ? (passE.TD||0)*4 : 0
+          const kRushTd   = rushE ? (rushE.TD||0)*6 : 0
+          const kTwoPt    = 0 // two-point conversions not tracked by CFBD
+          pts = madePts - (missedFG * 1) - (missedPAT * 2) + kPassTd + kRushTd + kTwoPt
         }
 
         units[unit].push({ name, pts })
@@ -402,8 +411,22 @@ export async function syncStats(
       const defFumRec = ts['fumblesRecovered']  ?? ts['Fumbles Recovered'] ?? 0
       const defTDs    = (ts['interceptionTDs']  ?? 0) + (ts['fumbleReturnTDs'] ?? 0) + (ts['defensiveTDs'] ?? 0)
       const defSafety = ts['safeties']          ?? 0
-      const defRaw    = defSacks*1 + defInts*2 + defFumRec*2 + defTDs*6 + defSafety*2
-      add(null, 'unit_DEF',    Math.round(defRaw * 10) / 10)
+
+      // Points allowed bonus
+      const oppScore  = school === game.homeTeam
+        ? (game.awayPoints ?? game.awayScore ?? -1)
+        : (game.homePoints ?? game.homeScore ?? -1)
+      const ptsAllowedBonus =
+        oppScore < 0  ?  0 :   // unknown
+        oppScore === 0 ? 10 :
+        oppScore <= 5  ?  8 :
+        oppScore <= 10 ?  6 :
+        oppScore <= 15 ?  4 :
+        oppScore <= 20 ?  2 : 0
+
+      const defRaw = defSacks*1 + defInts*2 + defFumRec*2 + defTDs*6 + defSafety*2 + ptsAllowedBonus
+      add(null, 'unit_DEF', Math.round(defRaw * 10) / 10)
+      add(null, 'def_pts_allowed_bonus', ptsAllowedBonus)
       add(null, 'def_sacks',   defSacks)
       add(null, 'def_ints',    defInts)
       add(null, 'def_fum_rec', defFumRec)

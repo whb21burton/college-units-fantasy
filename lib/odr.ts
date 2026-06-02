@@ -47,8 +47,8 @@ export function odrMult(rank: number): number {
   if (rank <=  50) return 0.8
   if (rank <=  80) return 0.7
   if (rank <= 100) return 0.6
-  if (rank <= 134) return 0.55  // bottom FBS — weak but still FBS
-  return 0.45                    // FCS/non-FBS — easy game
+  if (rank <= 134) return 0.50  // bottom FBS
+  return 0.40                   // FCS/non-FBS
 }
 
 /** Derive a label directly from the stored multiplier value. */
