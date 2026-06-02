@@ -117,7 +117,7 @@ export async function GET(req: Request) {
           .filter(([, s]) => (s['passing_YDS'] ?? 0) > 0 || (s['passing_TD'] ?? 0) > 0)
           .map(([name, s]) => ({
             name, s,
-            rawPts: (s['passing_YDS']||0)*0.1 + (s['passing_TD']||0)*4 + (s['passing_INT']||0)*-2
+            rawPts: (s['passing_YDS']||0)*0.1 + (s['passing_TD']||0)*4 + (s['passing_INT']||0)*-3
                   + (s['rushing_YDS']||0)*0.1 + (s['rushing_TD']||0)*6,
           }))
           .sort((a, b) => b.rawPts - a.rawPts);
@@ -140,11 +140,16 @@ export async function GET(req: Request) {
 
       } else if (unitType === 'RB') {
         const rbs = Object.entries(playerTotals)
-          .filter(([, s]) => ((s['rushing_YDS'] ?? 0) > 0 || (s['rushing_ATT'] ?? 0) > 0) && !(s['passing_YDS'] ?? 0))
+          .filter(([name, s]) =>
+            !teNameSet.has(name) &&                           // exclude TEs
+            !(s['passing_YDS'] ?? 0) &&                       // exclude QBs
+            ((s['rushing_YDS'] ?? 0) > 0 || (s['rushing_ATT'] ?? 0) > 0 || (s['rushing_TD'] ?? 0) > 0)
+          )
           .map(([name, s]) => ({
             name, s,
-            rawPts: (s['rushing_YDS']||0)*0.1 + (s['rushing_TD']||0)*6
-                  + (s['receiving_YDS']||0)*0.1 + (s['receiving_REC']||0)*1 + (s['receiving_TD']||0)*6,
+            // total yards × 0.1 + any TD × 6 (no reception points)
+            rawPts: ((s['rushing_YDS']||0) + (s['receiving_YDS']||0)) * 0.1
+                  + ((s['rushing_TD']||0) + (s['receiving_TD']||0)) * 6,
           }))
           .sort((a, b) => b.rawPts - a.rawPts);
         bdRows = rbs.slice(0, 3).map(({ name, rawPts, s }, i) => ({
@@ -160,7 +165,9 @@ export async function GET(req: Request) {
             && ((s['receiving_YDS'] ?? 0) > 0 || (s['receiving_REC'] ?? 0) > 0))
           .map(([name, s]) => ({
             name, s,
-            rawPts: (s['receiving_YDS']||0)*0.1 + (s['receiving_REC']||0)*1 + (s['receiving_TD']||0)*6,
+            // total yards × 0.1 + TD × 6 (no reception points)
+            rawPts: ((s['receiving_YDS']||0) + (s['rushing_YDS']||0)) * 0.1
+                  + ((s['receiving_TD']||0) + (s['rushing_TD']||0)) * 6,
           }))
           .sort((a, b) => b.rawPts - a.rawPts);
         bdRows = wrs.slice(0, 3).map(({ name, rawPts, s }, i) => ({
@@ -176,7 +183,9 @@ export async function GET(req: Request) {
             && ((s['receiving_YDS'] ?? 0) > 0 || (s['receiving_REC'] ?? 0) > 0))
           .map(([name, s]) => ({
             name, s,
-            rawPts: (s['receiving_YDS']||0)*0.1 + (s['receiving_REC']||0)*1 + (s['receiving_TD']||0)*6,
+            // total yards × 0.1 + TD × 6 (no reception points)
+            rawPts: ((s['receiving_YDS']||0) + (s['rushing_YDS']||0)) * 0.1
+                  + ((s['receiving_TD']||0) + (s['rushing_TD']||0)) * 6,
           }))
           .sort((a, b) => b.rawPts - a.rawPts);
         bdRows = tes.length > 0
