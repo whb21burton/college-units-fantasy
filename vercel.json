@@ -8,6 +8,26 @@
     {
       "path": "/api/cron/sync-coaching-profiles",
       "schedule": "0 6 1 9 *"
+    },
+    {
+      "path": "/api/cron/sync-team-info",
+      "schedule": "0 6 1 8 *"
+    },
+    {
+      "path": "/api/cron/sync-season-rosters",
+      "schedule": "0 8 1 8 *"
+    },
+    {
+      "path": "/api/cron/sync-recruiting",
+      "schedule": "0 6 * * 1"
+    },
+    {
+      "path": "/api/cron/sync-live-stats",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-injuries",
+      "schedule": "0 10 * * 1"
     }
   ]
 }
