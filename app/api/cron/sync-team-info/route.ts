@@ -61,11 +61,17 @@ export async function GET(req: Request) {
 
     console.log('[sync-team-info] after dedup:', rows.length, 'unique schools')
 
-    // Upsert into cached_teams (existing table)
-    const { error: teamsErr } = await admin
-      .from('cached_teams')
-      .upsert(rows, { onConflict: 'school' })
-    if (teamsErr) throw teamsErr
+    // Upsert into cached_teams in batches of 100 to avoid conflicts
+    for (let i = 0; i < rows.length; i += 100) {
+      const batch = rows.slice(i, i + 100)
+      const { error: teamsErr } = await admin
+        .from('cached_teams')
+        .upsert(batch, { onConflict: 'school' })
+      if (teamsErr) {
+        console.error('[sync-team-info] cached_teams batch error:', teamsErr.message)
+        throw teamsErr
+      }
+    }
 
     // Also upsert into team_info (new table)
     const { error: infoErr } = await admin
