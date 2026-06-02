@@ -363,7 +363,10 @@ export async function syncStats(
           pts = (rushE ? (rushE.YDS||0)*SCORING.rushYd + (rushE.TD||0)*SCORING.rushTd : 0)
               + (recvE ? (recvE.YDS||0)*SCORING.recYd + (recvE.TD||0)*SCORING.recTd : 0)
         } else if (unit === 'WR' || unit === 'TE') {
-          pts = recvE ? (recvE.YDS||0)*SCORING.recYd + (recvE.TD||0)*SCORING.recTd : 0
+          // Total yards (rushing + receiving) × 0.1 + any TD × 6
+          const totalYds = (recvE?.YDS||0) + (rushE?.YDS||0)
+          const totalTds = (recvE?.TD||0) + (rushE?.TD||0)
+          pts = totalYds * SCORING.recYd + totalTds * SCORING.recTd
         } else if (unit === 'K') {
           // Base kicking points (FGs + PATs made)
           const madePts   = kickE?.PTS || 0
