@@ -332,24 +332,24 @@ export async function syncStats(
         if (recvE) { add(name, 'receiving_YDS', recvE.YDS||0); add(name, 'receiving_TD', recvE.TD||0); add(name, 'receiving_REC', recvE.REC||0) }
         if (kickE) { add(name, 'kicking_PTS', kickE.PTS||0) }
 
-        // Assign to unit — posLookup is source of truth
+        // Position from roster is the ONLY source of truth
+        // A player can only be ONE position — no splitting across units
         const pos = getPos(school, name)
         let unit: Unit | null = null
 
         if (pos === 'QB' || pos === 'RB' || pos === 'WR' || pos === 'TE' || pos === 'K') {
           unit = pos
-        } else if (passE) {
-          unit = 'QB'
-        } else if (kickE && !rushE && !recvE) {
-          unit = 'K'
-        } else if (rushE && !recvE) {
-          unit = 'RB'
-        } else if (recvE && !rushE) {
-          unit = 'WR'
-        } else if (rushE && recvE) {
-          const rPts = (rushE.YDS||0)*SCORING.rushYd + (rushE.TD||0)*SCORING.rushTd
-          const cPts = (recvE.YDS||0)*SCORING.recYd  + (recvE.REC||0)*SCORING.rec + (recvE.TD||0)*SCORING.recTd
-          unit = rPts >= cPts ? 'RB' : 'WR'
+        } else if (!pos) {
+          // Unknown position — infer from stats as last resort only
+          if (passE && (passE.YDS||0) > 0) unit = 'QB'
+          else if (kickE && !rushE && !recvE) unit = 'K'
+          else if (rushE && !recvE) unit = 'RB'
+          else if (recvE && !rushE) unit = 'WR'
+          else if (rushE && recvE) {
+            const rPts = (rushE.YDS||0)*SCORING.rushYd + (rushE.TD||0)*SCORING.rushTd
+            const cPts = (recvE.YDS||0)*SCORING.recYd + (recvE.TD||0)*SCORING.recTd
+            unit = rPts >= cPts ? 'RB' : 'WR'
+          }
         }
 
         if (!unit) continue
