@@ -211,7 +211,7 @@ export async function GET(req: Request) {
             }))
           : null;
         if (!bdRows?.length) {
-          console.error(`[unit-stats/breakdown] ${school} wk${weekParam} TE: no TE stats found (playerTotals=${Object.keys(playerTotals).length} teNames=[${teNames.join(',')}])`);
+          console.error(`[unit-stats/breakdown] ${school} wk${weekParam} TE: no TE stats found (playerTotals=${Object.keys(playerTotals).length} teNames=[${[...teNameSet].join(',')}])`);
         }
       }
 
@@ -224,7 +224,7 @@ export async function GET(req: Request) {
         {
           bdRows: result,
           breakdown: result,
-          teNames,
+          teNames: [...teNameSet],
           odrMult,
           odrLabel: odrLabelFromMult(odrMult),
           unitTotal,
