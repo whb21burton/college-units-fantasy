@@ -207,8 +207,9 @@ export async function syncStats(
   const teamStatMap: Record<string, Record<string, number>> = {}
   for (const game of teamStats) {
     for (const team of game.teams ?? []) {
-      const s = team.school ?? team.team ?? ''
-      if (!s) continue
+      const rawS = team.school ?? team.team ?? ''
+      if (!rawS) continue
+      const s = YOUR_NAME[rawS] ?? rawS
       teamStatMap[s] ??= {}
       for (const stat of team.stats ?? []) {
         teamStatMap[s][stat.category] = parseFloat(stat.stat) || 0
@@ -221,8 +222,10 @@ export async function syncStats(
   for (const game of playerStats) {
     const gId = String(game.id ?? '')
     for (const team of game.teams ?? []) {
-      const s = team.school ?? team.team ?? ''
-      if (!s) continue
+      const rawS = team.school ?? team.team ?? ''
+      if (!rawS) continue
+      // Translate CFBD name to your canonical name
+      const s = YOUR_NAME[rawS] ?? rawS
       for (const cat of team.categories ?? []) {
         for (const type of cat.types ?? []) {
           for (const athlete of type.athletes ?? []) {
