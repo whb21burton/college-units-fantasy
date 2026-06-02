@@ -794,6 +794,17 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                           const expandedWk = expandedWeek[expandKey] ?? null;
 
                           const colDefs: Record<string, { label: string; key: string }[]> = {
+                            QB:  [{ label: 'PASS YDS', key: 'passing_YDS' }, { label: 'TD', key: 'passing_TD' }, { label: 'INT', key: 'passing_INT' }, { label: 'RUSH YDS', key: 'rushing_YDS' }],
+                            RB:  [{ label: 'ATT', key: 'rushing_ATT' }, { label: 'RUSH YDS', key: 'rushing_YDS' }, { label: 'TD', key: 'rushing_TD' }, { label: 'REC', key: 'receiving_REC' }, { label: 'REC YDS', key: 'receiving_YDS' }],
+                            WR:  [{ label: 'REC', key: 'receiving_REC' }, { label: 'YDS', key: 'receiving_YDS' }, { label: 'TD', key: 'receiving_TD' }],
+                            TE:  [{ label: 'REC', key: 'receiving_REC' }, { label: 'YDS', key: 'receiving_YDS' }, { label: 'TD', key: 'receiving_TD' }],
+                            DEF: [{ label: 'SACKS', key: 'sacks' }, { label: 'INT', key: 'ints' }, { label: 'FUM', key: 'fumRec' }, { label: 'TD', key: 'defTd' }],
+                            K:   [{ label: 'PTS', key: 'kicking_PTS' }],
+                          };
+                          const cols = colDefs[ut] ?? [];
+
+                          // Summary row uses sportsDataReader player[0] short keys
+                          const summaryColDefs: Record<string, { label: string; key: string }[]> = {
                             QB:  [{ label: 'PASS YDS', key: 'passYd' }, { label: 'TD', key: 'passTd' }, { label: 'INT', key: 'int' }, { label: 'RUSH YDS', key: 'rushYd' }],
                             RB:  [{ label: 'ATT', key: 'rushAtt' }, { label: 'RUSH YDS', key: 'rushYd' }, { label: 'TD', key: 'rushTd' }, { label: 'REC', key: 'rec' }, { label: 'REC YDS', key: 'recYd' }],
                             WR:  [{ label: 'REC', key: 'rec' }, { label: 'YDS', key: 'recYd' }, { label: 'TD', key: 'recTd' }],
@@ -801,7 +812,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                             DEF: [{ label: 'SACKS', key: 'sacks' }, { label: 'INT', key: 'ints' }, { label: 'FUM', key: 'fumRec' }, { label: 'TD', key: 'defTd' }],
                             K:   [{ label: 'PTS', key: 'pts' }],
                           };
-                          const cols = colDefs[ut] ?? [];
+                          const summaryCols = summaryColDefs[ut] ?? [];
 
                           const thStyle: React.CSSProperties = { fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1.5, color: '#4a5d7a', textTransform: 'uppercase', padding: '4px 6px', fontWeight: 400, whiteSpace: 'nowrap' };
                           const tdBase: React.CSSProperties = { fontFamily: 'Oswald,sans-serif', fontSize: 11, padding: '6px 6px', borderTop: '1px solid rgba(30,45,71,.4)', whiteSpace: 'nowrap' };
@@ -815,7 +826,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                     <th style={{ ...thStyle, textAlign: 'left', width: '22%' }}>OPP</th>
                                     <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>FPTS</th>
                                     <th style={{ ...thStyle, textAlign: 'right', width: '12%' }}>ODR</th>
-                                    {cols.map(c => (
+                                    {summaryCols.map(c => (
                                       <th key={c.key} style={{ ...thStyle, textAlign: 'right' }}>{c.label}</th>
                                     ))}
                                     <th style={{ ...thStyle, width: '4%' }}></th>
@@ -864,12 +875,12 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                             </div>
                                           </td>
                                           <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
-                                            {wk.fantasyPoints?.toFixed(1) ?? '—'}
+                                            {(wk.fpts ?? wk.fantasyPoints)?.toFixed(1) ?? '—'}
                                           </td>
                                           <td style={{ ...tdBase, textAlign: 'right', color: multColor, fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>
                                             ×{mult.toFixed(1)}
                                           </td>
-                                          {cols.map(c => (
+                                          {summaryCols.map(c => (
                                             <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#7a90b0' }}>
                                               {player0[c.key] ?? '—'}
                                             </td>
@@ -926,14 +937,18 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                                     ))}
                                                     {/* Unit total row */}
                                                     <tr style={{ borderTop: '1px solid rgba(245,166,35,.3)' }}>
-                                                      <td colSpan={2 + cols.length} style={{ ...tdBase, textAlign: 'left', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#f5a623', letterSpacing: 1 }}>
+                                                      <td style={{ ...tdBase, textAlign: 'left', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#f5a623', letterSpacing: 1 }}>
                                                         UNIT TOTAL
                                                       </td>
-                                                      <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
-                                                        {wk.fantasyPoints?.toFixed(1) ?? '—'}
+                                                      <td style={{ ...tdBase, textAlign: 'right', color: '#7a90b0', fontFamily: 'Anton,sans-serif', fontSize: 11 }}>
+                                                        {bd?.unitTotal?.toFixed(1) ?? wk.fantasyPoints?.toFixed(1) ?? '—'}
                                                       </td>
-                                                      <td></td>
-                                                      <td></td>
+                                                      <td style={{ ...tdBase, textAlign: 'right', color: '#f5a623', fontFamily: 'Oswald,sans-serif', fontSize: 9 }}>
+                                                        ×{(bd?.odrMult ?? wk.multiplier ?? 1).toFixed(1)}
+                                                      </td>
+                                                      <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+                                                        {bd?.fpts?.toFixed(1) ?? (wk.fpts ?? wk.fantasyPoints)?.toFixed(1) ?? '—'}
+                                                      </td>
                                                     </tr>
                                                   </tbody>
                                                 </table>
