@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     const teams = await cfbdGet('/teams')
     console.log('[sync-team-info] teams received:', teams.length)
 
-    const rows = teams
+    const rawRows = teams
       .filter((t: any) => t.school)
       .map((t: any) => ({
         school:           t.school,
@@ -50,6 +50,16 @@ export async function GET(req: Request) {
         is_active:        true,
         updated_at:       new Date().toISOString(),
       }))
+
+    // Deduplicate by school — keep first occurrence
+    const seen = new Set<string>()
+    const rows = rawRows.filter((r: any) => {
+      if (seen.has(r.school)) return false
+      seen.add(r.school)
+      return true
+    })
+
+    console.log('[sync-team-info] after dedup:', rows.length, 'unique schools')
 
     // Upsert into cached_teams (existing table)
     const { error: teamsErr } = await admin
