@@ -875,10 +875,12 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                             </div>
                                           </td>
                                           <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
-                                            {(wk.fpts ?? wk.fantasyPoints)?.toFixed(1) ?? '—'}
+                                            {bd?.fpts != null
+                                              ? bd.fpts.toFixed(2)
+                                              : (wk.fpts ?? wk.fantasyPoints)?.toFixed(2) ?? '—'}
                                           </td>
                                           <td style={{ ...tdBase, textAlign: 'right', color: multColor, fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>
-                                            ×{mult.toFixed(1)}
+                                            ×{mult.toFixed(2)}
                                           </td>
                                           {summaryCols.map(c => (
                                             <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#7a90b0' }}>
@@ -925,13 +927,13 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                                           </td>
                                                         ))}
                                                         <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 11 }}>
-                                                          {row.rawPts?.toFixed(1) ?? '—'}
+                                                          {row.rawPts?.toFixed(2) ?? '—'}
                                                         </td>
                                                         <td style={{ ...tdBase, textAlign: 'right', color: '#7a90b0', fontSize: 10 }}>
                                                           ×{(row.multiplier ?? 1).toFixed(2)}
                                                         </td>
                                                         <td style={{ ...tdBase, textAlign: 'right', color: '#15c678', fontFamily: 'Anton,sans-serif', fontSize: 11 }}>
-                                                          {row.weightedPts?.toFixed(1) ?? '—'}
+                                                          {row.weightedPts?.toFixed(2) ?? '—'}
                                                         </td>
                                                       </tr>
                                                     ))}
@@ -943,13 +945,13 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                                       <td style={{ ...tdBase, textAlign: 'right', paddingTop: 8 }} colSpan={3}>
                                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
                                                           <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: '#15c678' }}>
-                                                            {bd?.unitTotal?.toFixed(1) ?? '—'} WPTS
+                                                            {bd?.unitTotal?.toFixed(2) ?? '—'} WPTS
                                                           </span>
                                                           <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: '#f03a5a', letterSpacing: 0.5 }}>
-                                                            × ODR {(bd?.odrMult ?? wk.multiplier ?? 1).toFixed(1)}
+                                                            × ODR {(bd?.odrMult ?? wk.multiplier ?? 1).toFixed(2)}
                                                           </span>
                                                           <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: '#f0c94a', borderTop: '1px solid rgba(245,166,35,.4)', paddingTop: 2 }}>
-                                                            {bd?.fpts?.toFixed(1) ?? '—'} FPTS
+                                                            {bd?.fpts?.toFixed(2) ?? '—'} FPTS
                                                           </span>
                                                         </div>
                                                       </td>
@@ -971,7 +973,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                 </tbody>
                               </table>
                               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#4a5d7a', marginTop: 6 }}>
-                                {(unit.avgPerWeek ?? 0) > 0 ? `${unit.avgPerWeek!.toFixed(1)} avg/wk · ` : ''}
+                                {(unit.avgPerWeek ?? 0) > 0 ? `${unit.avgPerWeek!.toFixed(2)} avg/wk · ` : ''}
                                 {unit.weeksPlayed ?? 0} games played
                               </div>
                             </div>
