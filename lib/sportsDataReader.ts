@@ -355,9 +355,21 @@ export async function getSchoolWeekGameLog(
     }
 
     const mult      = multByWeek[week] ?? null;
-    const rawPoints = mult && mult > 0 ? Math.round(pts / mult * 10) / 10 : pts;
+    const rawPoints = pts / (mult ?? 1);
     const defStats  = unitType === 'DEF' ? (defStatsByWeek[week] ?? null) : undefined;
-    return { week, opponent, completed: true, fantasyPoints: pts, rawPoints, multiplier: mult, players, defStats };
+    return {
+      week,
+      opponent,
+      completed: true,
+      isBye: false,
+      fantasyPoints: pts,
+      fpts: mult != null ? Math.round(pts * mult * 10) / 10 : pts,
+      rawPoints,
+      multiplier: mult,
+      odrMult: mult,
+      players,
+      defStats,
+    };
   });
 }
 

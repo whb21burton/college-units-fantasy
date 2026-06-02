@@ -107,7 +107,7 @@ export async function GET(req: Request) {
         const safeties = ts['def_safeties'] ?? 0;
         const rawDEF   = sacks*1 + ints*2 + fumRec*2 + defTd*6 + safeties*2;
         bdRows = [{ role: 'DEF', playerName: null, rawPts: rawDEF, multiplier: 1.0,
-          weightedPts: Math.round(rawDEF * odrMult * 10) / 10,
+          weightedPts: Math.round(rawDEF * 10) / 10,
           stats: { sacks, ints, fumRec, defTd, safeties } }];
 
       } else if (unitType === 'QB') {
@@ -121,7 +121,7 @@ export async function GET(req: Request) {
           .sort((a, b) => b.rawPts - a.rawPts);
         if (qbs[0]) {
           bdRows = [{ role: 'QB', playerName: qbs[0].name, rawPts: qbs[0].rawPts,
-            multiplier: 1.0, weightedPts: Math.round(qbs[0].rawPts * odrMult * 10) / 10,
+            multiplier: 1.0, weightedPts: Math.round(qbs[0].rawPts * 10) / 10,
             stats: qbs[0].s }];
         }
 
@@ -132,7 +132,7 @@ export async function GET(req: Request) {
           .sort((a, b) => b.rawPts - a.rawPts);
         if (ks[0]) {
           bdRows = [{ role: 'K', playerName: ks[0].name, rawPts: ks[0].rawPts,
-            multiplier: 1.0, weightedPts: Math.round(ks[0].rawPts * odrMult * 10) / 10,
+            multiplier: 1.0, weightedPts: Math.round(ks[0].rawPts * 10) / 10,
             stats: ks[0].s }];
         }
 
@@ -148,7 +148,7 @@ export async function GET(req: Request) {
         bdRows = rbs.slice(0, 3).map(({ name, rawPts, s }, i) => ({
           role: `RB${i+1}`, playerName: name, rawPts,
           multiplier: RB_W[i],
-          weightedPts: Math.round(rawPts * RB_W[i] * odrMult * 10) / 10,
+          weightedPts: Math.round(rawPts * RB_W[i] * 10) / 10,
           stats: s,
         }));
 
@@ -164,7 +164,7 @@ export async function GET(req: Request) {
         bdRows = wrs.slice(0, 3).map(({ name, rawPts, s }, i) => ({
           role: `WR${i+1}`, playerName: name, rawPts,
           multiplier: WR_W[i],
-          weightedPts: Math.round(rawPts * WR_W[i] * odrMult * 10) / 10,
+          weightedPts: Math.round(rawPts * WR_W[i] * 10) / 10,
           stats: s,
         }));
 
@@ -181,7 +181,7 @@ export async function GET(req: Request) {
           ? tes.slice(0, 2).map(({ name, rawPts, s }, i) => ({
               role: `TE${i+1}`, playerName: name, rawPts,
               multiplier: TE_W[i],
-              weightedPts: Math.round(rawPts * TE_W[i] * odrMult * 10) / 10,
+              weightedPts: Math.round(rawPts * TE_W[i] * 10) / 10,
               stats: s,
             }))
           : null;
@@ -191,6 +191,10 @@ export async function GET(req: Request) {
       }
 
       const result = bdRows && bdRows.length > 0 ? bdRows : null;
+      const unitTotal = result
+        ? Math.round(result.reduce((s, r) => s + r.weightedPts, 0) * 10) / 10
+        : 0;
+      const fpts = Math.round(unitTotal * odrMult * 10) / 10;
       return NextResponse.json(
         {
           bdRows: result,
@@ -198,6 +202,8 @@ export async function GET(req: Request) {
           teNames,
           odrMult,
           odrLabel: odrLabelFromMult(odrMult),
+          unitTotal,
+          fpts,
         },
         { headers: NO_STORE },
       );

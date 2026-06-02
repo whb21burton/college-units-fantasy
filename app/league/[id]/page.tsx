@@ -1440,7 +1440,9 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
           <tbody>
             {displayed.map((p: any, i: number) => {
               const mult     = weights[i] ?? 0;
-              const weighted = Math.round((p.rawPts??0) * mult * weekMult * 10) / 10;
+              // WGTD = rawPts × positionMult (no ODR)
+              // FPTS = WGTD × ODR (shown as unit total row)
+              const weighted = Math.round((p.rawPts??0) * mult * 10) / 10;
               const role     = roles[i] ?? '';
               const qbPts    = (p.passYd??0)*0.1 + (p.passTd??0)*4 + (p.int??0)*(-2) + (p.rushYd??0)*0.1 + (p.rushTd??0)*6;
               return (
@@ -1489,6 +1491,11 @@ function SafeBreakdown({ week, unit }: { week: any; unit: string }) {
             <tr style={{ borderTop: '2px solid #d4a828' }}>
               <td colSpan={99} style={{ padding: '6px 8px', color: '#d4a828', fontFamily: 'Anton,sans-serif', fontSize: 12, fontWeight: 700, textAlign: 'right' }}>
                 UNIT TOTAL: {unitTotal}
+              </td>
+            </tr>
+            <tr>
+              <td colSpan={99} style={{ padding: '4px 8px', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontSize: 10, textAlign: 'right' }}>
+                × ODR {(weekMult ?? 1.0).toFixed(1)} = FPTS {Math.round((parseFloat(unitTotal) * (weekMult ?? 1.0)) * 10) / 10}
               </td>
             </tr>
           </tbody>
@@ -1890,8 +1897,8 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                   const canExpand = wk.completed;
                   const isExpanded = expandedWk === wk.week;
                   const multColor = wk.multiplier == null ? C.muted : wk.multiplier > 1 ? C.green : wk.multiplier < 1 ? C.red : C.sub;
-                  const fpts = wk.fantasyPoints != null
-                    ? wk.fantasyPoints.toFixed(1)
+                  const fpts = (wk.fpts ?? wk.fantasyPoints) != null
+                    ? (wk.fpts ?? wk.fantasyPoints)!.toFixed(1)
                     : wk.opponent != null
                       ? weeklyProj(player.projectedPoints).toFixed(1)
                       : '—';
