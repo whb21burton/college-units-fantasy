@@ -244,34 +244,27 @@ export async function syncStats(
   ))
 
   // 6. ── POSITION REGISTRY ──────────────────────────────────────────────────
-  // Fetch roster from CFBD for every school → build posLookup
-  // Key: "school||firstname lastname" → position
-  // This is the ONLY source of truth for player positions.
+  // Use cached_players as single source of truth — consistent with breakdown API
+  // This avoids 130+ CFBD API calls per sync run
   const posLookup: Record<string, string> = {}
 
-  await Promise.all(allSchools.map(async (school) => {
-    try {
-      const roster = await cfbdGet('/roster', { team: school, year: season })
-      let teCount = 0
-      for (const p of roster) {
-        const name = [p.firstName, p.lastName].filter(Boolean).join(' ').trim()
-        const pos = CFBD_POS[(p.position ?? '').toUpperCase().trim()] ?? null
-        if (!name || !pos) continue
-        // Store exact name
-        posLookup[`${school}||${name}`] = pos
-        // Store normalized name (lowercase, no punctuation)
-        const norm = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
-        posLookup[`${school}||${norm}`] = pos
-        if (pos === 'TE') teCount++
-      }
-    } catch (e: any) {
-      console.error(`[posRegistry] ${school} failed:`, e.message)
-    }
-  }))
+  const { data: cachedPlayerRows } = await db
+    .from('cached_players')
+    .select('school, player_name, position')
+    .in('school', allSchools)
+    .eq('season', season)
+
+  for (const p of cachedPlayerRows ?? []) {
+    if (!p.player_name || !p.position || !p.school) continue
+    const exact = `${p.school}||${p.player_name}`
+    const norm  = `${p.school}||${p.player_name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()}`
+    posLookup[exact] = p.position
+    posLookup[norm]  = p.position
+  }
 
   const teInLookup = Object.values(posLookup).filter(p => p === 'TE').length
   if (teInLookup === 0) {
-    console.error('[posLookup] WARNING: 0 TEs found in lookup — position registry failed')
+    console.error('[posLookup] WARNING: 0 TEs found — cached_players may be empty for this season')
   }
 
   // Helper: look up a player's position
