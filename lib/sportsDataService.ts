@@ -311,7 +311,12 @@ export async function syncStats(
         QB: [], RB: [], WR: [], TE: [], K: [],
       }
 
-      const names = Array.from(new Set<string>(entries.map((e: any) => e.name).filter(Boolean)))
+        // Filter out junk/team-level entries
+        const JUNK_NAMES = new Set(['Team', ' Team', 'team', 'TEAM', '', ' '])
+        const names = Array.from(new Set<string>(
+          entries.map((e: any) => e.name)
+            .filter((n: string) => n && !JUNK_NAMES.has(n.trim()))
+        ))
 
       for (const name of names) {
         const passE = entries.find((e: any) => e.name === name && e.category === 'passing')
