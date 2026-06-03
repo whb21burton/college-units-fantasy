@@ -253,6 +253,7 @@ export async function syncStats(
     .select('school, player_name, position')
     .in('school', allSchools)
     .eq('season', season)
+    .limit(10000)
 
   for (const p of cachedPlayerRows ?? []) {
     if (!p.player_name || !p.position || !p.school) continue
@@ -381,10 +382,6 @@ export async function syncStats(
           pts = madePts - (missedFG * 1) - (missedPAT * 2) + kPassTd + kRushTd + kTwoPt
         }
 
-        if (school === 'Washington' && week === 1) {
-          console.log(`[debug] ${name} pos=${pos} unit=${unit} pts=${pts.toFixed(2)}`)
-        }
-
         units[unit].push({ name, pts })
       }
 
@@ -401,19 +398,6 @@ export async function syncStats(
       const rbTop3 = units.RB.slice(0, 3) // HARD CAP: top 3 only
       let rbRaw = 0
       for (let i = 0; i < rbTop3.length; i++) rbRaw += rbTop3[i].pts * RB_WEIGHTS[i]
-      if (school === 'Washington' && week === 1) {
-        console.log(`[pos-debug] Washington posLookup sample:`,
-          Object.entries(posLookup)
-            .filter(([k]) => k.startsWith('Washington||'))
-            .slice(0, 5)
-        )
-        console.log(`[pos-debug] lookup for Adam Mohammed:`,
-          posLookup['Washington||Adam Mohammed'] ?? 'NOT FOUND'
-        )
-      }
-      if (school === 'Washington') {
-        console.log(`[RB-debug] ${school} w${week} top3:`, rbTop3.map(r => `${r.name}:${r.pts.toFixed(2)}`), 'rbRaw:', rbRaw.toFixed(2))
-      }
       add(null, 'unit_RB', roundHU(rbRaw))
 
       // WR
