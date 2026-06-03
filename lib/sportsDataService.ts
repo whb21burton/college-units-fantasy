@@ -248,15 +248,24 @@ export async function syncStats(
   // This avoids 130+ CFBD API calls per sync run
   const posLookup: Record<string, string> = {}
 
-  const { data: cachedPlayerRows } = await db
-    .from('cached_players')
-    .select('school, player_name, position')
-    .in('school', allSchools)
-    .eq('season', season)
-    .limit(10000)
-
-  console.log(`[playerRows] total rows: ${cachedPlayerRows?.length ?? 0}`)
-  const washRows = (cachedPlayerRows ?? []).filter((p: any) => p.school === 'Washington')
+  // Fetch all player positions using pagination (Supabase default limit is 1000)
+  let cachedPlayerRows: any[] = []
+  let from = 0
+  const PAGE = 1000
+  while (true) {
+    const { data: page, error: pageErr } = await db
+      .from('cached_players')
+      .select('school, player_name, position')
+      .in('school', allSchools)
+      .eq('season', season)
+      .range(from, from + PAGE - 1)
+    if (pageErr || !page?.length) break
+    cachedPlayerRows = cachedPlayerRows.concat(page)
+    if (page.length < PAGE) break
+    from += PAGE
+  }
+  console.log(`[playerRows] total rows: ${cachedPlayerRows.length}`)
+  const washRows = cachedPlayerRows.filter((p: any) => p.school === 'Washington')
   console.log(`[playerRows] Washington rows: ${washRows.length}`)
   const adamRow = washRows.find((p: any) => p.player_name === 'Adam Mohammed')
   console.log(`[playerRows] Adam Mohammed:`, adamRow ?? 'NOT FOUND')
