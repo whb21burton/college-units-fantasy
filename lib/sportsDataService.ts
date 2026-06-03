@@ -255,6 +255,12 @@ export async function syncStats(
     .eq('season', season)
     .limit(10000)
 
+  console.log(`[playerRows] total rows: ${cachedPlayerRows?.length ?? 0}`)
+  const washRows = (cachedPlayerRows ?? []).filter((p: any) => p.school === 'Washington')
+  console.log(`[playerRows] Washington rows: ${washRows.length}`)
+  const adamRow = washRows.find((p: any) => p.player_name === 'Adam Mohammed')
+  console.log(`[playerRows] Adam Mohammed:`, adamRow ?? 'NOT FOUND')
+
   for (const p of cachedPlayerRows ?? []) {
     if (!p.player_name || !p.position || !p.school) continue
     const exact = `${p.school}||${p.player_name}`
