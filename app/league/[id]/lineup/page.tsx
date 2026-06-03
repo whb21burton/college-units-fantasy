@@ -924,7 +924,9 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                             </div>
                                           </td>
                                           <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
-                                            {wk.fpts?.toFixed(2) ?? wk.fantasyPoints?.toFixed(2) ?? '—'}
+                                            {bd?.fpts != null
+                                              ? bd.fpts.toFixed(2)
+                                              : <span style={{ color: C.muted, fontSize: 10 }}>…</span>}
                                           </td>
                                           <td style={{ ...tdBase, textAlign: 'right', color: multColor, fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>
                                             ×{mult.toFixed(2)}
