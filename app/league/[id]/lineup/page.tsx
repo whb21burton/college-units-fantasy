@@ -87,12 +87,28 @@ function oppLabel(school: string, opponentMap: Record<string, string>, homeMap: 
   return isHome ? `vs ${short}` : `@ ${short}`;
 }
 
-function fppg(unit: DraftUnit, opponentMap?: Record<string, string>): string {
+function fppg(
+  unit: DraftUnit,
+  opponentMap?: Record<string, string>,
+  defRankMap?: Record<string, number>,
+  offRankMap?: Record<string, number>,
+): string {
   if (opponentMap && !opponentMap[unit.school]) return '0.00';
-  // Use avgFpts (WGTD×ODR avg) if available, fall back to avgPerWeek
-  const avg = (unit.avgFpts ?? unit.avgPerWeek ?? 0);
-  if (avg > 0) return avg.toFixed(2);
-  return ((unit.projectedPoints ?? 0) / 4).toFixed(2);
+  const avgF = (unit.avgFpts ?? unit.avgPerWeek ?? 0) > 0
+    ? (unit.avgFpts ?? unit.avgPerWeek ?? 0)
+    : (unit.projectedPoints ?? 0) / 4;
+  // Apply upcoming opponent ODR for projection
+  const opp = opponentMap?.[unit.school];
+  if (opp && defRankMap && offRankMap) {
+    const oppRank = unit.unitType === 'DEF'
+      ? (offRankMap[opp] ?? 50)
+      : (defRankMap[opp] ?? 50);
+    const mult = oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2 : oppRank <= 15 ? 1.1
+      : oppRank <= 25 ? 1.0 : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
+      : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.50;
+    return (avgF * mult).toFixed(2);
+  }
+  return avgF.toFixed(2);
 }
 
 function formatCountdown(isoTime: string | null): string {
@@ -677,7 +693,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                 const canAfford = price <= remaining || picked;
                 const posColor  = POS_COLOR[unit.unitType] ?? C.sub;
                 const opp       = oppLabel(unit.school, opponentMap, homeMap);
-                const fp        = fppg(unit, opponentMap);
+                const fp        = fppg(unit, opponentMap, defRankMap, offRankMap);
                 const rk        = rankByPos[unit.id] ?? '—';
 
                 return (
@@ -908,9 +924,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                             </div>
                                           </td>
                                           <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
-                                            {bd?.fpts != null
-                                              ? bd.fpts.toFixed(2)
-                                              : (wk.fpts ?? wk.fantasyPoints)?.toFixed(2) ?? '—'}
+                                            {wk.fpts?.toFixed(2) ?? wk.fantasyPoints?.toFixed(2) ?? '—'}
                                           </td>
                                           <td style={{ ...tdBase, textAlign: 'right', color: multColor, fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>
                                             ×{mult.toFixed(2)}
@@ -1006,10 +1020,9 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                 </tbody>
                               </table>
                               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#4a5d7a', marginTop: 6 }}>
-                                {(unit.avgFpts ?? unit.avgPerWeek ?? 0) > 0
-                                  ? `${(unit.avgFpts ?? unit.avgPerWeek)!.toFixed(2)} avg FPTS · `
-                                  : ''}
-                                {unit.weeksPlayed ?? 0} games played
+                                {(unit.avgFpts ?? 0) > 0
+                                  ? `${unit.avgFpts!.toFixed(2)} avg FPTS (${unit.weeksPlayed ?? 0} games)`
+                                  : `${unit.weeksPlayed ?? 0} games played`}
                               </div>
                             </div>
                           );

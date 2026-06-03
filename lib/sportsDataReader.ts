@@ -234,7 +234,9 @@ export async function getSchoolWeekGameLog(
     const pts      = unitPtsByWeek[week];
     const completed = pts !== undefined;
 
-    const isBye = !!sched && pts === undefined  // has schedule entry but no stats = bye
+    // isBye = week exists in season but no game scheduled (true bye)
+    // vs week simply not in schedule at all (also treat as bye for display)
+    const isBye = pts === undefined  // no stats = not played = show as bye
     if (!completed) {
       return {
         week,
@@ -355,16 +357,18 @@ export async function getSchoolWeekGameLog(
     }
 
     const mult      = multByWeek[week] ?? null;
-    const rawPoints = pts / (mult ?? 1);
     const defStats  = unitType === 'DEF' ? (defStatsByWeek[week] ?? null) : undefined;
+    const roundHU = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+    const fptsVal = mult != null ? roundHU(pts * mult) : roundHU(pts)
     return {
       week,
       opponent,
       completed: true,
       isBye: false,
-      fantasyPoints: pts,
-      fpts: mult != null ? Math.round((pts * mult + Number.EPSILON) * 100) / 100 : pts,
-      rawPoints,
+      fantasyPoints: fptsVal,   // NOW stores FPTS (WGTD×ODR) not raw WGTD
+      wgtd: roundHU(pts),       // raw WGTD for reference
+      fpts: fptsVal,
+      rawPoints: roundHU(pts),
       multiplier: mult,
       odrMult: mult,
       players,
