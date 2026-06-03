@@ -312,10 +312,10 @@ export async function syncStats(
       }
 
         // Filter out junk/team-level entries
-        const JUNK_NAMES = new Set(['Team', ' Team', 'team', 'TEAM', '', ' '])
+        const JUNK_NAMES = new Set(['Team', ' Team', 'team', 'TEAM'])
         const names = Array.from(new Set<string>(
           entries.map((e: any) => e.name)
-            .filter((n: string) => n && !JUNK_NAMES.has(n.trim()))
+            .filter((n: string) => Boolean(n) && !JUNK_NAMES.has(n.trim()))
         ))
 
       for (const name of names) {
@@ -386,28 +386,32 @@ export async function syncStats(
 
       // ── Score each unit ───────────────────────────────────────────────────
       add(null, 'game_mult', mult)
+      const roundHU = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 
       // QB — top scorer only — store RAW pts, ODR applied at display time
       units.QB.sort((a, b) => b.pts - a.pts)
-      add(null, 'unit_QB', units.QB[0] ? Math.round(units.QB[0].pts * 10) / 10 : 0)
+      add(null, 'unit_QB', units.QB[0] ? roundHU(units.QB[0].pts) : 0)
 
       // RB
       units.RB.sort((a, b) => b.pts - a.pts)
+      const rbTop3 = units.RB.slice(0, 3) // HARD CAP: top 3 only
       let rbRaw = 0
-      for (let i = 0; i < Math.min(units.RB.length, RB_WEIGHTS.length); i++) rbRaw += units.RB[i].pts * RB_WEIGHTS[i]
-      add(null, 'unit_RB', Math.round(rbRaw * 10) / 10)
+      for (let i = 0; i < rbTop3.length; i++) rbRaw += rbTop3[i].pts * RB_WEIGHTS[i]
+      add(null, 'unit_RB', roundHU(rbRaw))
 
       // WR
       units.WR.sort((a, b) => b.pts - a.pts)
+      const wrTop3 = units.WR.slice(0, 3) // HARD CAP: top 3 only
       let wrRaw = 0
-      for (let i = 0; i < Math.min(units.WR.length, WR_WEIGHTS.length); i++) wrRaw += units.WR[i].pts * WR_WEIGHTS[i]
-      add(null, 'unit_WR', Math.round(wrRaw * 10) / 10)
+      for (let i = 0; i < wrTop3.length; i++) wrRaw += wrTop3[i].pts * WR_WEIGHTS[i]
+      add(null, 'unit_WR', roundHU(wrRaw))
 
       // TE
       units.TE.sort((a, b) => b.pts - a.pts)
+      const teTop2 = units.TE.slice(0, 2) // HARD CAP: top 2 only
       let teRaw = 0
-      for (let i = 0; i < Math.min(units.TE.length, TE_WEIGHTS.length); i++) teRaw += units.TE[i].pts * TE_WEIGHTS[i]
-      add(null, 'unit_TE', Math.round(teRaw * 10) / 10)
+      for (let i = 0; i < teTop2.length; i++) teRaw += teTop2[i].pts * TE_WEIGHTS[i]
+      add(null, 'unit_TE', roundHU(teRaw))
 
       // DEF — fallback field names handle CFBD's inconsistent casing
       const defSacks  = ts['sacks']             ?? ts['Sacks']             ?? 0
@@ -429,7 +433,7 @@ export async function syncStats(
         oppScore <= 20 ?  2 : 0
 
       const defRaw = defSacks*1 + defInts*2 + defFumRec*2 + defTDs*6 + defSafety*2 + ptsAllowedBonus
-      add(null, 'unit_DEF', Math.round(defRaw * 10) / 10)
+      add(null, 'unit_DEF', roundHU(defRaw))
       add(null, 'def_pts_allowed_bonus', ptsAllowedBonus)
       add(null, 'def_sacks',   defSacks)
       add(null, 'def_ints',    defInts)
@@ -439,7 +443,7 @@ export async function syncStats(
 
       // K
       units.K.sort((a, b) => b.pts - a.pts)
-      add(null, 'unit_K', units.K[0] ? Math.round(units.K[0].pts * 10) / 10 : 0)
+      add(null, 'unit_K', units.K[0] ? roundHU(units.K[0].pts) : 0)
 
       // ── Persist: delete old rows for this school+game, insert fresh ───────
       await db.from('cached_stats').delete().eq('game_id', gameId).eq('school', school)
