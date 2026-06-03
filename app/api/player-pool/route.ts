@@ -71,7 +71,7 @@ export async function GET(req: Request) {
     // Fetch unit-level rows for the season up to current week
     let query = admin
       .from('cached_stats')
-      .select('school, stat_type, value')
+      .select('school, stat_type, value, week')
       .eq('season', SEASON)
       .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'])
       .is('player_name', null)
@@ -83,7 +83,24 @@ export async function GET(req: Request) {
       query = query.in('school', allowedSchools);
     }
 
-    const { data, error } = await query;
+    const [{ data, error }, multResult] = await Promise.all([
+      query,
+      admin
+        .from('cached_stats')
+        .select('school, week, value')
+        .eq('season', SEASON)
+        .eq('stat_type', 'game_mult')
+        .is('player_name', null)
+        .lte('week', 4)
+        .limit(10000),
+    ]);
+
+    // Build school||week → game_mult map
+    const multBySchoolWeek: Record<string, number> = {};
+    for (const row of multResult.data ?? []) {
+      const canonicalSchool = SCHOOL_ALIASES[row.school] ?? row.school;
+      multBySchoolWeek[`${canonicalSchool}||${row.week}`] = row.value ?? 1.0;
+    }
 
     // ── RB pricing data: rb1_opportunity per school across all weeks ──────────
     const { data: rbOppRows } = await admin
@@ -155,6 +172,7 @@ export async function GET(req: Request) {
     // fairly against the static FULL_POOL 4-week projections).
     const liveSums:   Record<string, number> = {};
     const liveCounts: Record<string, number> = {};
+    const fptsSums:   Record<string, number> = {}; // sum of WGTD×ODR
     let debugMisses = 0;
     for (const row of data ?? []) {
       const canonicalSchool = SCHOOL_ALIASES[row.school] ?? row.school;
@@ -168,8 +186,13 @@ export async function GET(req: Request) {
       }
       const unitType = row.stat_type.replace('unit_', '') as UnitType;
       const key = `${canonicalSchool}||${unitType}`;
-      liveSums[key]   = (liveSums[key]   ?? 0) + (row.value ?? 0);
+      const wgtd = row.value ?? 0;
+      // Get the ODR mult for this specific week
+      const weekMult = multBySchoolWeek[`${canonicalSchool}||${row.week}`] ?? 1.0;
+      const fpts = wgtd * weekMult;
+      liveSums[key]   = (liveSums[key]   ?? 0) + wgtd;
       liveCounts[key] = (liveCounts[key] ?? 0) + 1;
+      fptsSums[key]   = (fptsSums[key]   ?? 0) + fpts;
     }
 
     const debugKey   = `Florida||QB`;
@@ -180,7 +203,7 @@ export async function GET(req: Request) {
     console.log(`POOL_DEBUG: Florida||QB=${debugVal ?? 'MISSING'} weeks=${debugCount ?? 0} totalKeys=${totalKeys} sample=${allKeys}`);
 
     // Build complete pool: every CONFERENCES school × every unit type, no gaps
-    type Entry = { school: string; unitType: UnitType; pts: number; seasonTotal: number; weeksPlayed: number; avgPerWeek: number; isLive: boolean };
+    type Entry = { school: string; unitType: UnitType; pts: number; seasonTotal: number; weeksPlayed: number; avgPerWeek: number; avgFpts: number; isLive: boolean };
     const allEntries: Entry[] = [];
 
     for (const [conf, schools] of Object.entries(CONFERENCES) as [Conference, string[]][]) {
@@ -191,12 +214,13 @@ export async function GET(req: Request) {
           const key = `${school}||${unitType}`;
           if (key in liveSums) {
             const weeksPlayed = liveCounts[key];
-            const avgPerWeek  = liveSums[key] / weeksPlayed;
-            allEntries.push({ school, unitType, pts: avgPerWeek * TOTAL_WEEKS, seasonTotal: liveSums[key], weeksPlayed, avgPerWeek, isLive: true });
+            const avgPerWeek  = liveSums[key] / weeksPlayed;   // raw WGTD avg
+            const avgFpts     = (fptsSums[key] ?? 0) / weeksPlayed; // FPTS avg (WGTD×ODR)
+            allEntries.push({ school, unitType, pts: avgFpts * TOTAL_WEEKS, seasonTotal: liveSums[key], weeksPlayed, avgPerWeek, avgFpts, isLive: true });
           } else {
             // Fall back to FULL_POOL static 14-week season projection
             const fp = fullPoolMap[key] ?? 0;
-            allEntries.push({ school, unitType, pts: fp, seasonTotal: fp, weeksPlayed: 0, avgPerWeek: 0, isLive: false });
+            allEntries.push({ school, unitType, pts: fp, seasonTotal: fp, weeksPlayed: 0, avgPerWeek: 0, avgFpts: 0, isLive: false });
           }
         }
       }
@@ -226,7 +250,7 @@ export async function GET(req: Request) {
     // Assemble DraftUnit[]
     const pool: DraftUnit[] = [];
     for (const [unitType, arr] of Object.entries(byUnit) as [UnitType, Entry[]][]) {
-      arr.forEach(({ school, pts, seasonTotal, weeksPlayed, avgPerWeek }, rank) => {
+      arr.forEach(({ school, pts, seasonTotal, weeksPlayed, avgPerWeek, avgFpts }, rank) => {
         const conf = schoolConf[school];
         if (!conf) return;
         const starterName = (unitType === 'QB' || unitType === 'K')
@@ -252,7 +276,8 @@ export async function GET(req: Request) {
           projectedPoints: seasonTotal > 0 ? Math.round(seasonTotal) : Math.round(adjustedPts),
           seasonTotal:     Math.round(seasonTotal * 10) / 10,
           weeksPlayed,
-          avgPerWeek:      Math.round(avgPerWeek * 10) / 10,
+          avgPerWeek:      Math.round(avgPerWeek * 100) / 100,
+          avgFpts:         Math.round((avgFpts ?? avgPerWeek) * 100) / 100,
           ...(badge ? { badge } : {}),
         });
       });

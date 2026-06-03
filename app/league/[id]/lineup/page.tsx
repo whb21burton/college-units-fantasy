@@ -88,10 +88,11 @@ function oppLabel(school: string, opponentMap: Record<string, string>, homeMap: 
 }
 
 function fppg(unit: DraftUnit, opponentMap?: Record<string, string>): string {
-  // BYE week = 0 projection
-  if (opponentMap && !opponentMap[unit.school]) return '0.0';
-  if ((unit.avgPerWeek ?? 0) > 0) return unit.avgPerWeek!.toFixed(1);
-  return ((unit.projectedPoints ?? 0) / 4).toFixed(1);
+  if (opponentMap && !opponentMap[unit.school]) return '0.00';
+  // Use avgFpts (WGTD×ODR avg) if available, fall back to avgPerWeek
+  const avg = (unit.avgFpts ?? unit.avgPerWeek ?? 0);
+  if (avg > 0) return avg.toFixed(2);
+  return ((unit.projectedPoints ?? 0) / 4).toFixed(2);
 }
 
 function formatCountdown(isoTime: string | null): string {
@@ -337,7 +338,10 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       if (!aHasGame && !bHasGame) return 0;
       // Sort by projected points this week: avgPerWeek × upcoming opponent ODR
       const getProj = (u: DraftUnit) => {
-        const avg = (u.avgPerWeek ?? 0) > 0 ? u.avgPerWeek! : (u.projectedPoints ?? 0) / 4;
+        // Projection = avgFpts (historical FPTS avg) × upcoming opponent ODR
+        const avgF = (u.avgFpts ?? u.avgPerWeek ?? 0) > 0
+          ? (u.avgFpts ?? u.avgPerWeek ?? 0)
+          : (u.projectedPoints ?? 0) / 4;
         const opp = opponentMap[u.school];
         if (!opp) return 0;
         const oppRank = u.unitType === 'DEF'
@@ -345,8 +349,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
           : (defRankMap[opp] ?? 50);
         const mult = oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2 : oppRank <= 15 ? 1.1
           : oppRank <= 25 ? 1.0 : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
-          : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.55;
-        return avg * mult;
+          : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.50;
+        return avgF * mult;
       };
       return getProj(b) - getProj(a);
     });
@@ -788,7 +792,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                         {!unitStats[unit.id] ? (
                           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, padding: '8px 0' }}>Loading stats…</div>
                         ) : (() => {
-                          const weeks = (unitStats[unit.id]?.weeks ?? []).filter((w: any) => w.completed);
+                          const weeks = (unitStats[unit.id]?.weeks ?? [])
+                            .filter((w: any) => w.completed || w.isBye);
                           const ut = unit.unitType;
                           const expandKey = unit.id;
                           const expandedWk = expandedWeek[expandKey] ?? null;
@@ -834,6 +839,34 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                 </thead>
                                 <tbody>
                                   {weeks.map((wk: any) => {
+                                    // BYE WEEK — simple grey row, not clickable
+                                    if (wk.isBye) {
+                                      return (
+                                        <tr key={wk.week} style={{ opacity: 0.5 }}>
+                                          <td style={{ ...tdBase, textAlign: 'left', color: '#4a5d7a' }}>{wk.week}</td>
+                                          <td style={{ ...tdBase, textAlign: 'left', color: '#4a5d7a' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                              {wk.opponent && logos[wk.opponent] && (
+                                                <img src={logos[wk.opponent]} alt={wk.opponent}
+                                                  style={{ width: 16, height: 16, objectFit: 'contain' }}
+                                                  onError={e => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />
+                                              )}
+                                              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: '#3e5470', letterSpacing: 1 }}>
+                                                {wk.opponent ? `BYE vs ${wk.opponent.length > 10 ? wk.opponent.slice(0,10)+'…' : wk.opponent}` : 'BYE'}
+                                              </span>
+                                            </div>
+                                          </td>
+                                          <td style={{ ...tdBase, textAlign: 'right', color: '#3e5470' }}>—</td>
+                                          <td style={{ ...tdBase, textAlign: 'right', color: '#3e5470' }}>—</td>
+                                          {summaryCols.map(c => (
+                                            <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#3e5470' }}>—</td>
+                                          ))}
+                                          <td style={{ ...tdBase, color: '#3e5470' }}></td>
+                                        </tr>
+                                      );
+                                    }
+
+                                    // NORMAL PLAYED WEEK
                                     const mult = wk.multiplier ?? 1.0;
                                     const multColor = mult >= 1.2 ? '#15c678' : mult >= 1.0 ? '#f5a623' : mult >= 0.8 ? '#f08030' : '#f03a5a';
                                     const player0 = wk.players?.[0] ?? {};
@@ -973,7 +1006,9 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                 </tbody>
                               </table>
                               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#4a5d7a', marginTop: 6 }}>
-                                {(unit.avgPerWeek ?? 0) > 0 ? `${unit.avgPerWeek!.toFixed(2)} avg/wk · ` : ''}
+                                {(unit.avgFpts ?? unit.avgPerWeek ?? 0) > 0
+                                  ? `${(unit.avgFpts ?? unit.avgPerWeek)!.toFixed(2)} avg FPTS · `
+                                  : ''}
                                 {unit.weeksPlayed ?? 0} games played
                               </div>
                             </div>
