@@ -401,6 +401,9 @@ export async function syncStats(
       const rbTop3 = units.RB.slice(0, 3) // HARD CAP: top 3 only
       let rbRaw = 0
       for (let i = 0; i < rbTop3.length; i++) rbRaw += rbTop3[i].pts * RB_WEIGHTS[i]
+      if (school === 'Washington') {
+        console.log(`[RB-debug] ${school} w${week} top3:`, rbTop3.map(r => `${r.name}:${r.pts.toFixed(2)}`), 'rbRaw:', rbRaw.toFixed(2))
+      }
       add(null, 'unit_RB', roundHU(rbRaw))
 
       // WR
