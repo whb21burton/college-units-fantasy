@@ -381,6 +381,10 @@ export async function syncStats(
           pts = madePts - (missedFG * 1) - (missedPAT * 2) + kPassTd + kRushTd + kTwoPt
         }
 
+        if (school === 'Washington' && week === 1) {
+          console.log(`[debug] ${name} pos=${pos} unit=${unit} pts=${pts.toFixed(2)}`)
+        }
+
         units[unit].push({ name, pts })
       }
 
