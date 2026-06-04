@@ -448,12 +448,17 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       const candidates = pool.filter(u =>
         slot.accepts.includes(u.unitType) &&
         !usedIds.has(u.id) &&
-        (priceMap[u.id] ?? 0) <= maxForThis
+        (priceMap[u.id] ?? 0) <= maxForThis &&
+        (priceMap[u.id] ?? 0) > 0  // never pick BYE ($0) units
       );
 
       const source = candidates.length > 0
         ? candidates
-        : pool.filter(u => slot.accepts.includes(u.unitType) && !usedIds.has(u.id));
+        : pool.filter(u =>
+            slot.accepts.includes(u.unitType) &&
+            !usedIds.has(u.id) &&
+            (priceMap[u.id] ?? 0) > 0  // never pick BYE ($0) units
+          );
 
       if (source.length === 0) continue;
       const pick = source[Math.floor(Math.random() * source.length)];
@@ -721,8 +726,9 @@ export default function LineupPage({ params }: { params: { id: string } }) {
             ) : (
               filteredPool.map((unit, idx) => {
                 const price     = priceMap[unit.id] ?? 0;
+                const isBye     = price === 0;
                 const picked    = pickedIds.has(unit.id);
-                const canAfford = price <= remaining || picked;
+                const canAfford = !isBye && (price <= remaining || picked);
                 const posColor  = POS_COLOR[unit.unitType] ?? C.sub;
                 const opp       = oppLabel(unit.school, opponentMap, homeMap);
                 const fp        = fppg(unit, opponentMap, defRankMap, offRankMap);
@@ -749,7 +755,9 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                         padding: '9px 16px', alignItems: 'center',
                         background: idx % 2 === 0 ? C.lPanel : '#0a101c',
                         cursor: 'pointer',
-                        opacity: picked ? 0.45 : 1,
+                        opacity: isBye ? 0.4 : picked ? 0.45 : 1,
+                        textDecoration: isBye ? 'line-through' : 'none',
+                        pointerEvents: isBye ? 'none' : 'auto',
                         transition: 'background .1s',
                       }}
                       onMouseEnter={e => { e.currentTarget.style.background = '#131d30'; }}
