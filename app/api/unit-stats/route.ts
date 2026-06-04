@@ -28,6 +28,8 @@ export async function GET(req: Request) {
   const season    = parseInt(searchParams.get('season') || '2025', 10);
   const breakdown = searchParams.get('breakdown') === 'true';
   const weekParam = searchParams.get('week') ? parseInt(searchParams.get('week')!, 10) : null;
+  const currentWeekParam = searchParams.get('currentWeek')
+  const currentWeek = currentWeekParam ? parseInt(currentWeekParam, 10) : 4
 
   if (!school || !unitType) {
     return NextResponse.json({ error: 'school and unitType required' }, { status: 400 });
@@ -240,7 +242,7 @@ export async function GET(req: Request) {
     };
 
     const [weeks, playersRes, roleRows] = await Promise.all([
-      getSchoolWeekGameLog(school, unitType, season),
+      getSchoolWeekGameLog(school, unitType, season, currentWeek),
       admin
         .from('cached_players')
         .select('player_name, jersey_number')

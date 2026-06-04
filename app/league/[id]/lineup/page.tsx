@@ -737,7 +737,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                         } else {
                           setExpandedUnit(unit.id);
                           if (!unitStats[unit.id]) {
-                            fetch(`/api/unit-stats?school=${encodeURIComponent(unit.school)}&unitType=${unit.unitType}&season=2025`)
+                            fetch(`/api/unit-stats?school=${encodeURIComponent(unit.school)}&unitType=${unit.unitType}&season=2025&currentWeek=${league?.week ?? 4}`)
                               .then(r => r.json())
                               .then(d => setUnitStats(prev => ({ ...prev, [unit.id]: d })))
                               .catch(() => {});

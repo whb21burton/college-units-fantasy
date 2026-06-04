@@ -132,6 +132,7 @@ export async function getSchoolWeekGameLog(
   school: string,
   unitType: UnitType,
   season: number,
+  currentWeek?: number,
 ): Promise<{
   week: number;
   opponent: string | null;
@@ -237,9 +238,13 @@ export async function getSchoolWeekGameLog(
     // and upcoming (has schedule entry, game not yet played)
     // and truly empty (no schedule entry at all)
     const hasSched = !!sched
-    const isBye    = !hasSched && !completed  // no schedule entry = bye/off week
-    const isUpcoming = hasSched && !completed  // has game scheduled but not played yet
-    if (!completed) {
+    // If currentWeek provided, weeks > currentWeek are always future
+    // regardless of whether stats exist
+    const isPastCurrentWeek = currentWeek != null && week > currentWeek
+    const effectiveCompleted = completed && !isPastCurrentWeek
+    const isBye    = !hasSched && !effectiveCompleted
+    const isUpcoming = hasSched && !effectiveCompleted
+    if (!effectiveCompleted) {
       return {
         week,
         opponent,
@@ -367,9 +372,9 @@ export async function getSchoolWeekGameLog(
     return {
       week,
       opponent,
-      completed: true,
+      completed: !isPastCurrentWeek,
       isBye: false,
-      isUpcoming: false,
+      isUpcoming: isPastCurrentWeek && hasSched,
       fantasyPoints: fptsVal,   // NOW stores FPTS (WGTD×ODR) not raw WGTD
       wgtd: roundHU(pts),       // raw WGTD for reference
       fpts: fptsVal,
