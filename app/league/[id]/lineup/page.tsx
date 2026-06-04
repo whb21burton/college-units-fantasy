@@ -63,19 +63,48 @@ const POS_COLOR: Record<string, string> = {
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-function positionRankPrice(unit: DraftUnit, allUnits: DraftUnit[], isConf: boolean): number {
+function positionRankPrice(
+  unit: DraftUnit,
+  allUnits: DraftUnit[],
+  isConf: boolean,
+  opponentMap: Record<string, string>,
+  defRankMap: Record<string, number>,
+  offRankMap: Record<string, number>,
+): number {
+  // BYE week = $0
+  if (!opponentMap[unit.school]) return 0;
+
+  // Calculate projected points for each peer in this position
+  const getProj = (u: DraftUnit): number => {
+    const opp = opponentMap[u.school];
+    if (!opp) return 0; // BYE
+    const avgF = (u.avgFpts ?? u.avgPerWeek ?? 0) > 0
+      ? (u.avgFpts ?? u.avgPerWeek ?? 0)
+      : (u.projectedPoints ?? 0) / 4;
+    const oppRank = u.unitType === 'DEF'
+      ? (offRankMap[opp] ?? 50)
+      : (defRankMap[opp] ?? 50);
+    const mult = oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2 : oppRank <= 15 ? 1.1
+      : oppRank <= 25 ? 1.0 : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
+      : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.50;
+    return avgF * mult;
+  };
+
+  // Only rank peers who have a game this week (exclude BYEs)
   const peers = allUnits
-    .filter(u => u.unitType === unit.unitType)
-    .sort((a, b) => (b.seasonTotal ?? b.projectedPoints) - (a.seasonTotal ?? a.projectedPoints));
+    .filter(u => u.unitType === unit.unitType && !!opponentMap[u.school])
+    .sort((a, b) => getProj(b) - getProj(a));
+
   const total = peers.length;
-  const rank  = peers.findIndex(u => u.id === unit.id) + 1;
   if (total === 0) return 10;
-  // Divide pool into fifths — top fifth = $50, bottom fifth = $10
+  const rank = peers.findIndex(u => u.id === unit.id) + 1;
+  if (rank === 0) return 10; // not found — shouldn't happen
+
   const fifth = total / 5;
-  if (rank <= fifth)         return 50;
-  if (rank <= fifth * 2)     return 40;
-  if (rank <= fifth * 3)     return 30;
-  if (rank <= fifth * 4)     return 20;
+  if (rank <= fifth)     return 50;
+  if (rank <= fifth * 2) return 40;
+  if (rank <= fifth * 3) return 30;
+  if (rank <= fifth * 4) return 20;
   return 10;
 }
 
@@ -281,9 +310,9 @@ export default function LineupPage({ params }: { params: { id: string } }) {
 
   const priceMap = useMemo(() => {
     const m: Record<string, number> = {};
-    pool.forEach(u => { m[u.id] = positionRankPrice(u, pool, isConference); });
+    pool.forEach(u => { m[u.id] = positionRankPrice(u, pool, isConference, opponentMap, defRankMap, offRankMap); });
     return m;
-  }, [pool, isConference]);
+  }, [pool, isConference, opponentMap, defRankMap, offRankMap]);
 
   const rankByPos = useMemo(() => {
     const groups: Record<string, DraftUnit[]> = {};
