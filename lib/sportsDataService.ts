@@ -264,11 +264,6 @@ export async function syncStats(
     if (page.length < PAGE) break
     from += PAGE
   }
-  console.log(`[playerRows] total rows: ${cachedPlayerRows.length}`)
-  const washRows = cachedPlayerRows.filter((p: any) => p.school === 'Washington')
-  console.log(`[playerRows] Washington rows: ${washRows.length}`)
-  const adamRow = washRows.find((p: any) => p.player_name === 'Adam Mohammed')
-  console.log(`[playerRows] Adam Mohammed:`, adamRow ?? 'NOT FOUND')
 
   // Strip name suffixes for matching (Jr., Sr., II, III, IV, V)
   const stripSuffix = (name: string) =>
@@ -286,11 +281,6 @@ export async function syncStats(
     posLookup[strippedNorm] = p.position
   }
 
-  const pittsWR = Object.entries(posLookup)
-    .filter(([k]) => k.startsWith('Pittsburgh||') && posLookup[k] === 'WR')
-    .slice(0, 5)
-  console.log('[posLookup] Pittsburgh WRs:', pittsWR.length, pittsWR.map(([k]) => k))
-  console.log('[posLookup] Raphael lookup:', posLookup['Pittsburgh||Raphael Williams'] ?? 'NOT FOUND')
 
   const teInLookup = Object.values(posLookup).filter(p => p === 'TE').length
   if (teInLookup === 0) {
