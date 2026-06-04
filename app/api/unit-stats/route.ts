@@ -85,8 +85,12 @@ export async function GET(req: Request) {
 
       // Build position lookup — single source of truth
       const playerPosMap: Record<string, string> = {};
+      const stripSuffix = (n: string) => n.replace(/\s+(Jr\.?|Sr\.?|II|III|IV|V)$/i, '').trim()
       for (const p of allPlayersRes.data ?? []) {
-        if (p.player_name && p.position) playerPosMap[p.player_name] = p.position;
+        if (p.player_name && p.position) {
+          playerPosMap[p.player_name] = p.position;
+          playerPosMap[stripSuffix(p.player_name)] = p.position;
+        }
       }
       const teNameSet = new Set(
         Object.entries(playerPosMap).filter(([, pos]) => pos === 'TE').map(([name]) => name)

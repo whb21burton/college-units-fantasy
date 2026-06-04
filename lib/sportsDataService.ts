@@ -270,12 +270,20 @@ export async function syncStats(
   const adamRow = washRows.find((p: any) => p.player_name === 'Adam Mohammed')
   console.log(`[playerRows] Adam Mohammed:`, adamRow ?? 'NOT FOUND')
 
+  // Strip name suffixes for matching (Jr., Sr., II, III, IV, V)
+  const stripSuffix = (name: string) =>
+    name.replace(/\s+(Jr\.?|Sr\.?|II|III|IV|V)$/i, '').trim()
+
   for (const p of cachedPlayerRows ?? []) {
     if (!p.player_name || !p.position || !p.school) continue
-    const exact = `${p.school}||${p.player_name}`
-    const norm  = `${p.school}||${p.player_name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()}`
-    posLookup[exact] = p.position
-    posLookup[norm]  = p.position
+    const exact    = `${p.school}||${p.player_name}`
+    const norm     = `${p.school}||${p.player_name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()}`
+    const stripped = `${p.school}||${stripSuffix(p.player_name)}`
+    const strippedNorm = `${p.school}||${stripSuffix(p.player_name).toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()}`
+    posLookup[exact]        = p.position
+    posLookup[norm]         = p.position
+    posLookup[stripped]     = p.position
+    posLookup[strippedNorm] = p.position
   }
 
   const teInLookup = Object.values(posLookup).filter(p => p === 'TE').length
@@ -285,8 +293,11 @@ export async function syncStats(
 
   // Helper: look up a player's position
   const getPos = (school: string, name: string): string | null => {
+    const stripped = stripSuffix(name)
     return posLookup[`${school}||${name}`]
       ?? posLookup[`${school}||${name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()}`]
+      ?? posLookup[`${school}||${stripped}`]
+      ?? posLookup[`${school}||${stripped.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()}`]
       ?? null
   }
 
