@@ -1065,7 +1065,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                               </span>
                                             </div>
                                           </td>
-                                          <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+                                          <td style={{ ...tdBase, textAlign: 'right', color: bd?.fpts != null ? '#f0c94a' : '#4a5d7a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
                                             {bd?.fpts != null
                                               ? bd.fpts.toFixed(2)
                                               : wk.fantasyPoints != null
