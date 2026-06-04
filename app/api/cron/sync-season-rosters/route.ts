@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
-import { CONFERENCES } from '@/lib/playerPool'
 
 export const dynamic = 'force-dynamic'
 
-const BASE    = 'https://apinext.collegefootballdata.com'
-const SEASON  = 2025
-const ALL_FBS = Object.values(CONFERENCES).flat()
+const BASE   = 'https://apinext.collegefootballdata.com'
+const SEASON = 2025
 
 const CFBD_POS: Record<string, string> = {
   QB: 'QB', QUARTERBACK: 'QB',
@@ -36,8 +34,19 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url)
-  const schoolParam = searchParams.get('school')
-  const schools     = schoolParam ? [schoolParam] : ALL_FBS
+  const schoolParam  = searchParams.get('school')
+  const divisionParam = searchParams.get('division') // 'FBS', 'FCS', or null for all
+
+  // Load all schools from cached_teams
+  const admin = createAdminClient()
+  let schoolQuery = admin
+    .from('cached_teams')
+    .select('school, division')
+    .limit(2000)
+  if (divisionParam) schoolQuery = schoolQuery.eq('division', divisionParam)
+  const { data: teamRows } = await schoolQuery
+  const allSchools = (teamRows ?? []).map((t: any) => t.school as string)
+  const schools = schoolParam ? [schoolParam] : allSchools
 
   try {
     const admin  = createAdminClient()
