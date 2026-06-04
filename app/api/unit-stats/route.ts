@@ -88,8 +88,14 @@ export async function GET(req: Request) {
       const stripSuffix = (n: string) => n.replace(/\s+(Jr\.?|Sr\.?|II|III|IV|V)$/i, '').trim()
       for (const p of allPlayersRes.data ?? []) {
         if (p.player_name && p.position) {
-          playerPosMap[p.player_name] = p.position;
-          playerPosMap[stripSuffix(p.player_name)] = p.position;
+          const pn = p.player_name
+          const stripped = stripSuffix(pn)
+          playerPosMap[pn] = p.position
+          playerPosMap[stripped] = p.position
+          playerPosMap[pn.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()] = p.position
+          playerPosMap[stripped.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()] = p.position
+          playerPosMap[pn.toLowerCase().replace(/[^a-z0-9]/g, '')] = p.position
+          playerPosMap[stripped.toLowerCase().replace(/[^a-z0-9]/g, '')] = p.position
         }
       }
       const teNameSet = new Set(
@@ -136,11 +142,15 @@ export async function GET(req: Request) {
 
       } else if (unitType === 'QB') {
         const qbs = Object.entries(playerTotals)
-          .filter(([name, s]) =>
-            qbNameSet.has(name) ||
-            (!rbNameSet.has(name) && !wrNameSet.has(name) && !teNameSet.has(name) &&
-             ((s['passing_YDS'] ?? 0) > 0 || (s['passing_TD'] ?? 0) > 0))
-          )
+          .filter(([name, s]) => {
+            const norm = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+            const noSp = name.toLowerCase().replace(/[^a-z0-9]/g, '')
+            const isRB = rbNameSet.has(name) || rbNameSet.has(norm) || rbNameSet.has(noSp)
+            const isTE = teNameSet.has(name) || teNameSet.has(norm) || teNameSet.has(noSp)
+            const isWR = wrNameSet.has(name) || wrNameSet.has(norm) || wrNameSet.has(noSp)
+            return qbNameSet.has(name) || qbNameSet.has(norm) || qbNameSet.has(noSp) ||
+              (!isRB && !isWR && !isTE && ((s['passing_YDS'] ?? 0) > 0 || (s['passing_TD'] ?? 0) > 0))
+          })
           .map(([name, s]) => ({
             name, s,
             rawPts: (s['passing_YDS']||0)*0.1 + (s['passing_TD']||0)*4 + (s['passing_INT']||0)*-3
@@ -166,7 +176,11 @@ export async function GET(req: Request) {
 
       } else if (unitType === 'RB') {
         const rbs = Object.entries(playerTotals)
-          .filter(([name]) => rbNameSet.has(name))
+          .filter(([name]) => {
+            const norm = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+            const noSp = name.toLowerCase().replace(/[^a-z0-9]/g, '')
+            return rbNameSet.has(name) || rbNameSet.has(norm) || rbNameSet.has(noSp)
+          })
           .map(([name, s]) => ({
             name, s,
             // total yards × 0.1 + any TD × 6 (no reception points)
@@ -183,7 +197,11 @@ export async function GET(req: Request) {
 
       } else if (unitType === 'WR') {
         const wrs = Object.entries(playerTotals)
-          .filter(([name]) => wrNameSet.has(name))
+          .filter(([name]) => {
+            const norm = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+            const noSp = name.toLowerCase().replace(/[^a-z0-9]/g, '')
+            return wrNameSet.has(name) || wrNameSet.has(norm) || wrNameSet.has(noSp)
+          })
           .map(([name, s]) => ({
             name, s,
             // total yards × 0.1 + TD × 6 (no reception points)
@@ -200,7 +218,11 @@ export async function GET(req: Request) {
 
       } else if (unitType === 'TE') {
         const tes = Object.entries(playerTotals)
-          .filter(([name]) => teNameSet.has(name))
+          .filter(([name]) => {
+            const norm = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+            const noSp = name.toLowerCase().replace(/[^a-z0-9]/g, '')
+            return teNameSet.has(name) || teNameSet.has(norm) || teNameSet.has(noSp)
+          })
           .map(([name, s]) => ({
             name, s,
             // total yards × 0.1 + TD × 6 (no reception points)
