@@ -505,7 +505,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
           </div>
           {/* Column headers */}
           <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 100px 60px 60px', padding: '6px 12px', background: C.hdrBg, borderRadius: '6px 6px 0 0', marginBottom: 0 }}>
-            {['POS', 'PLAYER', 'OPP', 'FPPG', 'SAL'].map((h, i) => (
+            {['POS', 'PLAYER', 'OPP', 'Projected', 'SAL'].map((h, i) => (
               <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.hdrText, textTransform: 'uppercase', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
             ))}
           </div>
@@ -677,7 +677,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
 
           {/* Pool column headers */}
           <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '50px 1fr 90px 55px 40px 60px 38px', padding: '7px 16px', background: C.hdrBg, borderBottom: '1px solid ' + C.surf3 }}>
-            {['POS', 'PLAYER', 'OPP', 'FPPG', 'RK', 'SALARY', ''].map((h, i) => (
+            {['POS', 'PLAYER', 'OPP', 'Projected', 'RK', 'SALARY', ''].map((h, i) => (
               <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1.5, color: C.hdrText, textTransform: 'uppercase', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
             ))}
           </div>
@@ -770,7 +770,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                         })()}
                       </div>
 
-                      {/* FPPG */}
+                      {/* Projected */}
                       <div style={{ textAlign: 'right', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: C.gold }}>{fp}</div>
 
                       {/* RK */}
@@ -1067,7 +1067,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
 
           {/* Lineup slot headers */}
           <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '44px 1fr 80px 50px 50px 28px', padding: '6px 14px', background: C.hdrBg, borderBottom: '1px solid ' + C.surf3 }}>
-            {['POS', 'PLAYER', 'OPP', 'FPPG', 'SAL', ''].map((h, i) => (
+            {['POS', 'PLAYER', 'OPP', 'Projected', 'SAL', ''].map((h, i) => (
               <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1.5, color: C.hdrText, textTransform: 'uppercase', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
             ))}
           </div>
@@ -1110,7 +1110,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                   {/* OPP */}
                   <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp}</div>
 
-                  {/* FPPG */}
+                  {/* Projected */}
                   <div style={{ textAlign: 'right', fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: unit ? C.gold : C.muted }}>{fp}</div>
 
                   {/* Salary */}
