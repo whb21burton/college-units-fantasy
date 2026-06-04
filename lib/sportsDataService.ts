@@ -406,28 +406,36 @@ export async function syncStats(
 
       // QB — top scorer only — store RAW pts, ODR applied at display time
       units.QB.sort((a, b) => b.pts - a.pts)
-      add(null, 'unit_QB', units.QB[0] ? roundHU(units.QB[0].pts) : 0)
+      const qbRaw = units.QB[0] ? roundHU(units.QB[0].pts) : 0
+      add(null, 'unit_QB', qbRaw)
+      add(null, 'unit_QB_fpts', roundHU(qbRaw * mult))
 
       // RB
       units.RB.sort((a, b) => b.pts - a.pts)
       const rbTop3 = units.RB.slice(0, 3) // HARD CAP: top 3 only
       let rbRaw = 0
       for (let i = 0; i < rbTop3.length; i++) rbRaw += rbTop3[i].pts * RB_WEIGHTS[i]
-      add(null, 'unit_RB', roundHU(rbRaw))
+      const rbRawRounded = roundHU(rbRaw)
+      add(null, 'unit_RB', rbRawRounded)
+      add(null, 'unit_RB_fpts', roundHU(rbRawRounded * mult))
 
       // WR
       units.WR.sort((a, b) => b.pts - a.pts)
       const wrTop3 = units.WR.slice(0, 3) // HARD CAP: top 3 only
       let wrRaw = 0
       for (let i = 0; i < wrTop3.length; i++) wrRaw += wrTop3[i].pts * WR_WEIGHTS[i]
-      add(null, 'unit_WR', roundHU(wrRaw))
+      const wrRawRounded = roundHU(wrRaw)
+      add(null, 'unit_WR', wrRawRounded)
+      add(null, 'unit_WR_fpts', roundHU(wrRawRounded * mult))
 
       // TE
       units.TE.sort((a, b) => b.pts - a.pts)
       const teTop2 = units.TE.slice(0, 2) // HARD CAP: top 2 only
       let teRaw = 0
       for (let i = 0; i < teTop2.length; i++) teRaw += teTop2[i].pts * TE_WEIGHTS[i]
-      add(null, 'unit_TE', roundHU(teRaw))
+      const teRawRounded = roundHU(teRaw)
+      add(null, 'unit_TE', teRawRounded)
+      add(null, 'unit_TE_fpts', roundHU(teRawRounded * mult))
 
       // DEF — fallback field names handle CFBD's inconsistent casing
       const defSacks  = ts['sacks']             ?? ts['Sacks']             ?? 0
@@ -449,7 +457,9 @@ export async function syncStats(
         oppScore <= 20 ?  2 : 0
 
       const defRaw = defSacks*1 + defInts*2 + defFumRec*2 + defTDs*6 + defSafety*2 + ptsAllowedBonus
-      add(null, 'unit_DEF', roundHU(defRaw))
+      const defRawRounded = roundHU(defRaw)
+      add(null, 'unit_DEF', defRawRounded)
+      add(null, 'unit_DEF_fpts', roundHU(defRawRounded * mult))
       add(null, 'def_pts_allowed_bonus', ptsAllowedBonus)
       add(null, 'def_sacks',   defSacks)
       add(null, 'def_ints',    defInts)
@@ -459,7 +469,9 @@ export async function syncStats(
 
       // K
       units.K.sort((a, b) => b.pts - a.pts)
-      add(null, 'unit_K', units.K[0] ? roundHU(units.K[0].pts) : 0)
+      const kRaw = units.K[0] ? roundHU(units.K[0].pts) : 0
+      add(null, 'unit_K', kRaw)
+      add(null, 'unit_K_fpts', roundHU(kRaw * mult))
 
       // ── Persist: delete old rows for this school+game, insert fresh ───────
       await db.from('cached_stats').delete().eq('game_id', gameId).eq('school', school)

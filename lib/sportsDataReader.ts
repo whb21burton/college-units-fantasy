@@ -157,8 +157,10 @@ export async function getSchoolWeekGameLog(
       .select('week, stat_type, value')
       .eq('school', school)
       .eq('season', season)
-      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K', 'game_mult',
-                        'def_sacks', 'def_ints', 'def_fum_rec', 'def_tds', 'def_safeties'])
+      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K',
+                        'unit_QB_fpts', 'unit_RB_fpts', 'unit_WR_fpts', 'unit_TE_fpts',
+                        'unit_DEF_fpts', 'unit_K_fpts',
+                        'game_mult', 'def_sacks', 'def_ints', 'def_fum_rec', 'def_tds', 'def_safeties'])
       .is('player_name', null),
     admin
       .from('cached_stats')
@@ -194,13 +196,18 @@ export async function getSchoolWeekGameLog(
     if (row.game_id) gameIdToWeek[row.game_id] = row.week;
   }
 
-  const unitPtsByWeek: Record<number, number> = {};
+  const unitPtsByWeek:  Record<number, number> = {};
+  const unitFptsByWeek: Record<number, number> = {};
   const multByWeek:    Record<number, number> = {};
   const defStatsByWeek: Record<number, { sacks: number; ints: number; fumRec: number; defTd: number; safeties: number }> = {};
   for (const row of unitStatRows.data ?? []) {
     if (row.stat_type === `unit_${unitType}`) {
       unitPtsByWeek[row.week] = row.value;
-    } else if (row.stat_type === 'game_mult') {
+    }
+    if (row.stat_type === `unit_${unitType}_fpts`) {
+      unitFptsByWeek[row.week] = row.value;
+    }
+    if (row.stat_type === 'game_mult') {
       multByWeek[row.week] = row.value;
     } else if (row.stat_type.startsWith('def_')) {
       if (!defStatsByWeek[row.week]) defStatsByWeek[row.week] = { sacks: 0, ints: 0, fumRec: 0, defTd: 0, safeties: 0 };
@@ -368,7 +375,11 @@ export async function getSchoolWeekGameLog(
     const mult      = multByWeek[week] ?? null;
     const defStats  = unitType === 'DEF' ? (defStatsByWeek[week] ?? null) : undefined;
     const roundHU = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
-    const fptsVal = mult != null ? roundHU(pts * mult) : roundHU(pts)
+    // Use stored fpts if available (exact match with breakdown), else calculate
+    const storedFpts = unitFptsByWeek[week]
+    const fptsVal = storedFpts != null
+      ? storedFpts
+      : mult != null ? roundHU(pts * mult) : roundHU(pts)
     return {
       week,
       opponent,
