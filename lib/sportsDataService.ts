@@ -254,7 +254,7 @@ export async function syncStats(
   const PAGE = 1000
   while (true) {
     const { data: page, error: pageErr } = await db
-      .from('cached_players')
+      .from('season_rosters')
       .select('school, player_name, position')
       .in('school', allSchools)
       .eq('season', season)

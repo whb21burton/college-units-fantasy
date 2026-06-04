@@ -77,7 +77,7 @@ export async function GET(req: Request) {
         admin.from('cached_stats').select('stat_type, value')
           .eq('game_id', gameId).eq('school', school).is('player_name', null)
           .in('stat_type', ['def_sacks','def_ints','def_fum_rec','def_tds','def_safeties']),
-        admin.from('cached_players').select('player_name, position')
+        admin.from('season_rosters').select('player_name, position')
           .eq('school', school).eq('season', season),
       ]);
 
