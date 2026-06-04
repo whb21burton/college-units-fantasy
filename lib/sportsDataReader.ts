@@ -236,16 +236,23 @@ export async function getSchoolWeekGameLog(
 
     // isBye = week exists in season but no game scheduled (true bye)
     // vs week simply not in schedule at all (also treat as bye for display)
-    const isBye = pts === undefined  // no stats = not played = show as bye
+    // Distinguish between bye (has schedule entry, no stats)
+    // and upcoming (has schedule entry, game not yet played)
+    // and truly empty (no schedule entry at all)
+    const hasSched = !!sched
+    const isBye    = !hasSched && !completed  // no schedule entry = bye/off week
+    const isUpcoming = hasSched && !completed  // has game scheduled but not played yet
     if (!completed) {
       return {
         week,
         opponent,
         completed: false,
-        isBye: isBye,
+        isBye,
+        isUpcoming,
         fantasyPoints: null,
         rawPoints: null,
         multiplier: null,
+        odrMult: null,
         players: []
       };
     }
@@ -365,6 +372,7 @@ export async function getSchoolWeekGameLog(
       opponent,
       completed: true,
       isBye: false,
+      isUpcoming: false,
       fantasyPoints: fptsVal,   // NOW stores FPTS (WGTD×ODR) not raw WGTD
       wgtd: roundHU(pts),       // raw WGTD for reference
       fpts: fptsVal,

@@ -168,6 +168,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
 
   // Core state
   const [league,        setLeague]        = useState<any>(null);
+  const [upcomingWeek,  setUpcomingWeek]  = useState<number>(0);
   const [memberCount,   setMemberCount]   = useState(0);
   const [userId,        setUserId]        = useState<string | null>(null);
   const [pool,          setPool]          = useState<DraftUnit[]>([]);
@@ -265,6 +266,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       // Matchup context for opponent display
       // Show NEXT week's matchups for projections (current week is complete)
       const contestWeek = (lg.week ?? 1) + 1;
+      setUpcomingWeek(contestWeek);
       fetch(`/api/matchup-context?week=${contestWeek}&season=2025`)
         .then(r => r.json())
         .then(d => {
@@ -837,8 +839,10 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                         {!unitStats[unit.id] ? (
                           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, padding: '8px 0' }}>Loading stats…</div>
                         ) : (() => {
-                          const weeks = (unitStats[unit.id]?.weeks ?? [])
-                            .filter((w: any) => w.completed || w.isBye);
+                          // Show ALL weeks — played, bye, and upcoming
+                          const weeks = (unitStats[unit.id]?.weeks ?? []);
+                          // Determine upcoming week from league data
+                          const upcomingWk = upcomingWeek;
                           const ut = unit.unitType;
                           const expandKey = unit.id;
                           const expandedWk = expandedWeek[expandKey] ?? null;
@@ -884,6 +888,59 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                 </thead>
                                 <tbody>
                                   {weeks.map((wk: any) => {
+                                    const isThisUpcoming = wk.isUpcoming || wk.week === upcomingWk;
+
+                                    // UPCOMING WEEK — green outlined row with projected FPTS
+                                    if (isThisUpcoming && !wk.completed) {
+                                      const opp = wk.opponent;
+                                      const oppShortU = opp
+                                        ? (opp.length > 12 ? opp.slice(0, 12) + '…' : opp)
+                                        : '—';
+                                      // Calculate projected FPTS for this matchup
+                                      const avgF = (unit.avgFpts ?? unit.avgPerWeek ?? 0);
+                                      const oppRankU = opp
+                                        ? (unit.unitType === 'DEF'
+                                          ? (offRankMap[opp] ?? 50)
+                                          : (defRankMap[opp] ?? 50))
+                                        : 50;
+                                      const multU = oppRankU <= 5 ? 1.3 : oppRankU <= 10 ? 1.2
+                                        : oppRankU <= 15 ? 1.1 : oppRankU <= 25 ? 1.0
+                                        : oppRankU <= 35 ? 0.9 : oppRankU <= 50 ? 0.8
+                                        : oppRankU <= 80 ? 0.7 : oppRankU <= 100 ? 0.6 : 0.50;
+                                      const projFpts = avgF > 0 ? (avgF * multU).toFixed(2) : '—';
+                                      return (
+                                        <tr key={wk.week} style={{
+                                          outline: '2px solid rgba(21,198,120,.6)',
+                                          outlineOffset: '-1px',
+                                          background: 'rgba(21,198,120,.05)',
+                                        }}>
+                                          <td style={{ ...tdBase, textAlign: 'left', color: '#15c678', fontWeight: 700 }}>{wk.week}</td>
+                                          <td style={{ ...tdBase, textAlign: 'left' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                              {opp && logos[opp] && (
+                                                <img src={logos[opp]} alt={opp}
+                                                  style={{ width: 16, height: 16, objectFit: 'contain' }}
+                                                  onError={e => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />
+                                              )}
+                                              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: '#7eb8f7' }}>
+                                                {opp ? (homeMap[unit.school] ? 'vs ' : '@ ') + oppShortU : 'TBD'}
+                                              </span>
+                                            </div>
+                                          </td>
+                                          <td style={{ ...tdBase, textAlign: 'right', color: '#15c678', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+                                            {projFpts}
+                                          </td>
+                                          <td style={{ ...tdBase, textAlign: 'right', color: '#15c678', fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>
+                                            ×{multU.toFixed(1)}
+                                          </td>
+                                          {summaryCols.map(c => (
+                                            <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#3e5470' }}>—</td>
+                                          ))}
+                                          <td style={{ ...tdBase, color: '#15c678', fontSize: 9, textAlign: 'right' }}>▶</td>
+                                        </tr>
+                                      );
+                                    }
+
                                     // BYE WEEK — simple grey row, not clickable
                                     if (wk.isBye) {
                                       return (
