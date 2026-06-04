@@ -165,6 +165,8 @@ export async function GET(req: Request) {
         }
 
       } else if (unitType === 'RB') {
+        console.log('[rb-debug] Indiana w1 rbNameSet has Lee Beebe:', rbNameSet.has('Lee Beebe'))
+        console.log('[rb-debug] playerTotals keys:', Object.keys(playerTotals).slice(0, 10))
         const rbs = Object.entries(playerTotals)
           .filter(([name]) => rbNameSet.has(name))
           .map(([name, s]) => ({
