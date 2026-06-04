@@ -359,7 +359,9 @@ export default function LineupPage({ params }: { params: { id: string } }) {
   const remaining  = BUDGET - totalSalary;
   const filledCount = Object.values(lineup).filter(Boolean).length;
   const isComplete  = filledCount === SLOTS.length;
-  const isLocked    = firstGameTime ? new Date() >= new Date(firstGameTime) : false;
+  // TODO: re-enable when season is live
+  // const isLocked = firstGameTime ? new Date() >= new Date(firstGameTime) : false;
+  const isLocked = false;
 
   // Filtered pool for left panel
   const filteredPool = useMemo(() => {
