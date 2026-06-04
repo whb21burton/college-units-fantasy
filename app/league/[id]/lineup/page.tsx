@@ -267,6 +267,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       // Show NEXT week's matchups for projections (current week is complete)
       const contestWeek = (lg.week ?? 1) + 1;
       setUpcomingWeek(contestWeek);
+      console.log('[lineup] upcomingWeek set to:', contestWeek, 'lg.week:', lg.week);
       fetch(`/api/matchup-context?week=${contestWeek}&season=2025`)
         .then(r => r.json())
         .then(d => {
