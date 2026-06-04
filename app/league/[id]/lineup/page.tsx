@@ -221,7 +221,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       const confParam = noFilter ? '' : `?conference=${encodeURIComponent(lg.conference_filter)}`;
       console.log('[lineup] lg.league_type:', lg.league_type, 'confParam:', confParam);
       try {
-        const poolRes = await fetch(`/api/player-pool${confParam}`);
+        const poolRes = await fetch(`/api/player-pool${confParam}${confParam ? '&' : '?'}_t=${Date.now()}`);
         const d = await poolRes.json();
         console.log('[lineup] pool fetch status:', poolRes.status, 'count:', Array.isArray(d) ? d.length : 'not array', 'sample:', JSON.stringify(d?.[0]));
         setPool(Array.isArray(d) ? d : []);
