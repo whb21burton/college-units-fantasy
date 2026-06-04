@@ -354,16 +354,9 @@ export async function syncStats(
         if (pos === 'QB' || pos === 'RB' || pos === 'WR' || pos === 'TE' || pos === 'K') {
           unit = pos
         } else if (!pos) {
-          // Unknown position — infer from stats as last resort only
-          if (passE && (passE.YDS||0) > 0) unit = 'QB'
-          else if (kickE && !rushE && !recvE) unit = 'K'
-          else if (rushE && !recvE) unit = 'RB'
-          else if (recvE && !rushE) unit = 'WR'
-          else if (rushE && recvE) {
-            const rPts = (rushE.YDS||0)*SCORING.rushYd + (rushE.TD||0)*SCORING.rushTd
-            const cPts = (recvE.YDS||0)*SCORING.recYd + (recvE.TD||0)*SCORING.recTd
-            unit = rPts >= cPts ? 'RB' : 'WR'
-          }
+          // No position found in cached_players — skip this player entirely
+          // This ensures sync and breakdown use identical player sets
+          continue
         }
 
         if (!unit) continue
