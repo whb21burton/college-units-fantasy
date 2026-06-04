@@ -286,6 +286,12 @@ export async function syncStats(
     posLookup[strippedNorm] = p.position
   }
 
+  const pittsWR = Object.entries(posLookup)
+    .filter(([k]) => k.startsWith('Pittsburgh||') && posLookup[k] === 'WR')
+    .slice(0, 5)
+  console.log('[posLookup] Pittsburgh WRs:', pittsWR.length, pittsWR.map(([k]) => k))
+  console.log('[posLookup] Raphael lookup:', posLookup['Pittsburgh||Raphael Williams'] ?? 'NOT FOUND')
+
   const teInLookup = Object.values(posLookup).filter(p => p === 'TE').length
   if (teInLookup === 0) {
     console.error('[posLookup] WARNING: 0 TEs found — cached_players may be empty for this season')
