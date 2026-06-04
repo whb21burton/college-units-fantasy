@@ -225,26 +225,6 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         const d = await poolRes.json();
         console.log('[lineup] pool fetch status:', poolRes.status, 'count:', Array.isArray(d) ? d.length : 'not array', 'sample:', JSON.stringify(d?.[0]));
         setPool(Array.isArray(d) ? d : []);
-        // Pre-fetch breakdowns for all units so FPTS shows immediately
-        const units = Array.isArray(d) ? d : [];
-        for (const unit of units) {
-          // Fetch game log first
-          fetch(`/api/unit-stats?school=${encodeURIComponent(unit.school)}&unitType=${unit.unitType}&season=2025`)
-            .then(r => r.json())
-            .then(gameLog => {
-              setUnitStats((prev: Record<string, any>) => ({ ...prev, [unit.id]: gameLog }));
-              // Then fetch breakdown for each completed week
-              const completedWeeks = (gameLog?.weeks ?? []).filter((w: any) => w.completed);
-              for (const wk of completedWeeks) {
-                const bdKey = `${unit.id}_w${wk.week}`;
-                fetch(`/api/unit-stats?school=${encodeURIComponent(unit.school)}&unitType=${unit.unitType}&season=2025&week=${wk.week}`)
-                  .then(r => r.json())
-                  .then(bd => setWeekBreakdown((prev: Record<string, any>) => ({ ...prev, [bdKey]: bd })))
-                  .catch(() => {});
-              }
-            })
-            .catch(() => {});
-        }
       } catch (err) {
         console.error('[lineup] pool fetch failed:', err);
       }
