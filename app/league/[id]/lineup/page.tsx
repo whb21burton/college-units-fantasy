@@ -889,10 +889,13 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                 </thead>
                                 <tbody>
                                   {weeks.map((wk: any) => {
-                                    const isThisUpcoming = wk.isUpcoming || wk.week === upcomingWk;
+                                    // Only the FIRST unplayed scheduled week gets green outline
+                                    const isThisUpcoming = wk.week === upcomingWk && !wk.completed && !wk.isBye;
+                                    // Future weeks beyond upcoming = grey projected
+                                    const isFuture = !wk.completed && !wk.isBye && wk.week > upcomingWk;
 
-                                    // UPCOMING WEEK — green outlined row with projected FPTS
-                                    if (isThisUpcoming && !wk.completed) {
+                                    // UPCOMING WEEK — green outlined row
+                                    if (isThisUpcoming) {
                                       const opp = wk.opponent;
                                       const oppShortU = opp
                                         ? (opp.length > 12 ? opp.slice(0, 12) + '…' : opp)
@@ -938,6 +941,48 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                             <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#3e5470' }}>—</td>
                                           ))}
                                           <td style={{ ...tdBase, color: '#15c678', fontSize: 9, textAlign: 'right' }}>▶</td>
+                                        </tr>
+                                      );
+                                    }
+
+                                    // FUTURE WEEK — grey projected, no breakdown
+                                    if (isFuture) {
+                                      const opp = wk.opponent;
+                                      const oppShortF = opp
+                                        ? (opp.length > 12 ? opp.slice(0, 12) + '…' : opp)
+                                        : '—';
+                                      const avgF = (unit.avgFpts ?? unit.avgPerWeek ?? 0);
+                                      const oppRankF = opp
+                                        ? (unit.unitType === 'DEF'
+                                          ? (offRankMap[opp] ?? 50)
+                                          : (defRankMap[opp] ?? 50))
+                                        : 50;
+                                      const multF = oppRankF <= 5 ? 1.3 : oppRankF <= 10 ? 1.2
+                                        : oppRankF <= 15 ? 1.1 : oppRankF <= 25 ? 1.0
+                                        : oppRankF <= 35 ? 0.9 : oppRankF <= 50 ? 0.8
+                                        : oppRankF <= 80 ? 0.7 : oppRankF <= 100 ? 0.6 : 0.50;
+                                      const projF = avgF > 0 ? (avgF * multF).toFixed(2) : '—';
+                                      return (
+                                        <tr key={wk.week} style={{ opacity: 0.45 }}>
+                                          <td style={{ ...tdBase, textAlign: 'left', color: '#3e5470' }}>{wk.week}</td>
+                                          <td style={{ ...tdBase, textAlign: 'left' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                              {opp && logos[opp] && (
+                                                <img src={logos[opp]} alt={opp}
+                                                  style={{ width: 16, height: 16, objectFit: 'contain', opacity: 0.5 }}
+                                                  onError={e => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />
+                                              )}
+                                              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: '#3e5470' }}>
+                                                {opp ? (homeMap[unit.school] ? 'vs ' : '@ ') + oppShortF : 'TBD'}
+                                              </span>
+                                            </div>
+                                          </td>
+                                          <td style={{ ...tdBase, textAlign: 'right', color: '#3e5470', fontSize: 10 }}>{projF}</td>
+                                          <td style={{ ...tdBase, textAlign: 'right', color: '#3e5470', fontSize: 10 }}>×{multF.toFixed(1)}</td>
+                                          {summaryCols.map(c => (
+                                            <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#2a3a52' }}>—</td>
+                                          ))}
+                                          <td style={{ ...tdBase, color: '#2a3a52' }}></td>
                                         </tr>
                                       );
                                     }
