@@ -926,7 +926,9 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                           <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
                                             {bd?.fpts != null
                                               ? bd.fpts.toFixed(2)
-                                              : <span style={{ color: C.muted, fontSize: 10 }}>…</span>}
+                                              : wk.fantasyPoints != null
+                                                ? wk.fantasyPoints.toFixed(2)
+                                                : '—'}
                                           </td>
                                           <td style={{ ...tdBase, textAlign: 'right', color: multColor, fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>
                                             ×{mult.toFixed(2)}
@@ -1023,13 +1025,16 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                               </table>
                               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#4a5d7a', marginTop: 6 }}>
                                 {(() => {
-                                  // Calculate avg from actual bd.fpts values — most accurate
-                                  const allBds = (unitStats[unit.id]?.weeks ?? [])
-                                    .map((w: any) => weekBreakdown[`${unit.id}_w${w.week}`])
-                                    .filter((bd: any) => bd?.fpts != null)
-                                  const playedCount = allBds.length
-                                  const avgFpts = playedCount > 0
-                                    ? allBds.reduce((s: number, bd: any) => s + bd.fpts, 0) / playedCount
+                                  const allWeeks = (unitStats[unit.id]?.weeks ?? [])
+                                    .filter((w: any) => w.completed)
+                                  const playedCount = allWeeks.length
+                                  // Use bd.fpts if available, fall back to wk.fantasyPoints
+                                  const fptsValues = allWeeks.map((w: any) => {
+                                    const bd = weekBreakdown[`${unit.id}_w${w.week}`]
+                                    return bd?.fpts ?? w.fantasyPoints ?? null
+                                  }).filter((v: any) => v != null)
+                                  const avgFpts = fptsValues.length > 0
+                                    ? fptsValues.reduce((s: number, v: number) => s + v, 0) / fptsValues.length
                                     : 0
                                   return avgFpts > 0
                                     ? `${avgFpts.toFixed(2)} avg FPTS (${playedCount} games)`
