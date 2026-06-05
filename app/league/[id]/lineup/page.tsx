@@ -267,7 +267,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
 
       // Matchup context for opponent display
       // Show NEXT week's matchups for projections (current week is complete)
-      const contestWeek = (lg.week ?? 1) + 1;
+      const contestWeek = lg.week ?? 5;  // league.week IS the contest week
       setUpcomingWeek(contestWeek);
 
       fetch(`/api/matchup-context?week=${contestWeek}&season=2025`)
@@ -287,7 +287,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         .select('*')
         .eq('league_id', params.id)
         .eq('user_id', user.id)
-        .eq('week', (lg.week ?? 1) + 1)
+        .eq('week', lg.week ?? 5)
         .eq('entry_type', 'lineup')
         .eq('entry_number', entryNumber);
 

@@ -741,7 +741,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
   const maxPerAccount = league?.max_entries_per_user ?? 1;
   const buyInCents = Math.round((league?.buy_in ?? 0) * 100);
 
-  const week = (league?.week ?? 1) + 1;  // contest week = next unplayed week
+  const week = league?.week ?? 5;  // contest week — stored directly in league
 
   useEffect(() => {
     if (!userId) { setLoading(false); return; }
