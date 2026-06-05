@@ -277,9 +277,6 @@ export default function CreateLeaguePage() {
   const [userEmail,       setUserEmail]       = useState<string | null>(null);
   const [availableBrackets, setAvailableBrackets] = useState<any[]>([]);
   const [entriesPerPerson, setEntriesPerPerson] = useState(1);
-  const [selectedWeek,    setSelectedWeek]     = useState(5);
-
-  const CURRENT_WEEK = 5; // weeks 1-4 already played
 
   // Step 2
   const [draftType,    setDraftType]    = useState<'snake' | 'salary'>('snake');
@@ -382,7 +379,7 @@ export default function CreateLeaguePage() {
           buy_in:      effectiveBuyIn,
           league_size: leagueType === 'bracket' ? 999999 : entries,
           max_entries_per_user: leagueType === 'bracket' ? entriesPerPerson : 1,
-          week:        leagueType === 'weekly' ? selectedWeek : undefined,
+
           draft_type:  draftType,
           salary_cap:  draftType === 'salary' ? effectiveCap : null,
           is_public:   false,
@@ -569,43 +566,6 @@ export default function CreateLeaguePage() {
               )}
             </div>
 
-            {leagueType === 'weekly' && (
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10,
-                  letterSpacing: 2, color: '#4a5d7a', textTransform: 'uppercase' as const,
-                  display: 'block', marginBottom: 8 }}>Week</label>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' as const }}>
-                  {Array.from({ length: 14 }, (_, i) => i + 1).map(w => {
-                    const played = w < 5;
-                    const sel = w === selectedWeek;
-                    return (
-                      <div
-                        key={w}
-                        onClick={() => { if (!played) setSelectedWeek(w); }}
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 6,
-                          border: sel ? '2px solid #f5a623' : '2px solid #1a2b40',
-                          background: sel ? 'rgba(245,166,35,.15)' : '#0c1422',
-                          color: played ? '#2a3a52' : sel ? '#f5a623' : '#7a90aa',
-                          fontFamily: 'Anton,sans-serif',
-                          fontSize: 13,
-                          cursor: played ? 'not-allowed' : 'pointer',
-                          opacity: played ? 0.35 : 1,
-                          textDecoration: played ? 'line-through' : 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          userSelect: 'none' as const,
-                          transition: 'all .12s',
-                        }}
-                      >{w}</div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {/* Number of Managers — first field for non-bracket leagues */}
             {leagueType !== 'bracket' && (

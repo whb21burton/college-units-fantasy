@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
         conference_filter: storedConferenceFilter,
         is_public:         isPublic,
         league_type:       body.league_type ?? 'season',
-        week:              body.week ?? null,
+        week:              body.league_type === 'weekly' ? 5 : null,
         is_capped:              isCapped,
         max_entries_per_user:   maxEntriesPerUser,
         invite_code:            (body.invite_code?.trim().toUpperCase()) || generateInviteCode(),
