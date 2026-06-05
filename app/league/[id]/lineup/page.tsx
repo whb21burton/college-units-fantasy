@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 
@@ -165,6 +165,8 @@ function formatDate(isoTime: string | null): string {
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function LineupPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const entryNumber = parseInt(searchParams?.get('entry') ?? '1', 10);
 
   // Core state
   const [league,        setLeague]        = useState<any>(null);
@@ -286,7 +288,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
         .eq('league_id', params.id)
         .eq('user_id', user.id)
         .eq('week', lg.week ?? 1)
-        .eq('entry_type', 'lineup');
+        .eq('entry_type', 'lineup')
+        .eq('entry_number', entryNumber);
 
       if (existing && existing.length > 0) {
         const restored: Record<string, DraftUnit | null> = {};
@@ -485,7 +488,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       const res = await fetch('/api/lineup/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ league_id: params.id, week, picks }),
+        body: JSON.stringify({ league_id: params.id, week, picks, entry_number: entryNumber }),
       });
       if (res.ok) {
         goBack(params.id, router);

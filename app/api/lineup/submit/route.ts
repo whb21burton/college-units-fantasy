@@ -33,11 +33,13 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { league_id, week, picks } = body as {
+    const { league_id, week, picks, entry_number } = body as {
       league_id?: string;
       week?: number;
+      entry_number?: number;
       picks?: Array<{ unit_id: string; slot: string; slot_key?: string; salary_cost: number; player_data?: any }>;
     };
+    const entryNum = entry_number ?? 1;
 
     if (!league_id || !week || !picks?.length) {
       return NextResponse.json({ error: 'league_id, week, and picks are required' }, { status: 400 });
@@ -156,7 +158,8 @@ export async function POST(req: NextRequest) {
       .eq('league_id', league_id)
       .eq('user_id', user.id)
       .eq('week', week)
-      .eq('entry_type', 'lineup');
+      .eq('entry_type', 'lineup')
+      .eq('entry_number', entryNum);
 
     // Store slot + salary inside player_data to avoid schema cache issues
     // with the separately-added 'slot' column.
@@ -166,10 +169,11 @@ export async function POST(req: NextRequest) {
       user_id:     user.id,
       player_id:   p.unit_id,
       player_data: { ...(p.player_data ?? {}), _slot: p.slot_key ?? p.slot, _salary: p.salary_cost },
-      round:       0,
-      pick_number: Math.floor(Math.random() * 1_000_000_000) + i,
+      round:        0,
+      pick_number:  Math.floor(Math.random() * 1_000_000_000) + i,
       week,
-      entry_type:  'lineup',
+      entry_type:   'lineup',
+      entry_number: entryNum,
     }));
 
     const { error: insertErr } = await admin.from('draft_picks').insert(rows);

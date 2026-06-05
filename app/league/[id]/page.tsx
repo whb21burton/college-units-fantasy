@@ -898,7 +898,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
 
         {/* Open full builder button */}
         <button
-          onClick={() => router.push(`/league/${leagueId}/lineup`)}
+          onClick={() => router.push(`/league/${leagueId}/lineup?entry=${activeEntryNum}`)}
           style={{ width: '100%', marginBottom: 20, padding: '13px 0', background: 'linear-gradient(135deg,#f5a623,#ffd166)', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' }}
         >
           Open Full Lineup Builder →
