@@ -22,7 +22,7 @@ export async function GET() {
     .eq('is_public', true)
     .eq('commissioner_id', '603b48b1-3e85-4c72-bedb-c5166bbe9c6e')
     .in('league_type', ['weekly', 'season'])
-    .neq('status', 'cancelled')
+    .in('status', ['forming', 'active'])
     .order('created_at', { ascending: false });
 
   if (error) {

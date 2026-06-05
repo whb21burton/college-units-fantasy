@@ -207,6 +207,150 @@ function PageControls() {
   )
 }
 
+function LiveContestsPanel() {
+  const [leagues, setLeagues] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [msg, setMsg] = useState('')
+
+  async function load() {
+    setLoading(true)
+    const res = await fetch('/api/admin/stats')
+    // Use admin client directly via a dedicated fetch
+    const r = await fetch('/api/public-leagues?_admin=1')
+    const all = await r.json()
+    // Also fetch live/scoring which public-leagues no longer returns
+    const r2 = await fetch('/api/leagues?admin=1&type=weekly')
+    const all2 = r2.ok ? await r2.json() : []
+    // Merge and dedupe
+    const map: Record<string, any> = {}
+    for (const l of [...(Array.isArray(all) ? all : []), ...(Array.isArray(all2) ? all2 : [])]) map[l.id] = l
+    setLeagues(Object.values(map).filter((l: any) => l.league_type === 'weekly').sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function setStatus(leagueId: string, status: string) {
+    setBusy(leagueId + status)
+    setMsg('')
+    const res = await fetch(`/api/leagues/${leagueId}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    const d = await res.json()
+    if (res.ok) { setMsg(`✓ Status updated to ${status}`); load() }
+    else setMsg(`✗ ${d.error}`)
+    setBusy(null)
+  }
+
+  async function doPayout(leagueId: string) {
+    setBusy(leagueId + 'payout')
+    setMsg('')
+    const res = await fetch(`/api/leagues/${leagueId}/payout`, { method: 'POST' })
+    const d = await res.json()
+    if (res.ok) { setMsg(`✓ Payout complete — ${d.payoutCount} winners credited`); load() }
+    else setMsg(`✗ ${d.error}`)
+    setBusy(null)
+  }
+
+  async function doDissolve(leagueId: string, name: string) {
+    if (!confirm(`Delete & refund "${name}"? This cannot be undone.`)) return
+    setBusy(leagueId + 'dissolve')
+    setMsg('')
+    const res = await fetch(`/api/leagues/${leagueId}/dissolve`, { method: 'POST' })
+    const d = await res.json()
+    if (res.ok) { setMsg(`✓ Dissolved — ${d.refunded} refunds issued`); load() }
+    else setMsg(`✗ ${d.error}`)
+    setBusy(null)
+  }
+
+  const STATUS_COLOR: Record<string, string> = {
+    forming: C.muted, active: C.green, live: '#7eb8f7', scoring: C.gold, completed: C.sub, cancelled: C.red,
+  }
+
+  return (
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>
+          ⚡ Live Contests
+        </div>
+        <button onClick={load} style={{ padding: '6px 14px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>
+          ↻ Refresh
+        </button>
+      </div>
+
+      {msg && <div style={{ padding: '8px 12px', background: msg.startsWith('✓') ? 'rgba(21,198,120,.1)' : 'rgba(240,58,90,.1)', border: `1px solid ${msg.startsWith('✓') ? 'rgba(21,198,120,.3)' : 'rgba(240,58,90,.3)'}`, borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: msg.startsWith('✓') ? C.green : C.red, marginBottom: 12 }}>{msg}</div>}
+
+      {loading ? (
+        <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center', padding: 20 }}>Loading…</div>
+      ) : leagues.length === 0 ? (
+        <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center', padding: 20 }}>No weekly leagues found</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.surf3}` }}>
+                {['Name', 'Wk', 'Entries', 'Buy-in', 'Status', 'Actions'].map(h => (
+                  <th key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', padding: '6px 8px', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {leagues.map((l: any) => (
+                <tr key={l.id} style={{ borderBottom: `1px solid ${C.surf3}` }}>
+                  <td style={{ padding: '8px 8px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.text, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</td>
+                  <td style={{ padding: '8px 8px', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>{l.week ?? '—'}</td>
+                  <td style={{ padding: '8px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>{l.member_count ?? '—'}</td>
+                  <td style={{ padding: '8px 8px', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>{l.buy_in > 0 ? `$${l.buy_in}` : 'Free'}</td>
+                  <td style={{ padding: '8px 8px' }}>
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: STATUS_COLOR[l.status] ?? C.muted, textTransform: 'uppercase' }}>{l.status}</span>
+                  </td>
+                  <td style={{ padding: '8px 8px' }}>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {l.status === 'forming' && (
+                        <button onClick={() => setStatus(l.id, 'active')} disabled={busy === l.id + 'active'}
+                          style={{ padding: '4px 8px', background: 'rgba(21,198,120,.12)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 4, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green }}>
+                          → Active
+                        </button>
+                      )}
+                      {l.status === 'active' && (
+                        <button onClick={() => setStatus(l.id, 'live')} disabled={busy === l.id + 'live'}
+                          style={{ padding: '4px 8px', background: 'rgba(126,184,247,.12)', border: '1px solid rgba(126,184,247,.3)', borderRadius: 4, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#7eb8f7' }}>
+                          → Live
+                        </button>
+                      )}
+                      {l.status === 'live' && (
+                        <button onClick={() => setStatus(l.id, 'scoring')} disabled={busy === l.id + 'scoring'}
+                          style={{ padding: '4px 8px', background: 'rgba(245,166,35,.12)', border: '1px solid rgba(245,166,35,.3)', borderRadius: 4, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold }}>
+                          → Scoring
+                        </button>
+                      )}
+                      {l.status === 'scoring' && (
+                        <button onClick={() => doPayout(l.id)} disabled={busy === l.id + 'payout'}
+                          style={{ padding: '4px 8px', background: 'rgba(245,166,35,.18)', border: '1px solid rgba(245,166,35,.4)', borderRadius: 4, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold, fontWeight: 700 }}>
+                          {busy === l.id + 'payout' ? '…' : '$ Audit & Payout'}
+                        </button>
+                      )}
+                      {l.status !== 'completed' && l.status !== 'cancelled' && (
+                        <button onClick={() => doDissolve(l.id, l.name)} disabled={busy === l.id + 'dissolve'}
+                          style={{ padding: '4px 8px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.25)', borderRadius: 4, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.red }}>
+                          {busy === l.id + 'dissolve' ? '…' : '✕ Delete+Refund'}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function WeeklyPickemCreator() {
   const [name, setName] = useState('')
   const [week, setWeek] = useState(5)
@@ -1451,6 +1595,7 @@ export default function PlatformManagerPage() {
         </div>
 
         <PageControls />
+        <LiveContestsPanel />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 20 }}>
           <WeeklyPickemCreator />
           <PublicBracketCreator />
