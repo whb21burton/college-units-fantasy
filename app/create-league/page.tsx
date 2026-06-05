@@ -569,37 +569,37 @@ export default function CreateLeaguePage() {
               )}
             </div>
 
-            {/* Contest Week — weekly leagues only */}
             {leagueType === 'weekly' && (
               <div style={{ marginBottom: 20 }}>
-                <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
-                  Contest Week
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10,
+                  letterSpacing: 2, color: '#4a5d7a', textTransform: 'uppercase',
+                  display: 'block', marginBottom: 8 }}>Week</label>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {Array.from({ length: 14 }, (_, i) => i + 1).map(w => {
-                    const played = w < CURRENT_WEEK;
-                    const isSel  = selectedWeek === w;
+                    const played = w < 5;
+                    const selected = w === selectedWeek;
                     return (
                       <button
                         key={w}
-                        onClick={() => setSelectedWeek(w)}
+                        type="button"
+                        onClick={() => !played && setSelectedWeek(w)}
                         style={{
-                          width: 40, height: 36, borderRadius: 6,
-                          border: `1px solid ${isSel ? C.gold : C.surf3}`,
-                          background: isSel ? 'rgba(245,166,35,.15)' : C.surf2,
-                          color: isSel ? C.gold : played ? C.muted : C.sub,
-                          fontFamily: 'Anton,sans-serif', fontSize: 13,
+                          width: 36, height: 36,
+                          borderRadius: 6,
+                          border: `2px solid ${selected ? '#f5a623' : played ? '#1a2b40' : '#1a2b40'}`,
+                          background: selected ? 'rgba(245,166,35,.15)' : '#0c1422',
+                          color: played ? '#2a3a52' : selected ? '#f5a623' : '#7a90aa',
+                          fontFamily: 'Anton,sans-serif',
+                          fontSize: 13,
                           cursor: played ? 'not-allowed' : 'pointer',
                           opacity: played ? 0.35 : 1,
                           textDecoration: played ? 'line-through' : 'none',
                           pointerEvents: played ? 'none' : 'auto',
+                          transition: 'all .12s',
                         }}
                       >{w}</button>
                     );
                   })}
-                </div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 6 }}>
-                  Weeks 1–{CURRENT_WEEK - 1} already played · Week {selectedWeek} selected
                 </div>
               </div>
             )}
