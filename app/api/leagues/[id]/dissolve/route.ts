@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 });
     if (league.commissioner_id !== user.id) return NextResponse.json({ error: 'Not commissioner' }, { status: 403 });
     if (league.league_type === 'weekly') {
-      return NextResponse.json({ error: 'Weekly leagues cannot be dissolved with refunds' }, { status: 400 });
+      // Weekly leagues CAN be dissolved with refunds — fall through to normal refund logic
     }
 
     if (league.buy_in === 0) {
