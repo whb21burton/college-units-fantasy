@@ -36,9 +36,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const { data: paidTransactions } = await admin
       .from('transactions')
       .select('id, user_id, amount_cents')
-      .eq('league_id', params.id)
       .eq('type', 'contest_entry')
-      .eq('status', 'completed');
+      .eq('status', 'completed')
+      .or(`league_id.eq.${params.id},description.ilike.%${params.id}%`);
 
     const paidMembers = paidTransactions ?? [];
     let refundCount = 0;
