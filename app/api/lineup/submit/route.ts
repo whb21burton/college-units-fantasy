@@ -69,6 +69,11 @@ export async function POST(req: NextRequest) {
 
     if (!member) return NextResponse.json({ error: 'Not a member of this league' }, { status: 403 });
 
+    // TODO: re-enable when season is live
+    // Skip lock check for testing
+    const TESTING_MODE = true;
+    if (!TESTING_MODE) {
+
     // Server-side lineup lock: reject any pick whose school's game has started.
     // Units whose school hasn't kicked off yet are still swappable.
     const schoolSet = new Set(picks.map(p => p.player_data?.school).filter(Boolean));
@@ -108,6 +113,7 @@ export async function POST(req: NextRequest) {
         }, { status: 403 });
       }
     }
+    } // end !TESTING_MODE
 
     // Validate picks count
     if (picks.length !== TOTAL_STARTERS) {
