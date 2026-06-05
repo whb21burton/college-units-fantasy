@@ -1062,13 +1062,13 @@ function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
     </div>
   );
 
-  const members = data?.members ?? [];
+  const entries = data?.entries ?? data?.members ?? [];
   const weeks   = data?.weeks ?? [];
 
   const weekScores = week
-    ? members.map((m: any) => ({ ...m, displayScore: (m.weeklyScores?.[week] ?? 0) }))
+    ? entries.map((e: any) => ({ ...e, displayScore: Math.round((e.weeklyScores?.[week] ?? 0) * 100) / 100 }))
              .sort((a: any, b: any) => b.displayScore - a.displayScore)
-    : members;
+    : entries.map((e: any) => ({ ...e, displayScore: e.total }));
 
   return (
     <div style={{ maxWidth: 620 }}>
@@ -1101,7 +1101,7 @@ function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
         </div>
       )}
 
-      {members.length === 0 ? (
+      {entries.length === 0 ? (
         <div style={{
           background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 12,
           padding: '40px 28px', textAlign: 'center',
@@ -1122,7 +1122,7 @@ function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
               {week ? `WK ${week} PTS` : 'TOTAL PTS'}
             </span>
           </div>
-          {(week ? weekScores : members).map((m: any, i: number) => {
+          {weekScores.map((m: any, i: number) => {
             const pts = week ? m.displayScore : m.total;
             return (
               <div
