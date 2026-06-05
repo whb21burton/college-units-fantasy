@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 import DraftOrderEditor from '@/components/league/DraftOrderEditor';
+import { useWallet } from '@/context/WalletContext';
 function odrLabelFromMult(m: number) { return m >= 1.15 ? 'Elite' : m >= 1.05 ? 'Good' : m >= 0.95 ? 'Avg' : m >= 0.85 ? 'Weak' : 'Poor' }
 function getODRColor(m: number) { return m >= 1.15 ? '#15c678' : m >= 1.05 ? '#7fc97f' : m >= 0.95 ? '#f5a623' : m >= 0.85 ? '#f08030' : '#f03a5a' }
 
@@ -259,6 +260,7 @@ const WEEKLY_TABS: { key: Tab; label: string }[] = [
 export default function LeaguePage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { balance: walletBalance, refresh: refreshWallet } = useWallet();
   const isEmbed = searchParams.get('embed') === '1';
   const [league,       setLeague]       = useState<any>(null);
   const [members,      setMembers]      = useState<any[]>([]);
@@ -566,21 +568,6 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               }}>
                 {(league?.status || 'FORMING')}
               </span>
-              {(league?.league_type === 'weekly' || league?.league_type === 'dfs') && (
-                <button
-                  onClick={() => router.push(`/league/${params.id}/lineup`)}
-                  style={{
-                    marginLeft: 'auto',
-                    padding: '6px 14px',
-                    background: 'rgba(21,198,120,.15)',
-                    border: '1px solid rgba(21,198,120,.4)',
-                    borderRadius: 20,
-                    fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700,
-                    color: C.green, letterSpacing: 1.5, textTransform: 'uppercase',
-                    cursor: 'pointer',
-                  }}
-                >+ Add Entry</button>
-              )}
               {league?.league_type !== 'weekly' && league?.league_type !== 'dfs' && (
                 <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: isFull ? C.gold : C.sub }}>
                   {totalOccupied}/{league?.league_size} · {isFull ? 'Full' : spotsLeft + ' open'}
@@ -650,7 +637,14 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
             <WaiverTab league={league} userId={userId} />
           )}
           {activeTab === 'lineup' && (
-            <WeeklyLineupTab leagueId={params.id} router={router} userId={userId} league={league} />
+            <WeeklyLineupTab
+              leagueId={params.id}
+              router={router}
+              userId={userId}
+              league={league}
+              walletBalance={walletBalance ?? 0}
+              refreshWallet={refreshWallet ?? (() => {})}
+            />
           )}
           {activeTab === 'leaderboard' && (
             <WeeklyLeaderboardTab leagueId={params.id} />
@@ -731,7 +725,7 @@ const LINEUP_POS_COLOR: Record<string, string> = {
 };
 
 /* ── Weekly Lineup Tab ──────────────────────────────────────── */
-function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: string; router: any; userId: string | null; league: any }) {
+function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refreshWallet }: { leagueId: string; router: any; userId: string | null; league: any; walletBalance: number; refreshWallet: () => void }) {
   const [picks,          setPicks]          = useState<any[] | null>(null);
   const [firstGameTime,  setFirstGameTime]  = useState<string | null>(null);
   const [loading,        setLoading]        = useState(true);
@@ -742,6 +736,10 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
   const [unitFilter,     setUnitFilter]     = useState<string>('ALL');
   const [search,         setSearch]         = useState('');
   const [showPool,       setShowPool]       = useState(false);
+  const [myEntries,      setMyEntries]      = useState<any[]>([]);
+  const [activeEntryNum, setActiveEntryNum] = useState(1);
+  const maxPerAccount = league?.max_entries_per_user ?? 1;
+  const buyInCents = Math.round((league?.buy_in ?? 0) * 100);
 
   const week = league?.week ?? 1;
 
@@ -749,26 +747,38 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
     if (!userId) { setLoading(false); return; }
     async function load() {
       setLoading(true);
-      const [picksRes, ctxRes] = await Promise.all([
+      const [picksRes, ctxRes, allEntriesRes] = await Promise.all([
         supabase
           .from('draft_picks')
           .select('*')
           .eq('league_id', leagueId)
           .eq('user_id', userId!)
           .eq('week', week)
-          .eq('entry_type', 'lineup'),
+          .eq('entry_type', 'lineup')
+          .eq('entry_number', activeEntryNum),
         fetch(`/api/matchup-context?week=${week}&season=2025`)
           .then(r => r.json()).catch(() => ({})),
+        supabase
+          .from('draft_picks')
+          .select('entry_number')
+          .eq('league_id', leagueId)
+          .eq('user_id', userId!)
+          .eq('week', week)
+          .eq('entry_type', 'lineup'),
       ]);
       const p = picksRes.data ?? [];
       setPicks(p);
       setOriginalLineup(p);
       setLineupSubmitted(p.length > 0);
       setFirstGameTime(ctxRes.firstGameTime ?? null);
+      // Build unique entry numbers
+      const entryNums = Array.from(new Set((allEntriesRes.data ?? []).map((r: any) => r.entry_number ?? 1))) as number[];
+      if (entryNums.length === 0) entryNums.push(1);
+      setMyEntries(entryNums.map(n => ({ entry_number: n })));
       setLoading(false);
     }
     load();
-  }, [leagueId, userId, week]);
+  }, [leagueId, userId, week, activeEntryNum]);
 
   useEffect(() => {
     const allowedSchools: string[] | null = Array.isArray(league?.settings?.allowed_schools)
@@ -788,10 +798,81 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
     </div>
   );
 
+  async function handleAddEntry() {
+    if (myEntries.length >= maxPerAccount) {
+      alert(`Maximum ${maxPerAccount} entries per user.`);
+      return;
+    }
+    if (buyInCents > 0) {
+      if (walletBalance < buyInCents) {
+        alert(`Not enough funds. Need $${(buyInCents / 100).toFixed(2)}, you have $${(walletBalance / 100).toFixed(2)}.`);
+        return;
+      }
+      const payRes = await fetch('/api/wallet/bracket-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contestId: leagueId, buyInCents, entryNumber: myEntries.length + 1 }),
+      });
+      if (!payRes.ok) {
+        const d = await payRes.json();
+        alert(d.error ?? 'Payment failed');
+        return;
+      }
+      refreshWallet();
+    }
+    const nextNum = myEntries.length + 1;
+    setMyEntries(prev => [...prev, { entry_number: nextNum }]);
+    setActiveEntryNum(nextNum);
+    setPicks([]);
+    setOriginalLineup([]);
+    setLineupSubmitted(false);
+  }
+
   // Lock only if ALL units in the current lineup have kicked off.
   // If firstGameTime exists but the user has no lineup yet, keep unlocked.
   const isLocked = false; // Per-unit lock is now enforced server-side in /api/lineup/submit and /api/players/drop-add
   const lineupChanged = originalLineup !== null && JSON.stringify(picks) !== JSON.stringify(originalLineup);
+
+  const entryHeader = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+      {myEntries.map(e => (
+        <button
+          key={e.entry_number}
+          onClick={() => {
+            setActiveEntryNum(e.entry_number);
+            setPicks(null);
+            setLoading(true);
+          }}
+          style={{
+            padding: '5px 14px',
+            borderRadius: 20,
+            border: '1px solid ' + (activeEntryNum === e.entry_number ? C.gold : C.surf3),
+            background: activeEntryNum === e.entry_number ? 'rgba(245,166,35,.15)' : C.surf2,
+            color: activeEntryNum === e.entry_number ? C.gold : C.sub,
+            fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >Entry {e.entry_number}</button>
+      ))}
+      {myEntries.length < maxPerAccount && (
+        <button
+          onClick={handleAddEntry}
+          style={{
+            padding: '5px 14px',
+            borderRadius: 20,
+            border: '1px solid rgba(21,198,120,.4)',
+            background: 'rgba(21,198,120,.1)',
+            color: C.green,
+            fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >+ Add Entry</button>
+      )}
+      <span style={{ marginLeft: 'auto', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+        {myEntries.length}/{maxPerAccount} entries
+      </span>
+    </div>
+  );
 
   // No lineup submitted yet — show player pool inline
   if (!picks || picks.length === 0) {
@@ -807,6 +888,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
     return (
       <div style={{ maxWidth: 560 }}>
         {/* Header */}
+        {entryHeader}
         <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
           Build Your Lineup
         </div>
@@ -889,6 +971,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league }: { leagueId: strin
 
   return (
     <div style={{ maxWidth: 520 }}>
+      {entryHeader}
       {/* Status row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
