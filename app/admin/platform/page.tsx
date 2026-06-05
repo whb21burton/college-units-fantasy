@@ -209,7 +209,7 @@ function PageControls() {
 
 function WeeklyPickemCreator() {
   const [name, setName] = useState('')
-  const [week, setWeek] = useState(1)
+  const [week, setWeek] = useState(5)
   const [buyIn, setBuyIn] = useState(0)
   const [maxAccounts, setMaxAccounts] = useState<number | null>(null)
   const [maxPerAccount, setMaxPerAccount] = useState(1)
@@ -271,8 +271,8 @@ function WeeklyPickemCreator() {
       <label style={labelStyle}>Week</label>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 16 }}>
         {Array.from({ length: 14 }, (_, i) => i + 1).map(w => (
-          <button key={w} onClick={() => setWeek(w)}
-            style={{ padding: '8px 4px', border: `2px solid ${week === w ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: week === w ? 'rgba(245,166,35,.1)' : C.surf2, color: week === w ? C.gold : C.sub, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+          <button key={w} onClick={() => w >= 5 && setWeek(w)}
+            style={{ padding: '8px 4px', border: `2px solid ${week === w ? C.gold : C.surf3}`, borderRadius: 6, cursor: w < 5 ? 'not-allowed' : 'pointer', background: week === w ? 'rgba(245,166,35,.1)' : C.surf2, color: w < 5 ? '#2a3a52' : week === w ? C.gold : C.sub, fontFamily: 'Anton,sans-serif', fontSize: 12, opacity: w < 5 ? 0.35 : 1, textDecoration: w < 5 ? 'line-through' : 'none', pointerEvents: w < 5 ? 'none' : 'auto' as any }}>
             {w}
           </button>
         ))}
