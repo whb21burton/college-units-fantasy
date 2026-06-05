@@ -239,7 +239,7 @@ function effectivePts(
   return { pts: base * mult, isActual: false, base, storedMult: null };
 }
 
-type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'trade' | 'ranks' | 'lineup' | 'leaderboard';
+type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'trade' | 'ranks' | 'lineup' | 'leaderboard' | 'chat';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'draft',   label: 'Draft'    },
@@ -253,6 +253,7 @@ const TABS: { key: Tab; label: string }[] = [
 const WEEKLY_TABS: { key: Tab; label: string }[] = [
   { key: 'lineup',      label: 'Lineup'      },
   { key: 'leaderboard', label: 'Leaderboard' },
+  { key: 'chat',        label: 'Chat'        },
 ];
 
 export default function LeaguePage({ params }: { params: { id: string } }) {
@@ -557,18 +558,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
         <div style={{ background: 'linear-gradient(180deg, #0d1827 0%, #0c1422 100%)', borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
           <div className="mob-header-pad" style={{ padding: '16px 24px 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-              {isCommissioner ? (
-                <button
-                  onClick={() => setShowSettings(true)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: 0 }}
-                  title="Edit league settings"
-                >
-                  <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 0.3, color: C.text, textTransform: 'uppercase', margin: 0 }}>{league?.name}</h1>
-                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.gold, letterSpacing: 2, textTransform: 'uppercase' as const }}>✏️ Edit</span>
-                </button>
-              ) : (
-                <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 0.3, color: C.text, textTransform: 'uppercase', margin: 0 }}>{league?.name}</h1>
-              )}
+              <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 0.3, color: C.text, textTransform: 'uppercase', margin: 0 }}>{league?.name}</h1>
               <span style={{
                 fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 600, letterSpacing: 1.5,
                 color: C.gold, background: 'rgba(245,166,35,.12)', border: '1px solid rgba(245,166,35,.28)',
@@ -576,9 +566,26 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               }}>
                 {(league?.status || 'FORMING')}
               </span>
-              <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: isFull ? C.gold : C.sub }}>
-                {totalOccupied}/{league?.league_size} · {isFull ? 'Full' : spotsLeft + ' open'}
-              </span>
+              {(league?.league_type === 'weekly' || league?.league_type === 'dfs') && (
+                <button
+                  onClick={() => router.push(`/league/${params.id}/lineup`)}
+                  style={{
+                    marginLeft: 'auto',
+                    padding: '6px 14px',
+                    background: 'rgba(21,198,120,.15)',
+                    border: '1px solid rgba(21,198,120,.4)',
+                    borderRadius: 20,
+                    fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700,
+                    color: C.green, letterSpacing: 1.5, textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >+ Add Entry</button>
+              )}
+              {league?.league_type !== 'weekly' && league?.league_type !== 'dfs' && (
+                <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: isFull ? C.gold : C.sub }}>
+                  {totalOccupied}/{league?.league_size} · {isFull ? 'Full' : spotsLeft + ' open'}
+                </span>
+              )}
             </div>
             <div className="mob-scroll-x" style={{ display: 'flex', gap: 2 }}>
               {computedTabs.map(tab => (
@@ -648,70 +655,60 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           {activeTab === 'leaderboard' && (
             <WeeklyLeaderboardTab leagueId={params.id} />
           )}
-        </div>
-      </div>
-
-      {/* ══════════════════════════════════════════════
-          RIGHT CHAT PANEL
-      ══════════════════════════════════════════════ */}
-      <aside className="mob-hide" style={{
-        width: 280, flexShrink: 0, background: C.surf,
-        borderLeft: '1px solid ' + C.surf3,
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      }}>
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid ' + C.surf3, flexShrink: 0 }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.text, textTransform: 'uppercase' }}>League Chat</div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>{league?.name}</div>
-        </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {chatMessages.length === 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 8, opacity: .5 }}>
-              <div style={{ fontSize: 28 }}>💬</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6 }}>No messages yet.<br/>Start the conversation!</div>
-            </div>
-          )}
-          {chatMessages.map((msg: any, i: number) => {
-            const isMe = msg.user_id === userId;
-            return (
-              <div key={msg.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 3 }}>
-                  {isMe ? 'You' : (msg.team_name || 'Unknown')}
+          {activeTab === 'chat' && (
+            <div style={{ maxWidth: 600, margin: '0 auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 200px)', background: C.surf, borderRadius: 12, border: '1px solid ' + C.surf3, overflow: 'hidden' }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {chatMessages.length === 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 8, opacity: .5 }}>
+                      <div style={{ fontSize: 28 }}>💬</div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6 }}>No messages yet.<br/>Start the conversation!</div>
+                    </div>
+                  )}
+                  {chatMessages.map((msg: any, i: number) => {
+                    const isMe = msg.user_id === userId;
+                    return (
+                      <div key={msg.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 3 }}>
+                          {isMe ? 'You' : (msg.team_name || 'Unknown')}
+                        </div>
+                        <div style={{
+                          maxWidth: '85%', padding: '8px 11px',
+                          borderRadius: isMe ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+                          background: isMe ? 'rgba(212,168,40,.12)' : C.surf2,
+                          border: isMe ? '1px solid rgba(212,168,40,.22)' : '1px solid ' + C.surf3,
+                          fontFamily: 'Inter,sans-serif', fontSize: 13, color: C.text, lineHeight: 1.4,
+                          wordBreak: 'break-word',
+                        }}>
+                          {msg.message}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={chatEndRef} />
                 </div>
-                <div style={{
-                  maxWidth: '85%', padding: '8px 11px',
-                  borderRadius: isMe ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-                  background: isMe ? 'rgba(212,168,40,.12)' : C.surf2,
-                  border: isMe ? '1px solid rgba(212,168,40,.22)' : '1px solid ' + C.surf3,
-                  fontFamily: 'Inter,sans-serif', fontSize: 13, color: C.text, lineHeight: 1.4,
-                  wordBreak: 'break-word',
-                }}>
-                  {msg.message}
+                <div style={{ padding: '10px 14px', borderTop: '1px solid ' + C.surf3, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="text"
+                      placeholder="Message..."
+                      value={chatInput}
+                      onChange={e => setChatInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+                      style={{ flex: 1, padding: '9px 11px', background: C.bg, border: '1px solid ' + C.surf3, borderRadius: 8, color: C.text, fontFamily: 'Inter,sans-serif', fontSize: 13, outline: 'none', minWidth: 0 }}
+                    />
+                    <button
+                      onClick={sendChat}
+                      disabled={!chatInput.trim()}
+                      style={{ padding: '9px 13px', background: chatInput.trim() ? C.gold : C.surf3, border: 'none', borderRadius: 8, cursor: chatInput.trim() ? 'pointer' : 'default', fontFamily: 'Anton,sans-serif', fontSize: 14, color: chatInput.trim() ? C.bg : C.muted, transition: 'all .15s', flexShrink: 0 }}
+                    >→</button>
+                  </div>
                 </div>
               </div>
-            );
-          })}
-          <div ref={chatEndRef} />
+            </div>
+          )}
         </div>
-
-        <div style={{ padding: '10px 14px', borderTop: '1px solid ' + C.surf3, flexShrink: 0 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type="text"
-              placeholder="Message..."
-              value={chatInput}
-              onChange={e => setChatInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
-              style={{ flex: 1, padding: '9px 11px', background: C.bg, border: '1px solid ' + C.surf3, borderRadius: 8, color: C.text, fontFamily: 'Inter,sans-serif', fontSize: 13, outline: 'none', minWidth: 0 }}
-            />
-            <button
-              onClick={sendChat}
-              disabled={!chatInput.trim()}
-              style={{ padding: '9px 13px', background: chatInput.trim() ? C.gold : C.surf3, border: 'none', borderRadius: 8, cursor: chatInput.trim() ? 'pointer' : 'default', fontFamily: 'Anton,sans-serif', fontSize: 14, color: chatInput.trim() ? C.bg : C.muted, transition: 'all .15s', flexShrink: 0 }}
-            >↑</button>
-          </div>
-        </div>
-      </aside>
+      </div>
     </div>
   );
 }
