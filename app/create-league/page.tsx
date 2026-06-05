@@ -582,17 +582,17 @@ export default function CreateLeaguePage() {
                     return (
                       <button
                         key={w}
-                        disabled={played}
-                        onClick={() => !played && setSelectedWeek(w)}
+                        onClick={() => setSelectedWeek(w)}
                         style={{
                           width: 40, height: 36, borderRadius: 6,
-                          border: `1px solid ${isSel ? C.gold : played ? C.surf3 : C.surf3}`,
-                          background: isSel ? 'rgba(245,166,35,.15)' : played ? C.surf2 : C.surf2,
+                          border: `1px solid ${isSel ? C.gold : C.surf3}`,
+                          background: isSel ? 'rgba(245,166,35,.15)' : C.surf2,
                           color: isSel ? C.gold : played ? C.muted : C.sub,
                           fontFamily: 'Anton,sans-serif', fontSize: 13,
                           cursor: played ? 'not-allowed' : 'pointer',
-                          opacity: played ? 0.4 : 1,
+                          opacity: played ? 0.35 : 1,
                           textDecoration: played ? 'line-through' : 'none',
+                          pointerEvents: played ? 'none' : 'auto',
                         }}
                       >{w}</button>
                     );
