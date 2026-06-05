@@ -572,32 +572,35 @@ export default function CreateLeaguePage() {
             {leagueType === 'weekly' && (
               <div style={{ marginBottom: 20 }}>
                 <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10,
-                  letterSpacing: 2, color: '#4a5d7a', textTransform: 'uppercase',
+                  letterSpacing: 2, color: '#4a5d7a', textTransform: 'uppercase' as const,
                   display: 'block', marginBottom: 8 }}>Week</label>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' as const }}>
                   {Array.from({ length: 14 }, (_, i) => i + 1).map(w => {
                     const played = w < 5;
-                    const selected = w === selectedWeek;
+                    const sel = w === selectedWeek;
                     return (
-                      <button
+                      <div
                         key={w}
-                        type="button"
-                        onClick={() => !played && setSelectedWeek(w)}
+                        onClick={() => { if (!played) setSelectedWeek(w); }}
                         style={{
-                          width: 36, height: 36,
+                          width: 36,
+                          height: 36,
                           borderRadius: 6,
-                          border: `2px solid ${selected ? '#f5a623' : played ? '#1a2b40' : '#1a2b40'}`,
-                          background: selected ? 'rgba(245,166,35,.15)' : '#0c1422',
-                          color: played ? '#2a3a52' : selected ? '#f5a623' : '#7a90aa',
+                          border: sel ? '2px solid #f5a623' : '2px solid #1a2b40',
+                          background: sel ? 'rgba(245,166,35,.15)' : '#0c1422',
+                          color: played ? '#2a3a52' : sel ? '#f5a623' : '#7a90aa',
                           fontFamily: 'Anton,sans-serif',
                           fontSize: 13,
                           cursor: played ? 'not-allowed' : 'pointer',
                           opacity: played ? 0.35 : 1,
                           textDecoration: played ? 'line-through' : 'none',
-                          pointerEvents: played ? 'none' : 'auto',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          userSelect: 'none' as const,
                           transition: 'all .12s',
                         }}
-                      >{w}</button>
+                      >{w}</div>
                     );
                   })}
                 </div>
