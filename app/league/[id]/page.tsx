@@ -1040,9 +1040,27 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
 
 /* ── Weekly Leaderboard Tab ─────────────────────────────────── */
 function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
-  const [data,    setData]    = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [week,    setWeek]    = useState<number | null>(null);
+  const [data,          setData]          = useState<any>(null);
+  const [loading,       setLoading]       = useState(true);
+  const [week,          setWeek]          = useState<number | null>(null);
+  const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
+  const [entryPicks,    setEntryPicks]    = useState<Record<string, any[]>>({});
+  const [matchupCtx,    setMatchupCtx]    = useState<any>(null);
+
+  useEffect(() => {
+    fetch(`/api/matchup-context?week=5&season=2025`)
+      .then(r => r.json())
+      .then(d => setMatchupCtx(d))
+      .catch(() => {});
+  }, []);
+
+  async function loadEntryPicks(userId: string, entryNumber: number) {
+    const key = `${userId}::${entryNumber}`;
+    if (entryPicks[key]) return;
+    const res = await fetch(`/api/lineup/leaderboard?league_id=${leagueId}&user_id=${userId}&entry_number=${entryNumber}&picks=true`);
+    const d = await res.json();
+    setEntryPicks(prev => ({ ...prev, [key]: d.picks ?? [] }));
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -1124,29 +1142,140 @@ function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
           </div>
           {weekScores.map((m: any, i: number) => {
             const pts = week ? m.displayScore : m.total;
+            const entryKey = `${m.user_id}::${m.entry_number ?? 1}`;
+            const isExpanded = expandedEntry === entryKey;
+            const picks = entryPicks[entryKey] ?? [];
+
+            // Calculate projected total for this entry
+            const projTotal = picks.reduce((sum: number, pick: any) => {
+              const school = pick.player_data?.school;
+              const unitType = pick.player_data?.unitType;
+              if (!school || !unitType || !matchupCtx) return sum;
+              const opp = matchupCtx.opponentMap?.[school];
+              if (!opp) return sum;
+              const avgF = pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0;
+              const oppRank = unitType === 'DEF'
+                ? (matchupCtx.offRankMap?.[opp] ?? 50)
+                : (matchupCtx.defRankMap?.[opp] ?? 50);
+              const mult = oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2
+                : oppRank <= 15 ? 1.1 : oppRank <= 25 ? 1.0
+                : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
+                : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.50;
+              return sum + avgF * mult;
+            }, 0);
+
             return (
-              <div
-                key={m.user_id}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '12px 20px', borderBottom: '1px solid ' + C.surf3,
-                  background: i === 0 ? 'rgba(245,166,35,.04)' : 'transparent',
-                }}
-              >
-                <div style={{
-                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                  background: i === 0 ? 'linear-gradient(135deg,#f5a623,#ffd166)' : C.surf3,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: 'Anton,sans-serif', fontSize: 12,
-                  color: i === 0 ? C.bg : C.sub,
-                }}>{i + 1}</div>
-                <div style={{ flex: 1, fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 600, color: C.text }}>
-                  {m.team_name}
+              <React.Fragment key={entryKey}>
+                <div
+                  onClick={() => {
+                    if (isExpanded) {
+                      setExpandedEntry(null);
+                    } else {
+                      setExpandedEntry(entryKey);
+                      loadEntryPicks(m.user_id, m.entry_number ?? 1);
+                    }
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '12px 20px', borderBottom: '1px solid ' + C.surf3,
+                    background: isExpanded ? 'rgba(245,166,35,.06)' : i === 0 ? 'rgba(245,166,35,.04)' : 'transparent',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                    background: i === 0 ? 'linear-gradient(135deg,#f5a623,#ffd166)' : C.surf3,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'Anton,sans-serif', fontSize: 12,
+                    color: i === 0 ? C.bg : C.sub,
+                  }}>{i + 1}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 600, color: C.text }}>
+                      {m.team_name}
+                    </div>
+                    {projTotal > 0 && pts === 0 && (
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                        Proj: {projTotal.toFixed(1)}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: "'Anton',sans-serif", fontSize: 16, color: pts > 0 ? C.gold : C.muted }}>
+                      {pts > 0 ? pts.toFixed(2) : '—'}
+                    </div>
+                    {projTotal > 0 && pts === 0 && (
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>projected</div>
+                    )}
+                  </div>
+                  <div style={{ color: C.muted, fontSize: 10 }}>{isExpanded ? '▲' : '▼'}</div>
                 </div>
-                <div style={{ fontFamily: "'Anton',sans-serif", fontSize: 16, color: pts > 0 ? C.gold : C.muted }}>
-                  {pts.toFixed(1)}
-                </div>
-              </div>
+
+                {/* Expanded lineup */}
+                {isExpanded && (
+                  <div style={{ background: 'rgba(0,0,0,.2)', borderBottom: '1px solid ' + C.surf3, padding: '12px 20px' }}>
+                    {picks.length === 0 ? (
+                      <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center', padding: '12px 0' }}>
+                        Loading lineup…
+                      </div>
+                    ) : (
+                      <div>
+                        {picks.map((pick: any, pi: number) => {
+                          const school = pick.player_data?.school;
+                          const unitType = pick.player_data?.unitType;
+                          const opp = matchupCtx?.opponentMap?.[school];
+                          const avgF = pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0;
+                          const oppRank = opp && matchupCtx
+                            ? unitType === 'DEF'
+                              ? (matchupCtx.offRankMap?.[opp] ?? 50)
+                              : (matchupCtx.defRankMap?.[opp] ?? 50)
+                            : 50;
+                          const mult = oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2
+                            : oppRank <= 15 ? 1.1 : oppRank <= 25 ? 1.0
+                            : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
+                            : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.50;
+                          const proj = (avgF * mult).toFixed(1);
+                          const POS_COLORS: Record<string, string> = {
+                            QB: '#e05c2a', RB: '#2a9d8f', WR: '#3a86ff',
+                            TE: '#8338ec', DEF: '#2b9348', K: '#e9c46a',
+                          };
+                          return (
+                            <div key={pi} style={{
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              padding: '6px 0', borderBottom: pi < picks.length - 1 ? '1px solid rgba(30,45,71,.3)' : 'none',
+                            }}>
+                              <div style={{
+                                background: POS_COLORS[unitType] ?? C.surf3,
+                                color: '#fff', fontFamily: 'Oswald,sans-serif', fontSize: 9,
+                                fontWeight: 700, borderRadius: 4, padding: '2px 6px',
+                                minWidth: 28, textAlign: 'center', flexShrink: 0,
+                              }}>{unitType}</div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: '#7eb8f7' }}>
+                                  {pick.player_data?.playerName || school}
+                                </div>
+                                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
+                                  {school}{opp ? ` vs ${opp}` : ''}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.muted }}>
+                                  {proj}
+                                </div>
+                                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1 }}>PROJ</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {/* Entry total */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(245,166,35,.2)' }}>
+                          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.gold, letterSpacing: 1 }}>TOTAL PROJECTED</span>
+                          <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>{projTotal.toFixed(1)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </React.Fragment>
             );
           })}
         </div>

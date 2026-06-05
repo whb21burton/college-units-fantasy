@@ -18,6 +18,22 @@ export async function GET(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
+    const picksMode    = searchParams.get('picks') === 'true';
+    const pickUserId   = searchParams.get('user_id');
+    const pickEntryNum = parseInt(searchParams.get('entry_number') ?? '1', 10);
+
+    // Picks mode — return just the picks for one entry
+    if (picksMode && pickUserId) {
+      const { data: picks } = await admin
+        .from('draft_picks')
+        .select('player_data, week, entry_number')
+        .eq('league_id', league_id)
+        .eq('user_id', pickUserId)
+        .eq('entry_type', 'lineup')
+        .eq('entry_number', pickEntryNum);
+      return NextResponse.json({ picks: picks ?? [] });
+    }
+
     // Determine which weeks to score
     let weeks: number[];
     if (weekParam) {
