@@ -200,46 +200,45 @@ const SCORING_RULES = [
     pos: 'QB',
     color: '#e05c2a',
     rules: [
-      { stat: 'Passing TD',     pts: '+4' },
-      { stat: 'Passing Yards',  pts: '+0.1/yd' },
-      { stat: 'Rushing TD',     pts: '+6' },
-      { stat: 'Interception',   pts: '−2' },
-      { stat: 'Fumble Lost',    pts: '−2' },
+      { stat: 'Passing TD',    pts: '+4' },
+      { stat: 'Passing Yards', pts: '+0.1/yd' },
+      { stat: 'Rushing TD',    pts: '+6' },
+      { stat: 'Rushing Yards', pts: '+0.1/yd' },
+      { stat: 'Interception',  pts: '−3' },
     ],
   },
   {
     pos: 'RB / WR / TE Unit',
     color: '#3a86ff',
     rules: [
-      { stat: 'Rushing Yards',   pts: '+0.1/yd' },
-      { stat: 'Receiving Yards', pts: '+0.1/yd' },
-      { stat: 'Reception',       pts: '+1' },
-      { stat: 'Any TD',          pts: '+6' },
-      { stat: 'Fumble Lost',     pts: '−2' },
+      { stat: 'Total Yards (rush+rec)', pts: '+0.1/yd' },
+      { stat: 'Any TD',                 pts: '+6' },
     ],
   },
   {
     pos: 'Kicker',
     color: '#e9c46a',
     rules: [
-      { stat: 'FG 50+ yards',  pts: '+5' },
-      { stat: 'FG 40-49 yds',  pts: '+4' },
-      { stat: 'FG 0-39 yds',   pts: '+3' },
-      { stat: 'PAT Made',      pts: '+1' },
-      { stat: 'PAT Missed',    pts: '−2' },
-      { stat: 'FG Missed',     pts: '−1' },
+      { stat: 'Points Scored (PAT/FG)', pts: '+1/pt' },
+      { stat: 'Missed FG',              pts: '−1' },
+      { stat: 'Missed PAT',             pts: '−2' },
     ],
   },
   {
     pos: 'Defense',
     color: '#2b9348',
     rules: [
-      { stat: 'Sack',             pts: '+1' },
-      { stat: 'Interception',     pts: '+2' },
-      { stat: 'Fumble Recovery',  pts: '+2' },
-      { stat: 'Defensive TD',     pts: '+6' },
-      { stat: 'Safety',           pts: '+2' },
-      { stat: 'Shutout',          pts: '+10' },
+      { stat: 'Sack',            pts: '+1' },
+      { stat: 'Interception',    pts: '+2' },
+      { stat: 'Fumble Recovery', pts: '+2' },
+      { stat: 'Defensive TD',    pts: '+6' },
+      { stat: 'Safety',          pts: '+2' },
+      { stat: 'Shutout (0 pts)', pts: '+10' },
+      { stat: 'Allow 1–5 pts',   pts: '+8' },
+      { stat: 'Allow 6–10 pts',  pts: '+6' },
+      { stat: 'Allow 11–15 pts', pts: '+4' },
+      { stat: 'Allow 16–20 pts', pts: '+2' },
+      { stat: 'Allow 21+ pts',   pts: '+0' },
     ],
   },
 ];
@@ -530,11 +529,12 @@ function ContestDetailModal({
                 </div>
                 <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 }}>
                   {[
-                    ['Top 5', '1.30×'], ['Top 10', '1.20×'], ['Top 15', '1.10×'],
-                    ['Top 25', '1.00×'], ['Top 35', '0.90×'], ['51+', '0.70×'],
+                    ['1–5',    '1.30×'], ['6–10',   '1.20×'], ['11–15',  '1.10×'],
+                    ['16–25',  '1.00×'], ['26–35',  '0.90×'], ['36–50',  '0.80×'],
+                    ['51–80',  '0.70×'], ['81–100', '0.60×'], ['101–134','0.50×'],
                   ].map(([rank, mult]) => (
                     <div key={rank} style={{ background: C.hover, borderRadius: 4, padding: '6px 10px', display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.muted }}>Def rank {rank}</span>
+                      <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.muted }}>Rank {rank}</span>
                       <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.text }}>{mult}</span>
                     </div>
                   ))}
