@@ -587,9 +587,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
   }
 
   // ── Builder view ─────────────────────────────────────────────────────────────
-  const enterLabel = league?.buy_in === 0
-    ? 'ENTER | FREE'
-    : `ENTER | $${(league?.buy_in ?? 0).toFixed(2)}`;
+  const enterLabel = 'Submit Lineup';
 
   // void tick to use it (forces countdown re-render)
   void tick;
