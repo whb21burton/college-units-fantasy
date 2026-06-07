@@ -394,7 +394,7 @@ export async function syncStats(
           const kPassTd   = passE ? (passE.TD||0)*4 : 0
           const kRushTd   = rushE ? (rushE.TD||0)*6 : 0
           const kTwoPt    = 0 // two-point conversions not tracked by CFBD
-          pts = madePts - (missedFG * 1) - (missedPAT * 2) + kPassTd + kRushTd + kTwoPt
+          pts = madePts - (missedFG * 1) - (missedPAT * 1) + kPassTd + kRushTd + kTwoPt
         }
 
         units[unit].push({ name, pts })
