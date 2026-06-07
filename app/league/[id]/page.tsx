@@ -735,9 +735,10 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
   const [poolLoading,    setPoolLoading]    = useState(true);
   const [unitFilter,     setUnitFilter]     = useState<string>('ALL');
   const [search,         setSearch]         = useState('');
-  const [showPool,       setShowPool]       = useState(false);
-  const [myEntries,      setMyEntries]      = useState<any[]>([]);
-  const [activeEntryNum, setActiveEntryNum] = useState(1);
+  const [showPool,           setShowPool]           = useState(false);
+  const [myEntries,          setMyEntries]          = useState<any[]>([]);
+  const [activeEntryNum,     setActiveEntryNum]     = useState(1);
+  const [showAddEntryConfirm, setShowAddEntryConfirm] = useState(false);
   const maxPerAccount = league?.max_entries_per_user ?? 1;
   const buyInCents = Math.round((league?.buy_in ?? 0) * 100);
 
@@ -856,7 +857,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
       ))}
       {myEntries.length < maxPerAccount && (
         <button
-          onClick={handleAddEntry}
+          onClick={() => setShowAddEntryConfirm(true)}
           style={{
             padding: '5px 14px',
             borderRadius: 20,
@@ -1033,6 +1034,58 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
             Resubmit Lineup
           </button>
         ) : null
+      )}
+
+      {showAddEntryConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,.85)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20,
+        }}>
+          <div style={{
+            background: '#0c1422', border: '1px solid #1a2b40',
+            borderRadius: 14, padding: '32px 28px',
+            maxWidth: 400, width: '100%', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>⚡</div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: '#e4edf7', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+              Add Another Entry?
+            </div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: '#7a90aa', marginBottom: 24, lineHeight: 1.6 }}>
+              {buyInCents > 0
+                ? `This will charge $${(buyInCents / 100).toFixed(2)} from your wallet for Entry ${myEntries.length + 1}. This cannot be undone.`
+                : `You are adding Entry ${myEntries.length + 1}. This cannot be undone.`}
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => setShowAddEntryConfirm(false)}
+                style={{
+                  flex: 1, padding: '12px',
+                  background: 'transparent', border: '1px solid #1a2b40',
+                  borderRadius: 8, cursor: 'pointer',
+                  fontFamily: 'Oswald,sans-serif', fontSize: 12,
+                  letterSpacing: 1, color: '#7a90aa',
+                }}
+              >Cancel</button>
+              <button
+                onClick={async () => {
+                  setShowAddEntryConfirm(false);
+                  await handleAddEntry();
+                }}
+                style={{
+                  flex: 1, padding: '12px',
+                  background: 'rgba(245,166,35,.15)',
+                  border: '1px solid rgba(245,166,35,.4)',
+                  borderRadius: 8, cursor: 'pointer',
+                  fontFamily: 'Anton,sans-serif', fontSize: 13,
+                  letterSpacing: 1, color: '#f5a623',
+                  textTransform: 'uppercase',
+                }}
+              >Yes, Add Entry</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
