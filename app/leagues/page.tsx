@@ -172,12 +172,16 @@ function autoSummary(l: League, members: Member[]): string {
   const confStr = cf === 'All D1' ? 'All D1' : `${cf} Only`;
   const type = l.league_type === 'weekly' ? 'weekly DFS' : 'season';
   const size = l.league_type === 'weekly' ? (l.member_count ?? members.length) : l.league_size;
-  const prize = totalPrize(l);
+  let prize = totalPrize(l);
+  // If member_count is 0 (contest not yet filled) but buy_in > 0, estimate from league_size
+  if (prize <= 0 && (l.buy_in ?? 0) > 0) {
+    prize = (l.buy_in ?? 0) * (l.league_size || 10) * 0.95;
+  }
   const po = payouts(l);
   const feeStr = l.buy_in === 0 ? 'free to enter' : `$${l.buy_in.toFixed(2)} entry fee`;
   let summary = `This ${size}-team ${confStr} ${type} league`;
   if (prize > 0) {
-    summary += ` features $${prize.toFixed(2)} in total prizes.`;
+    summary += ` features up to $${prize.toFixed(2)} in total prizes.`;
     if (po.length >= 2) {
       summary += ` 1st place wins $${po[0].amount.toFixed(2)}, 2nd place wins $${po[1].amount.toFixed(2)}.`;
     }
@@ -185,7 +189,7 @@ function autoSummary(l: League, members: Member[]): string {
     summary += ' is free to play with no prize pool.';
   }
   summary += ` It is ${feeStr}`;
-  if (l.buy_in > 0) summary += ` with a 10% hosting fee`;
+  if (l.buy_in > 0) summary += ` with a 5% hosting fee`;
   summary += '.';
   return summary;
 }
