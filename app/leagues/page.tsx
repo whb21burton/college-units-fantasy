@@ -219,9 +219,12 @@ const SCORING_RULES = [
     pos: 'Kicker',
     color: '#e9c46a',
     rules: [
-      { stat: 'Points Scored (PAT/FG)', pts: '+1/pt' },
-      { stat: 'Missed FG',              pts: '−1' },
-      { stat: 'Missed PAT',             pts: '−2' },
+      { stat: 'PAT Made',       pts: '+1' },
+      { stat: 'FG 0-39 yards', pts: '+3' },
+      { stat: 'FG 40-49 yards', pts: '+4' },
+      { stat: 'FG 50+ yards',  pts: '+5' },
+      { stat: 'Missed FG',     pts: '−1' },
+      { stat: 'Missed PAT',    pts: '−1' },
     ],
   },
   {
