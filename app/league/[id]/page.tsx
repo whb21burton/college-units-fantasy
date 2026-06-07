@@ -5265,7 +5265,7 @@ function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId
                     <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 14, padding: 28, maxWidth: 400, width: '100%' }}>
                       <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, textAlign: 'center', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>Dissolve {league?.name}?</div>
                       <div style={{ fontFamily: 'Inter,sans-serif', fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 20, textAlign: 'center' }}>
-                        All {members.length} members will receive <strong style={{ color: C.text }}>${(league.buy_in * 0.95).toFixed(2)}</strong> back. The league will be cancelled.
+                        All paid entries will be refunded <strong style={{ color: C.text }}>${(league.buy_in * 0.95).toFixed(2)}</strong> each (95% of entry fee). The league will be cancelled.
                       </div>
                       <div style={{ display: 'flex', gap: 10 }}>
                         <button onClick={() => setShowDissolveModal(false)} style={{ flex: 1, padding: 12, background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>Cancel</button>

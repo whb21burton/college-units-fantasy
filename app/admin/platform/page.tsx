@@ -1292,7 +1292,7 @@ function AdminStats() {
                 </div>
                 <button
                   onClick={async () => {
-                    if (!confirm(`Delete "${c.name}" and refund all ${c.members} entries?`)) return
+                    if (!confirm(`Delete "${c.name}" and refund all paid entries? Each paid entry will be refunded.`)) return
                     const res = await fetch('/api/admin/delete-contest', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
