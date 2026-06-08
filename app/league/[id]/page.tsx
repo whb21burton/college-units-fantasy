@@ -732,10 +732,6 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
   const [loading,        setLoading]        = useState(true);
   const [originalLineup, setOriginalLineup] = useState<any[] | null>(null);
   const [lineupSubmitted, setLineupSubmitted] = useState(false);
-  const [pool,           setPool]           = useState<any[]>([]);
-  const [poolLoading,    setPoolLoading]    = useState(true);
-  const [unitFilter,     setUnitFilter]     = useState<string>('ALL');
-  const [search,         setSearch]         = useState('');
   const [showPool,           setShowPool]           = useState(false);
   const [myEntries,          setMyEntries]          = useState<any[]>([]);
   const [activeEntryNum,     setActiveEntryNum]     = useState(1);
@@ -813,18 +809,6 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
     }
     load();
   }, [leagueId, userId, week, activeEntryNum]);
-
-  useEffect(() => {
-    const allowedSchools: string[] | null = Array.isArray(league?.settings?.allowed_schools)
-      ? league.settings.allowed_schools
-      : null;
-    const params = new URLSearchParams();
-    if (allowedSchools?.length) params.set('schools', allowedSchools.join(','));
-    fetch(`/api/player-pool${params.toString() ? '?' + params.toString() : ''}`)
-      .then(r => r.json())
-      .then(d => { setPool(Array.isArray(d) ? d : []); setPoolLoading(false); })
-      .catch(() => setPoolLoading(false));
-  }, [league?.id]);
 
   if (loading) return (
     <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 2, fontSize: 12 }}>
@@ -910,79 +894,32 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
     </div>
   );
 
-  // No lineup submitted yet — show player pool inline
-  if (!picks || picks.length === 0) {
-    const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
-    const filtered = pool
-      .filter(p => unitFilter === 'ALL' || p.unitType === unitFilter)
-      .filter(p => {
-        if (!search.trim()) return true;
-        const q = search.toLowerCase();
-        return p.school.toLowerCase().includes(q) || (p.playerName ?? '').toLowerCase().includes(q);
-      });
-
+  // No lineup submitted yet — show placeholder with CTA
+  if (!lineupSubmitted || !picks || picks.length === 0) {
     return (
       <div style={{ maxWidth: 560 }}>
-        {/* Header */}
         {entryHeader}
-        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
-          Build Your Lineup
-        </div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, marginBottom: 16 }}>
-          Pick 9 starters · $200 salary cap · QB · RB×2 · WR×2 · TE · FLEX · DEF · K
-        </div>
-
-        {/* Open full builder button */}
         <button
           onClick={() => router.push(`/league/${leagueId}/lineup?entry=${activeEntryNum}`)}
-          style={{ width: '100%', marginBottom: 20, padding: '13px 0', background: 'linear-gradient(135deg,#f5a623,#ffd166)', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg, textTransform: 'uppercase' }}
-        >
-          Open Full Lineup Builder →
-        </button>
-
-        {/* Position filters */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-          {POS_FILTERS.map(f => (
-            <button key={f} onClick={() => setUnitFilter(f)}
-              style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid ' + (unitFilter === f ? C.gold : C.surf3), background: unitFilter === f ? C.gold : C.surf2, color: unitFilter === f ? C.bg : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-              {f}
-            </button>
-          ))}
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
-            style={{ flex: 1, minWidth: 100, background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '4px 10px', color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 11, outline: 'none' }} />
+          style={{
+            width: '100%', marginBottom: 20, padding: '13px 0',
+            background: 'linear-gradient(135deg,#f5a623,#ffd166)',
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+            fontFamily: 'Anton,sans-serif', fontSize: 14,
+            letterSpacing: 2, color: '#070a12', textTransform: 'uppercase',
+          }}
+        >Build Your Lineup →</button>
+        <div style={{ background: '#0c1422', border: '1px solid #1a2b40', borderRadius: 10, overflow: 'hidden' }}>
+          {['QB','RB','RB','WR','WR','TE','FLEX','DEF','K'].map((pos, i) => {
+            const POS_COLORS: Record<string,string> = { QB:'#e05c2a',RB:'#2a9d8f',WR:'#3a86ff',TE:'#8338ec',FLEX:'#f5a623',DEF:'#2b9348',K:'#e9c46a' };
+            return (
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom: i < 8 ? '1px solid #1a2b40' : 'none', opacity: 0.5 }}>
+                <div style={{ background: POS_COLORS[pos]??'#1a2b40', color:'#fff', fontFamily:'Oswald,sans-serif', fontSize:9, fontWeight:700, borderRadius:4, padding:'2px 6px', minWidth:28, textAlign:'center', flexShrink:0 }}>{pos}</div>
+                <div style={{ fontFamily:"'Space Grotesk',sans-serif", fontSize:13, color:'#3e5470', fontStyle:'italic' }}>Empty</div>
+              </div>
+            );
+          })}
         </div>
-
-        {/* Player list */}
-        {poolLoading ? (
-          <div style={{ padding: 24, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>Loading players…</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ padding: 24, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>No players found</div>
-        ) : filtered.slice(0, 40).map((p: any) => {
-          const posColor = UNIT_COLORS?.[p.unitType] ?? C.sub;
-          return (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', marginBottom: 4, background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 8 }}>
-              <div style={{ background: posColor, color: '#fff', fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, borderRadius: 4, padding: '2px 7px', minWidth: 30, textAlign: 'center' }}>
-                {p.unitType}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: 'Space Grotesk,sans-serif', fontSize: 13, fontWeight: 700, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {p.playerName || p.school}
-                </div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub }}>{p.school} · {p.conference}</div>
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.gold }}>{(p.avgPerWeek ?? 0) > 0 ? p.avgPerWeek.toFixed(1) : ((p.projectedPoints ?? 0) / 14).toFixed(1)}</div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1 }}>AVG/WK</div>
-              </div>
-            </div>
-          );
-        })}
-
-        {filtered.length > 40 && (
-          <div style={{ textAlign: 'center', padding: 12, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
-            Showing 40 of {filtered.length} — use filters to narrow
-          </div>
-        )}
       </div>
     );
   }
