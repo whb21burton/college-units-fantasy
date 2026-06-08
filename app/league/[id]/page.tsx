@@ -1158,12 +1158,18 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
   }
 
   useEffect(() => {
+    // Default to current league week
+    if (league?.week) setWeek(league.week);
+  }, [league?.week]);
+
+  useEffect(() => {
     setLoading(true);
     fetch(`/api/lineup/leaderboard?league_id=${leagueId}`)
       .then(r => r.json())
       .then(d => {
         setData(d);
-        if (d.weeks?.length) setWeek(d.weeks[d.weeks.length - 1]);
+        // Only set week from data if not already set from league
+        if (!league?.week && d.weeks?.length) setWeek(d.weeks[d.weeks.length - 1]);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -1181,23 +1187,51 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
   const weekScores = week
     ? entries.map((e: any) => ({ ...e, displayScore: Math.round((e.weeklyScores?.[week] ?? 0) * 100) / 100 }))
              .sort((a: any, b: any) => b.displayScore - a.displayScore)
-    : entries.map((e: any) => ({ ...e, displayScore: e.total }));
+    : entries.map((e: any) => ({ ...e, displayScore: e.total }))
+             .sort((a: any, b: any) => b.displayScore - a.displayScore);
+
+  // Payout helpers (same logic as bracket leaderboard)
+  const buyInCents       = Math.round((league?.buy_in ?? 0) * 100);
+  const totalEntries     = weekScores.length;
+  const netPool          = Math.floor(buyInCents * totalEntries * 0.95);
+  const payoutStructure  = league?.settings?.payout_structure ?? 'winner_take_all';
+
+  function getAdaptedStructure(s: string, n: number): string {
+    if (s === 'top3') { if (n <= 1) return 'winner_take_all'; if (n === 2) return 'top2'; return 'top3'; }
+    if (s === 'top2') { if (n <= 1) return 'winner_take_all'; return 'top2'; }
+    return s;
+  }
+  function getPayoutForRank(rank: number): number {
+    if (netPool === 0) return 0;
+    if (payoutStructure === 'double_up') {
+      const winners = Math.floor(totalEntries / 2);
+      const hasMiddle = totalEntries % 2 !== 0;
+      if (hasMiddle && rank === winners + 1) return buyInCents;
+      return rank <= winners ? Math.floor(buyInCents * 1.95) : 0;
+    }
+    const adapted = getAdaptedStructure(payoutStructure, totalEntries);
+    if (adapted === 'winner_take_all') return rank === 1 ? netPool : 0;
+    if (adapted === 'top2') { if (rank === 1) return Math.floor(netPool * 0.70); if (rank === 2) return Math.floor(netPool * 0.30); return 0; }
+    if (adapted === 'top3') { if (rank === 1) return Math.floor(netPool * 0.60); if (rank === 2) return Math.floor(netPool * 0.25); if (rank === 3) return Math.floor(netPool * 0.15); return 0; }
+    return 0;
+  }
+  function isInMoney(rank: number): boolean {
+    if (payoutStructure === 'double_up') { const w = Math.floor(totalEntries / 2); return rank <= w + (totalEntries % 2 !== 0 ? 1 : 0); }
+    const adapted = getAdaptedStructure(payoutStructure, totalEntries);
+    if (adapted === 'top3') return rank <= 3;
+    if (adapted === 'top2') return rank <= 2;
+    return rank === 1;
+  }
+  const cutRank = payoutStructure === 'double_up' ? Math.floor(totalEntries / 2) + (totalEntries % 2 !== 0 ? 1 : 0)
+    : payoutStructure === 'top3' ? Math.min(3, totalEntries)
+    : payoutStructure === 'top2' ? Math.min(2, totalEntries)
+    : 1;
 
   return (
     <div style={{ maxWidth: 620 }}>
-      {/* Week selector */}
+      {/* Week selector — no TOTAL button */}
       {weeks.length > 0 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setWeek(null)}
-            style={{
-              padding: '5px 12px', borderRadius: 6,
-              background: week === null ? 'rgba(245,166,35,.15)' : C.surf2,
-              border: `1px solid ${week === null ? C.gold : C.surf3}`,
-              color: week === null ? C.gold : C.sub,
-              fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, cursor: 'pointer',
-            }}
-          >TOTAL</button>
           {weeks.map((w: number) => (
             <button
               key={w}
@@ -1231,15 +1265,22 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
         <div style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid ' + C.surf3, display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>TEAM</span>
-            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>
-              {week ? `WK ${week} PTS` : 'TOTAL PTS'}
-            </span>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              {netPool > 0 && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>Pool: ${(netPool / 100).toFixed(2)}</span>}
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>
+                {week ? `WK ${week} PTS` : 'TOTAL PTS'}
+              </span>
+            </div>
           </div>
           {weekScores.map((m: any, i: number) => {
-            const pts = week ? m.displayScore : m.total;
+            const rank     = i + 1;
+            const pts      = week ? m.displayScore : m.total;
             const entryKey = `${m.user_id}::${m.entry_number ?? 1}`;
             const isExpanded = expandedEntry === entryKey;
-            const picks = entryPicks[entryKey] ?? [];
+            const picks    = entryPicks[entryKey] ?? [];
+            const inMoney  = buyInCents > 0 && isInMoney(rank);
+            const prize    = buyInCents > 0 ? getPayoutForRank(rank) : 0;
+            const showCutLine = buyInCents > 0 && i > 0 && rank === cutRank + 1;
 
             // Calculate projected total for this entry
             const projTotal = picks.reduce((sum: number, pick: any) => {
@@ -1261,6 +1302,13 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
 
             return (
               <React.Fragment key={entryKey}>
+                {showCutLine && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 20px' }}>
+                    <div style={{ flex: 1, height: 1, background: 'rgba(240,58,90,.3)' }} />
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.red, textTransform: 'uppercase' }}>CUT LINE</span>
+                    <div style={{ flex: 1, height: 1, background: 'rgba(240,58,90,.3)' }} />
+                  </div>
+                )}
                 <div
                   onClick={() => {
                     if (isExpanded) {
@@ -1304,6 +1352,21 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
                       <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>projected</div>
                     )}
                   </div>
+                  {buyInCents > 0 && (
+                    <div style={{ textAlign: 'right', minWidth: 52, flexShrink: 0 }}>
+                      {inMoney ? (
+                        <>
+                          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.green }}>${(prize / 100).toFixed(2)}</div>
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.green, letterSpacing: 1 }}>💰 IN</div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.muted }}>—</div>
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1 }}>OUT</div>
+                        </>
+                      )}
+                    </div>
+                  )}
                   <div style={{ color: C.muted, fontSize: 10 }}>{isExpanded ? '▲' : '▼'}</div>
                 </div>
 
