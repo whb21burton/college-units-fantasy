@@ -740,6 +740,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
   const [teamLogos,          setTeamLogos]          = useState<Record<string, string>>({});
   const [scheduleMap,        setScheduleMap]        = useState<Record<string, {opp:string;date:string;time:string}>>({});
   const [expandedPick,       setExpandedPick]       = useState<string | null>(null);
+  const [matchupCtx,         setMatchupCtx]         = useState<any>(null);
   const maxPerAccount = league?.max_entries_per_user ?? 1;
   const buyInCents = Math.round((league?.buy_in ?? 0) * 100);
 
@@ -774,6 +775,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
       setLineupSubmitted(p.length > 0);
       setFirstGameTime(ctxRes.firstGameTime ?? null);
       setGameTimeMap(ctxRes.gameTimeMap ?? {});
+      setMatchupCtx(ctxRes);
 
       // Fetch logos and schedule — non-blocking, don't let failures break main load
       try {
@@ -925,6 +927,11 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
   }
 
   if (lineupSubmitted && picks && picks.length > 0) {
+    const totalProj = picks.reduce((sum: number, pick: any) => {
+      const avgF = pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0;
+      const gameMult = matchupCtx?.multMap?.[pick.player_data?.school] ?? 1.0;
+      return sum + avgF * gameMult;
+    }, 0);
     return (
       <div style={{ maxWidth: 560 }}>
         {entryHeader}
@@ -959,6 +966,9 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
             const game = scheduleMap[school];
             const bdKey = `${school}-${unitType}`;
             const isExpanded = expandedPick === bdKey;
+            const avgF = pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0;
+            const gameMult = matchupCtx?.multMap?.[school] ?? 1.0;
+            const proj = avgF * gameMult;
             return (
               <React.Fragment key={i}>
                 <div onClick={() => setExpandedPick(isExpanded ? null : bdKey)}
@@ -968,6 +978,12 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
                   <div style={{ flex:1 }}>
                     <div style={{ fontFamily:"'Space Grotesk',sans-serif", fontSize:13, fontWeight:600, color:'#7eb8f7' }}>{pick.player_data?.playerName || school}</div>
                     <div style={{ fontFamily:'Oswald,sans-serif', fontSize:9, color:'#4a5d7a' }}>{game ? `${game.opp} · ${game.date}` : school}</div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontFamily:'Anton,sans-serif', fontSize:14, color:'#f5a623' }}>
+                      {proj > 0 ? proj.toFixed(1) : '—'}
+                    </div>
+                    <div style={{ fontFamily:'Oswald,sans-serif', fontSize:8, color:'#4a5d7a', letterSpacing:1 }}>PROJ</div>
                   </div>
                   {locked && <span style={{ fontSize:12 }}>🔒</span>}
                   <span style={{ fontSize:10, color:'#3e5470' }}>{isExpanded ? '▲' : '▼'}</span>
@@ -981,6 +997,10 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
             );
           });
           })()}
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 14px', borderTop:'1px solid rgba(245,166,35,.2)', background:'rgba(245,166,35,.05)' }}>
+            <span style={{ fontFamily:'Oswald,sans-serif', fontSize:10, color:'#f5a623', letterSpacing:1 }}>TOTAL PROJECTED</span>
+            <span style={{ fontFamily:'Anton,sans-serif', fontSize:16, color:'#f5a623' }}>{totalProj.toFixed(1)}</span>
+          </div>
         </div>
 
         {showAddEntryConfirm && (
