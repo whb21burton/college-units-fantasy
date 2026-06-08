@@ -741,6 +741,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
   const [scheduleMap,        setScheduleMap]        = useState<Record<string, {opp:string;date:string;time:string}>>({});
   const [expandedPick,       setExpandedPick]       = useState<string | null>(null);
   const [matchupCtx,         setMatchupCtx]         = useState<any>(null);
+  const [pool,               setPool]               = useState<any[]>([]);
   const maxPerAccount = league?.max_entries_per_user ?? 1;
   const buyInCents = Math.round((league?.buy_in ?? 0) * 100);
 
@@ -811,6 +812,13 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
     }
     load();
   }, [leagueId, userId, week, activeEntryNum]);
+
+  useEffect(() => {
+    fetch('/api/player-pool')
+      .then(r => r.json())
+      .then(d => setPool(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [leagueId]);
 
   if (loading) return (
     <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', letterSpacing: 2, fontSize: 12 }}>
@@ -938,7 +946,9 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
         : pRank <= 5 ? 1.3 : pRank <= 10 ? 1.2 : pRank <= 15 ? 1.1
         : pRank <= 25 ? 1.0 : pRank <= 35 ? 0.9 : pRank <= 50 ? 0.8
         : pRank <= 80 ? 0.7 : pRank <= 100 ? 0.6 : 0.50;
-      return sum + (pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0) * pMult;
+      const freshUnit = pool.find((p: any) => p.school === pSchool && p.unitType === pType);
+      const pAvgF = freshUnit?.avgFpts ?? pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0;
+      return sum + pAvgF * pMult;
     }, 0);
     return (
       <div style={{ maxWidth: 560 }}>
@@ -982,7 +992,9 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
               : oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2 : oppRank <= 15 ? 1.1
               : oppRank <= 25 ? 1.0 : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
               : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.50;
-            const proj     = (pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0) * gameMult;
+            const freshUnit = pool.find((p: any) => p.school === school && p.unitType === unitType);
+            const avgF      = freshUnit?.avgFpts ?? pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0;
+            const proj      = avgF * gameMult;
             return (
               <React.Fragment key={i}>
                 <div onClick={() => setExpandedPick(isExpanded ? null : bdKey)}
