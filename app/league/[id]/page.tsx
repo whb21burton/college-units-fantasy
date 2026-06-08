@@ -787,9 +787,10 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
         ]);
         const logosData = logosRes.ok ? await logosRes.json() : [];
         const gamesData = gamesRes.ok ? await gamesRes.json() : [];
-        const logoMap: Record<string, string> = {};
-        for (const t of logosData ?? []) if (t.school && t.logo_url) logoMap[t.school] = t.logo_url;
-        setTeamLogos(logoMap);
+        // team-logos returns a plain object {school: url}
+        setTeamLogos(typeof logosData === 'object' && !Array.isArray(logosData)
+          ? logosData
+          : {});
         const sched: Record<string, {opp:string;date:string;time:string}> = {};
         for (const g of gamesData ?? []) {
           const d = new Date(g.game_date);
