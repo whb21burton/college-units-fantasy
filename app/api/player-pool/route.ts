@@ -68,34 +68,23 @@ export async function GET(req: Request) {
       if (!(key in fullPoolMap)) fullPoolMap[key] = unit.projectedPoints;
     }
 
-    // Fetch base stats and fpts stats sequentially — service role bypasses row cap
-    let baseQuery = admin
+    // Fetch stored unit FPTS directly — one value per school per week
+    let statsQuery = admin
       .from('cached_stats')
       .select('school, stat_type, value, week')
       .eq('season', SEASON)
-      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'])
-      .is('player_name', null)
-      .gte('value', 0)
-      .lte('week', 4);
-
-    let fptsQuery = admin
-      .from('cached_stats')
-      .select('school, stat_type, value, week')
-      .eq('season', SEASON)
-      .in('stat_type', ['unit_QB_fpts', 'unit_RB_fpts', 'unit_WR_fpts', 'unit_TE_fpts', 'unit_DEF_fpts', 'unit_K_fpts'])
+      .in('stat_type', ['unit_QB_fpts', 'unit_RB_fpts', 'unit_WR_fpts',
+                        'unit_TE_fpts', 'unit_DEF_fpts', 'unit_K_fpts'])
       .is('player_name', null)
       .lte('week', 4);
 
     if (allowedSchools && allowedSchools.length > 0) {
-      baseQuery = baseQuery.in('school', allowedSchools);
-      fptsQuery  = fptsQuery.in('school', allowedSchools);
+      statsQuery = statsQuery.in('school', allowedSchools);
     }
 
-    const baseResult  = await baseQuery;
-    const fptsResult  = await fptsQuery;
-
-    const data  = [...(baseResult.data ?? []), ...(fptsResult.data ?? [])];
-    const error = baseResult.error ?? fptsResult.error;
+    const statsResult = await statsQuery;
+    const data  = statsResult.data ?? [];
+    const error = statsResult.error;
 
     // ── RB pricing data: rb1_opportunity per school across all weeks ──────────
     const { data: rbOppRows } = await admin
@@ -159,28 +148,19 @@ export async function GET(req: Request) {
 
     if (error) throw error;
 
-    // Aggregate per-week average from live data, keyed by school||unitType.
-    // Track both sum and count so we can compute avgPerWeek = sum / weeksPlayed,
-    // then project to a 4-week season (current): projectedSeason = avgPerWeek * TOTAL_WEEKS.
-    // This ensures projectedPoints always reflects actual performance pace rather
-    // than the season cumulative total (which grows each week and can't be compared
-    // fairly against the static FULL_POOL 4-week projections).
+    // Aggregate stored FPTS per school+unitType across played weeks
     const liveSums:   Record<string, number> = {};
     const liveCounts: Record<string, number> = {};
-    const fptsSums:   Record<string, number> = {}; // sum of stored unit_*_fpts values
-    for (const row of data ?? []) {
+    const fptsSums:   Record<string, number> = {};
+    for (const row of data) {
       const canonicalSchool = SCHOOL_ALIASES[row.school] ?? row.school;
       if (!schoolConf[canonicalSchool]) continue;
-      const isFpts   = row.stat_type.endsWith('_fpts');
       const unitType = row.stat_type.replace('unit_', '').replace('_fpts', '') as UnitType;
       const key = `${canonicalSchool}||${unitType}`;
       const val = row.value ?? 0;
-      if (isFpts) {
-        fptsSums[key] = (fptsSums[key] ?? 0) + val;
-      } else {
-        liveSums[key]   = (liveSums[key]   ?? 0) + val;
-        liveCounts[key] = (liveCounts[key] ?? 0) + 1;
-      }
+      liveSums[key]   = (liveSums[key]   ?? 0) + val;
+      liveCounts[key] = (liveCounts[key] ?? 0) + 1;
+      fptsSums[key]   = (fptsSums[key]   ?? 0) + val;
     }
 
     // Build complete pool: every CONFERENCES school × every unit type, no gaps
@@ -193,10 +173,6 @@ export async function GET(req: Request) {
         if (allowedSchools && !allowedSchools.includes(school)) continue; // skip schools not in league
         for (const unitType of UNIT_TYPES) {
           const key = `${school}||${unitType}`;
-          if (school === 'Auburn' && unitType === 'QB') {
-            console.log('[auburn-entry] key:', key, 'in liveSums:', key in liveSums,
-              'liveCounts:', liveCounts[key], 'fptsSums:', fptsSums[key]);
-          }
           if (key in liveSums) {
             const weeksPlayed = liveCounts[key];
             if (weeksPlayed > 0) {
