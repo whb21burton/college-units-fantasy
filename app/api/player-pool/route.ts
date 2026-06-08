@@ -193,13 +193,22 @@ export async function GET(req: Request) {
         if (allowedSchools && !allowedSchools.includes(school)) continue; // skip schools not in league
         for (const unitType of UNIT_TYPES) {
           const key = `${school}||${unitType}`;
+          if (school === 'Auburn' && unitType === 'QB') {
+            console.log('[auburn-entry] key:', key, 'in liveSums:', key in liveSums,
+              'liveCounts:', liveCounts[key], 'fptsSums:', fptsSums[key]);
+          }
           if (key in liveSums) {
             const weeksPlayed = liveCounts[key];
-            const avgPerWeek  = liveSums[key] / weeksPlayed;   // raw WGTD avg
-            const avgFpts     = (fptsSums[key] ?? 0) / weeksPlayed; // FPTS avg (WGTD×ODR)
-            allEntries.push({ school, unitType, pts: avgFpts * TOTAL_WEEKS, seasonTotal: liveSums[key], weeksPlayed, avgPerWeek, avgFpts, isLive: true });
+            if (weeksPlayed > 0) {
+              const avgPerWeek = liveSums[key] / weeksPlayed;
+              const avgFpts    = (fptsSums[key] ?? 0) / weeksPlayed;
+              allEntries.push({ school, unitType, pts: avgFpts * TOTAL_WEEKS, seasonTotal: liveSums[key], weeksPlayed, avgPerWeek, avgFpts, isLive: true });
+            } else {
+              const fp = fullPoolMap[key] ?? 0;
+              allEntries.push({ school, unitType, pts: fp, seasonTotal: fp, weeksPlayed: 0, avgPerWeek: 0, avgFpts: 0, isLive: false });
+            }
           } else {
-            // Fall back to FULL_POOL static 14-week season projection
+            // Fall back to FULL_POOL static projection
             const fp = fullPoolMap[key] ?? 0;
             allEntries.push({ school, unitType, pts: fp, seasonTotal: fp, weeksPlayed: 0, avgPerWeek: 0, avgFpts: 0, isLive: false });
           }
