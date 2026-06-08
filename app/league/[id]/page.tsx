@@ -779,23 +779,29 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
       setFirstGameTime(ctxRes.firstGameTime ?? null);
       setGameTimeMap(ctxRes.gameTimeMap ?? {});
 
-      // Fetch logos and schedule in parallel
-      const [logosRes, schedRes] = await Promise.all([
-        fetch('/api/team-logos').then(r => r.json()).catch(() => []),
-        fetch(`/api/games?week=${week}&season=2025`).then(r => r.json()).catch(() => []),
-      ]);
-      const logoMap: Record<string, string> = {};
-      for (const t of logosRes ?? []) logoMap[t.school] = t.logo_url;
-      setTeamLogos(logoMap);
-      const sched: Record<string, {opp:string;date:string;time:string}> = {};
-      for (const g of schedRes ?? []) {
-        const d = new Date(g.game_date ?? '');
-        const dateStr = isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
-        const timeStr = isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
-        sched[g.home_team] = { opp: `vs ${g.away_team}`, date: dateStr, time: timeStr };
-        sched[g.away_team] = { opp: `@ ${g.home_team}`, date: dateStr, time: timeStr };
+      // Fetch logos and schedule — non-blocking, don't let failures break main load
+      try {
+        const [logosRes, gamesRes] = await Promise.all([
+          fetch('/api/team-logos'),
+          fetch(`/api/games?week=${week}&season=2025`),
+        ]);
+        const logosData = logosRes.ok ? await logosRes.json() : [];
+        const gamesData = gamesRes.ok ? await gamesRes.json() : [];
+        const logoMap: Record<string, string> = {};
+        for (const t of logosData ?? []) if (t.school && t.logo_url) logoMap[t.school] = t.logo_url;
+        setTeamLogos(logoMap);
+        const sched: Record<string, {opp:string;date:string;time:string}> = {};
+        for (const g of gamesData ?? []) {
+          const d = new Date(g.game_date);
+          const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', timeZone: 'America/New_York' });
+          const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' });
+          sched[g.home_team] = { opp: `vs ${g.away_team}`, date: dateStr, time: timeStr };
+          sched[g.away_team] = { opp: `@ ${g.home_team}`, date: dateStr, time: timeStr };
+        }
+        setScheduleMap(sched);
+      } catch (e) {
+        console.error('Failed to load logos/schedule:', e);
       }
-      setScheduleMap(sched);
 
       // Build unique entry numbers
       const entryNums = Array.from(new Set((allEntriesRes.data ?? []).map((r: any) => r.entry_number ?? 1))) as number[];
