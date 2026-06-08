@@ -928,9 +928,10 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
 
   if (lineupSubmitted && picks && picks.length > 0) {
     const totalProj = picks.reduce((sum: number, pick: any) => {
-      const avgF = pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0;
-      const gameMult = matchupCtx?.multMap?.[pick.player_data?.school] ?? 1.0;
-      return sum + avgF * gameMult;
+      const p = pick.player_data?.projectedPoints
+        ?? ((pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0)
+            * (matchupCtx?.multMap?.[pick.player_data?.school] ?? 1.0));
+      return sum + p;
     }, 0);
     return (
       <div style={{ maxWidth: 560 }}>
@@ -966,9 +967,9 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
             const game = scheduleMap[school];
             const bdKey = `${school}-${unitType}`;
             const isExpanded = expandedPick === bdKey;
-            const avgF = pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0;
-            const gameMult = matchupCtx?.multMap?.[school] ?? 1.0;
-            const proj = avgF * gameMult;
+            const proj = pick.player_data?.projectedPoints
+              ?? ((pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0)
+                  * (matchupCtx?.multMap?.[school] ?? 1.0));
             return (
               <React.Fragment key={i}>
                 <div onClick={() => setExpandedPick(isExpanded ? null : bdKey)}
