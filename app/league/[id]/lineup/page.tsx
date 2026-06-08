@@ -182,10 +182,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [submitted,     setSubmitted]     = useState(false);
-  const [editing,       setEditing]       = useState(false);
   const [firstGameTime, setFirstGameTime] = useState<string | null>(null);
   const [gameTimeMap,   setGameTimeMap]   = useState<Record<string, string>>({});
-  const [swapSlot,      setSwapSlot]      = useState<string | null>(null);
   const [opponentMap,   setOpponentMap]   = useState<Record<string, string>>({});
   const [homeMap,       setHomeMap]       = useState<Record<string, boolean>>({});
   const [defRankMap,    setDefRankMap]    = useState<Record<string, number>>({});
@@ -511,149 +509,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
     </div>
   );
 
-  // ── Submitted / read-only view ───────────────────────────────────────────────
-  if (submitted && !editing) {
-    // Per-unit lock check based on individual game kickoff
-    const unitLockedMap: Record<string, boolean> = {};
-    for (const slot of SLOTS) {
-      const unit = lineup[slot.key];
-      if (!unit) { unitLockedMap[slot.key] = false; continue; }
-      const kickoff = gameTimeMap[unit.school];
-      unitLockedMap[slot.key] = kickoff ? new Date() >= new Date(kickoff) : false;
-    }
-    const lockedCount   = Object.values(unitLockedMap).filter(Boolean).length;
-    const editableCount = SLOTS.length - lockedCount;
-
-    // If swapping a slot, show the pool for that position
-    const swapSlotDef = swapSlot ? SLOTS.find(s => s.key === swapSlot) : null;
-
-    const doSwap = async (newUnit: DraftUnit) => {
-      if (!swapSlot) return;
-      const newLineup = { ...lineup, [swapSlot]: newUnit };
-      setLineup(newLineup);
-      setSaving(true);
-      try {
-        const picks = SLOTS.map(s => ({
-          unit_id:     newLineup[s.key]!.id,
-          slot:        s.label,
-          slot_key:    s.key,
-          salary_cost: priceMap[newLineup[s.key]!.id] ?? 0,
-          player_data: newLineup[s.key],
-        }));
-        const res = await fetch('/api/lineup/submit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ league_id: params.id, week, picks, entry_number: entryNumber }),
-        });
-        if (res.ok) setSwapSlot(null);
-        else { const d = await res.json().catch(() => ({})); showToast(d.error ?? 'Swap failed.'); }
-      } finally { setSaving(false); }
-    }
-
-    return (
-      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <div style={{ background: 'linear-gradient(180deg,#0d1827,#0c1422)', borderBottom: '1px solid ' + C.surf3, padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button onClick={() => goBack(params.id, router)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase' }}>← Back</button>
-            <div style={{ width: 1, height: 16, background: C.surf3 }} />
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 1 }}>{league?.name}</div>
-          </div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.sub, textAlign: 'right' }}>
-            {lockedCount > 0 && <span style={{ color: C.red }}>🔒 {lockedCount} locked</span>}
-            {lockedCount > 0 && editableCount > 0 && <span style={{ color: C.surf3 }}> · </span>}
-            {editableCount > 0 && <span style={{ color: C.green }}>✏ {editableCount} editable</span>}
-          </div>
-        </div>
-
-        {/* Swap modal */}
-        {swapSlot && swapSlotDef && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.88)', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ background: C.surf, borderBottom: '1px solid ' + C.surf3, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.text, letterSpacing: 1 }}>SWAP {swapSlotDef.label} UNIT</div>
-              <button onClick={() => setSwapSlot(null)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: 18 }}>✕</button>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-              {pool
-                .filter(u => swapSlotDef.accepts.includes(u.unitType) && (priceMap[u.id] ?? 0) > 0 && !(gameTimeMap[u.school] && new Date() >= new Date(gameTimeMap[u.school])))
-                .sort((a, b) => (b.avgFpts ?? 0) - (a.avgFpts ?? 0))
-                .map(u => {
-                  const isCurrent = lineup[swapSlot]?.id === u.id;
-                  return (
-                    <div key={u.id} onClick={() => !isCurrent && !saving && doSwap(u)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, marginBottom: 6, background: isCurrent ? 'rgba(245,166,35,.1)' : C.surf2, border: `1px solid ${isCurrent ? C.gold : C.surf3}`, cursor: isCurrent ? 'default' : 'pointer' }}>
-                      <span style={{ ...posBadge(POS_COLOR[u.unitType] ?? C.sub) }}>{u.unitType}</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: '#7eb8f7' }}>{u.playerName || u.school}</div>
-                        {u.playerName && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub }}>{u.school}</div>}
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>{oppLabel(u.school, opponentMap, homeMap)}</div>
-                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.gold }}>${priceMap[u.id] ?? 0}</div>
-                      </div>
-                      {isCurrent && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold }}>CURRENT</span>}
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
-        )}
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', maxWidth: 540, margin: '0 auto', width: '100%' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.green }} />
-              <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.green }}>Submitted</span>
-            </div>
-            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${totalSalary} / ${BUDGET}</span>
-          </div>
-          {/* Column headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 100px 60px 60px', padding: '6px 12px', background: C.hdrBg, borderRadius: '6px 6px 0 0' }}>
-            {['POS', 'PLAYER', 'OPP', 'Proj', ''].map((h, i) => (
-              <div key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.hdrText, textTransform: 'uppercase', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
-            ))}
-          </div>
-          {SLOTS.map((slot, idx) => {
-            const unit = lineup[slot.key];
-            const posColor = unit ? (POS_COLOR[unit.unitType] ?? C.sub) : C.muted;
-            const opp = unit ? oppLabel(unit.school, opponentMap, homeMap) : '—';
-            const fp = unit ? fppg(unit) : '—';
-            const unitLocked = unitLockedMap[slot.key];
-            return (
-              <div key={slot.key} style={{ display: 'grid', gridTemplateColumns: '44px 1fr 100px 60px 60px', alignItems: 'center', padding: '9px 12px', background: idx % 2 === 0 ? '#0c1220' : '#0a0e18', borderBottom: '1px solid rgba(30,45,71,.4)' }}>
-                <div><span style={posBadge(posColor)}>{slot.label}</span></div>
-                <div style={{ minWidth: 0 }}>
-                  {unit ? (
-                    <>
-                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{unit.playerName || unit.school}</div>
-                      {unit.playerName && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.5 }}>{unit.school}</div>}
-                    </>
-                  ) : (
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>Empty</div>
-                  )}
-                </div>
-                <div style={{ textAlign: 'right', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>{opp}</div>
-                <div style={{ textAlign: 'right', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.gold }}>{fp}</div>
-                <div style={{ textAlign: 'right' }}>
-                  {unitLocked ? (
-                    <span style={{ fontSize: 14 }}>🔒</span>
-                  ) : (
-                    <button onClick={() => setSwapSlot(slot.key)}
-                      style={{ padding: '3px 8px', background: 'rgba(126,184,247,.1)', border: '1px solid rgba(126,184,247,.3)', borderRadius: 4, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: '#7eb8f7' }}>
-                      SWAP
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Builder view ─────────────────────────────────────────────────────────────
-  const enterLabel = 'Submit Lineup';
+  // ── Builder view (always shown — pre-populated if existing picks exist) ────────
+  const enterLabel = submitted ? 'Update Lineup' : 'Submit Lineup';
 
   // void tick to use it (forces countdown re-render)
   void tick;
