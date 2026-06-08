@@ -1285,6 +1285,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
               const posColor = POS_COLOR[slot.label] ?? POS_COLOR[unit?.unitType ?? ''] ?? C.muted;
               const opp = unit ? oppLabel(unit.school, opponentMap, homeMap) : '—';
               const fp  = unit ? fppg(unit) : '—';
+              const kickoff = unit ? gameTimeMap[unit.school] : null;
+              const isUnitLocked = kickoff ? new Date() >= new Date(kickoff) : false;
 
               return (
                 <div
@@ -1295,6 +1297,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                     background: idx % 2 === 0 ? C.rPanel : '#090d16',
                     borderBottom: '1px solid rgba(30,45,71,.4)',
                     minHeight: 52,
+                    opacity: isUnitLocked ? 0.6 : 1,
                   }}
                 >
                   {/* POS */}
@@ -1304,7 +1307,10 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                   <div style={{ minWidth: 0 }}>
                     {unit ? (
                       <>
-                        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{unit.playerName || unit.school}</div>
+                        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {isUnitLocked && <span style={{ fontSize: 11 }}>🔒</span>}
+                          {unit.playerName || unit.school}
+                        </div>
                         {unit.playerName && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub }}>{unit.school}</div>}
                       </>
                     ) : (
@@ -1323,7 +1329,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
 
                   {/* Remove */}
                   <div style={{ textAlign: 'right' }}>
-                    {unit && (
+                    {unit && !isUnitLocked && (
                       <button
                         onClick={() => clearSlot(slot.key)}
                         style={{ display: 'inline-flex', width: 20, height: 20, borderRadius: '50%', background: 'rgba(231,76,60,.12)', border: '1px solid rgba(231,76,60,.3)', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.red, fontSize: 12, padding: 0, lineHeight: 1 }}

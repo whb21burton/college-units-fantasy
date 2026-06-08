@@ -728,7 +728,6 @@ const LINEUP_POS_COLOR: Record<string, string> = {
 function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refreshWallet }: { leagueId: string; router: any; userId: string | null; league: any; walletBalance: number; refreshWallet: () => void }) {
   const [picks,          setPicks]          = useState<any[] | null>(null);
   const [firstGameTime,  setFirstGameTime]  = useState<string | null>(null);
-  const [gameTimeMap,    setGameTimeMap]    = useState<Record<string, string>>({});
   const [loading,        setLoading]        = useState(true);
   const [originalLineup, setOriginalLineup] = useState<any[] | null>(null);
   const [lineupSubmitted, setLineupSubmitted] = useState(false);
@@ -773,7 +772,6 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
       setOriginalLineup(p);
       setLineupSubmitted(p.length > 0);
       setFirstGameTime(ctxRes.firstGameTime ?? null);
-      setGameTimeMap(ctxRes.gameTimeMap ?? {});
       // Build unique entry numbers
       const entryNums = Array.from(new Set((allEntriesRes.data ?? []).map((r: any) => r.entry_number ?? 1))) as number[];
       if (entryNums.length === 0) entryNums.push(1);
@@ -976,28 +974,18 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
     <div style={{ maxWidth: 520 }}>
       {entryHeader}
       {/* Status row */}
-      {(() => {
-        const lockedSlots   = LINEUP_SLOTS.filter(s => { const u = lineupMap[s.key]; if (!u) return false; const k = gameTimeMap[u.school]; return k ? new Date() >= new Date(k) : false; });
-        const editableSlots = LINEUP_SLOTS.filter(s => { const u = lineupMap[s.key]; if (!u) return false; const k = gameTimeMap[u.school]; return !(k ? new Date() >= new Date(k) : false); });
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1 }}>
-              {lockedSlots.length > 0 && <span style={{ color: C.red }}>🔒 {lockedSlots.length} locked</span>}
-              {lockedSlots.length > 0 && editableSlots.length > 0 && <span style={{ color: C.surf3 }}> · </span>}
-              {editableSlots.length > 0 && <span style={{ color: C.green }}>✏ {editableSlots.length} editable</span>}
-              {lockedSlots.length === 0 && editableSlots.length === 0 && <span style={{ color: C.green }}>✓ Submitted</span>}
-            </div>
-            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${totalSalary} / $200</span>
-          </div>
-        );
-      })()}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <button
+          onClick={() => router.push(`/league/${leagueId}/lineup?entry=${activeEntryNum}`)}
+          style={{ padding: '6px 16px', background: 'linear-gradient(135deg,#d4a828,#f0c94a)', border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: C.bg, cursor: 'pointer', textTransform: 'uppercase' }}
+        >✏ Edit Lineup</button>
+        <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${totalSalary} / $200</span>
+      </div>
 
       {/* Slot rows */}
       {LINEUP_SLOTS.map(slot => {
-        const unit      = lineupMap[slot.key];
-        const posColor  = unit ? (LINEUP_POS_COLOR[unit.unitType] ?? C.sub) : C.muted;
-        const kickoff   = unit ? gameTimeMap[unit.school] : null;
-        const unitLocked = kickoff ? new Date() >= new Date(kickoff) : false;
+        const unit     = lineupMap[slot.key];
+        const posColor = unit ? (LINEUP_POS_COLOR[unit.unitType] ?? C.sub) : C.muted;
         return (
           <div key={slot.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4, background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8 }}>
             <div style={{ width: 36, flexShrink: 0, fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: posColor }}>{slot.label}</div>
@@ -1010,16 +998,6 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
               ) : (
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Empty</div>
               )}
-            </div>
-            <div style={{ flexShrink: 0 }}>
-              {unitLocked ? (
-                <span style={{ fontSize: 14 }}>🔒</span>
-              ) : unit ? (
-                <button
-                  onClick={() => router.push(`/league/${leagueId}/lineup?entry=${activeEntryNum}&swap=${unit.unitType}`)}
-                  style={{ padding: '4px 10px', background: 'rgba(126,184,247,.1)', border: '1px solid rgba(126,184,247,.3)', borderRadius: 4, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: '#7eb8f7' }}
-                >SWAP</button>
-              ) : null}
             </div>
           </div>
         );
