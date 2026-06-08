@@ -972,7 +972,14 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
           }}
         >✏ Edit Lineup →</button>
         <div style={{ background: '#0c1422', border: '1px solid #1a2b40', borderRadius: 10, overflow: 'hidden' }}>
-          {picks.map((pick: any, i: number) => {
+          {(() => {
+            const POS_WEIGHT: Record<string,number> = { QB:0, RB:1, WR:3, TE:5, FLEX:6, DEF:7, K:8 };
+            const sortedPicks = [...(picks ?? [])].sort((a,b) => {
+              const aW = POS_WEIGHT[a.player_data?.unitType ?? ''] ?? 9;
+              const bW = POS_WEIGHT[b.player_data?.unitType ?? ''] ?? 9;
+              return aW - bW;
+            });
+            return sortedPicks.map((pick: any, i: number) => {
             const school = pick.player_data?.school;
             const unitType = pick.player_data?.unitType;
             const kickoff = gameTimeMap?.[school];
@@ -988,7 +995,8 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
                 {locked && <span style={{ fontSize:12 }}>🔒</span>}
               </div>
             );
-          })}
+          });
+          })()}
         </div>
 
         {showAddEntryConfirm && (
@@ -1265,7 +1273,7 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
                       </div>
                     ) : (
                       <div>
-                        {picks.map((pick: any, pi: number) => {
+                        {(() => { const POS_WEIGHT: Record<string,number> = { QB:0, RB:1, WR:3, TE:5, FLEX:6, DEF:7, K:8 }; return [...picks].sort((a,b) => (POS_WEIGHT[a.player_data?.unitType??'']??9) - (POS_WEIGHT[b.player_data?.unitType??'']??9)); })().map((pick: any, pi: number) => {
                           const school = pick.player_data?.school;
                           const unitType = pick.player_data?.unitType;
                           const opp = matchupCtx?.opponentMap?.[school];
