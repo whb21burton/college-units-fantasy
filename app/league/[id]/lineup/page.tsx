@@ -1205,6 +1205,18 @@ export default function LineupPage({ params }: { params: { id: string } }) {
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{filledCount}/{SLOTS.length} filled</span>
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>${totalSalary} / $200 used</span>
             </div>
+            {(() => {
+              const projTotal = SLOTS.reduce((sum, s) => {
+                const u = lineup[s.key];
+                return sum + (u ? (u.projectedPoints ?? u.avgFpts ?? u.avgPerWeek ?? 0) : 0);
+              }, 0);
+              return projTotal > 0 ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Projected</span>
+                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.gold, textTransform: 'uppercase' }}>{projTotal.toFixed(1)} pts</span>
+                </div>
+              ) : null;
+            })()}
             <div style={{ height: 4, background: C.surf3, borderRadius: 2, marginBottom: 4 }}>
               <div style={{ height: '100%', borderRadius: 2, width: `${Math.min(1, totalSalary / BUDGET) * 100}%`, background: remaining < 0 ? C.red : totalSalary / BUDGET > 0.85 ? C.orange : C.green, transition: 'width .3s' }} />
             </div>

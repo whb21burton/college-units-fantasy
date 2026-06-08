@@ -647,7 +647,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
             />
           )}
           {activeTab === 'leaderboard' && (
-            <WeeklyLeaderboardTab leagueId={params.id} />
+            <WeeklyLeaderboardTab leagueId={params.id} league={league} userId={userId} />
           )}
           {activeTab === 'chat' && (
             <div style={{ maxWidth: 600, margin: '0 auto' }}>
@@ -1076,13 +1076,15 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
 }
 
 /* ── Weekly Leaderboard Tab ─────────────────────────────────── */
-function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
+function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; league: any; userId: string | null }) {
   const [data,          setData]          = useState<any>(null);
   const [loading,       setLoading]       = useState(true);
   const [week,          setWeek]          = useState<number | null>(null);
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
   const [entryPicks,    setEntryPicks]    = useState<Record<string, any[]>>({});
   const [matchupCtx,    setMatchupCtx]    = useState<any>(null);
+
+  const allGamesComplete = league?.status === 'completed' || league?.status === 'scoring';
 
   useEffect(() => {
     fetch(`/api/matchup-context?week=5&season=2025`)
@@ -1209,7 +1211,9 @@ function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
                       setExpandedEntry(null);
                     } else {
                       setExpandedEntry(entryKey);
-                      loadEntryPicks(m.user_id, m.entry_number ?? 1);
+                      if (allGamesComplete || m.user_id === userId) {
+                        loadEntryPicks(m.user_id, m.entry_number ?? 1);
+                      }
                     }
                   }}
                   style={{
@@ -1250,7 +1254,11 @@ function WeeklyLeaderboardTab({ leagueId }: { leagueId: string }) {
                 {/* Expanded lineup */}
                 {isExpanded && (
                   <div style={{ background: 'rgba(0,0,0,.2)', borderBottom: '1px solid ' + C.surf3, padding: '12px 20px' }}>
-                    {picks.length === 0 ? (
+                    {!allGamesComplete && m.user_id !== userId ? (
+                      <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center', padding: '12px 0', letterSpacing: 1 }}>
+                        🔒 Lineup hidden until contest ends
+                      </div>
+                    ) : picks.length === 0 ? (
                       <div style={{ color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, textAlign: 'center', padding: '12px 0' }}>
                         Loading lineup…
                       </div>
