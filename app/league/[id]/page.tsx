@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
 import DraftOrderEditor from '@/components/league/DraftOrderEditor';
 import { useWallet } from '@/context/WalletContext';
+import UnitExpansion from '@/components/UnitExpansion';
 function odrLabelFromMult(m: number) { return m >= 1.15 ? 'Elite' : m >= 1.05 ? 'Good' : m >= 0.95 ? 'Avg' : m >= 0.85 ? 'Weak' : 'Poor' }
 function getODRColor(m: number) { return m >= 1.15 ? '#15c678' : m >= 1.05 ? '#7fc97f' : m >= 0.95 ? '#f5a623' : m >= 0.85 ? '#f08030' : '#f03a5a' }
 
@@ -743,7 +744,6 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
   const [teamLogos,          setTeamLogos]          = useState<Record<string, string>>({});
   const [scheduleMap,        setScheduleMap]        = useState<Record<string, {opp:string;date:string;time:string}>>({});
   const [expandedPick,       setExpandedPick]       = useState<string | null>(null);
-  const [pickBreakdowns,     setPickBreakdowns]     = useState<Record<string, any>>({});
   const maxPerAccount = league?.max_entries_per_user ?? 1;
   const buyInCents = Math.round((league?.buy_in ?? 0) * 100);
 
@@ -862,20 +862,6 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
     setLineupSubmitted(false);
     // Navigate directly to lineup builder for the new entry
     router.push(`/league/${leagueId}/lineup?entry=${nextNum}`);
-  }
-
-  async function loadPickBreakdown(school: string, unitType: string) {
-    const key = `${school}-${unitType}`;
-    if (pickBreakdowns[key]) {
-      setExpandedPick(expandedPick === key ? null : key);
-      return;
-    }
-    const results = await Promise.all([1,2,3,4].map(w =>
-      fetch(`/api/unit-stats?school=${encodeURIComponent(school)}&unitType=${unitType}&season=2025&week=${w}`)
-        .then(r => r.json()).catch(() => null)
-    ));
-    setPickBreakdowns(prev => ({ ...prev, [key]: results }));
-    setExpandedPick(key);
   }
 
   // Lock only if ALL units in the current lineup have kicked off.
@@ -1036,10 +1022,9 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
             const game = scheduleMap[school];
             const bdKey = `${school}-${unitType}`;
             const isExpanded = expandedPick === bdKey;
-            const bdWeeks: (any|null)[] = pickBreakdowns[bdKey] ?? [];
             return (
               <React.Fragment key={i}>
-                <div onClick={() => loadPickBreakdown(school, unitType)}
+                <div onClick={() => setExpandedPick(isExpanded ? null : bdKey)}
                   style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom: !isExpanded && i < sortedPicks.length-1 ? '1px solid #1a2b40' : 'none', opacity: locked ? 0.6 : 1, cursor:'pointer' }}>
                   <div style={{ background: POS_COLORS[normalize(displayPos)]??'#1a2b40', color:'#fff', fontFamily:'Oswald,sans-serif', fontSize:9, fontWeight:700, borderRadius:4, padding:'2px 6px', minWidth:28, textAlign:'center', flexShrink:0 }}>{displayPos}</div>
                   {logo && <img src={logo} alt={school} style={{ width:28, height:28, objectFit:'contain', flexShrink:0 }} onError={e => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />}
@@ -1051,30 +1036,8 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
                   <span style={{ fontSize:10, color:'#3e5470' }}>{isExpanded ? '▲' : '▼'}</span>
                 </div>
                 {isExpanded && (
-                  <div style={{ background:'rgba(0,0,0,.25)', borderBottom: i < sortedPicks.length-1 ? '1px solid #1a2b40' : 'none', padding:'8px 14px' }}>
-                    {bdWeeks.length === 0 ? (
-                      <div style={{ color:'#3e5470', fontFamily:'Oswald,sans-serif', fontSize:10, textAlign:'center', padding:'8px 0' }}>Loading…</div>
-                    ) : (
-                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                        <thead>
-                          <tr>
-                            {['WK','OPP','FPTS','ODR'].map(h => (
-                              <th key={h} style={{ fontFamily:'Oswald,sans-serif', fontSize:8, letterSpacing:2, color:'#3e5470', textTransform:'uppercase', textAlign:'right', padding:'3px 4px', fontWeight:400 }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {bdWeeks.map((bd: any, wi: number) => (
-                            <tr key={wi}>
-                              <td style={{ fontFamily:'Anton,sans-serif', fontSize:11, color:'#7a90aa', padding:'3px 4px', textAlign:'right' }}>{wi + 1}</td>
-                              <td style={{ fontFamily:'Oswald,sans-serif', fontSize:9, color:'#4a5d7a', padding:'3px 4px', textAlign:'right' }}>{bd?.opp ?? bd?.opponent ?? '—'}</td>
-                              <td style={{ fontFamily:'Anton,sans-serif', fontSize:11, color:'#f5a623', padding:'3px 4px', textAlign:'right' }}>{bd?.fpts != null ? bd.fpts.toFixed(2) : '—'}</td>
-                              <td style={{ fontFamily:'Oswald,sans-serif', fontSize:9, color:'#7a90aa', padding:'3px 4px', textAlign:'right' }}>{bd?.odrLabel ?? (bd?.odrMult != null ? `×${bd.odrMult.toFixed(2)}` : '—')}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
+                  <div style={{ background:'rgba(0,0,0,.25)', borderBottom: i < sortedPicks.length-1 ? '1px solid #1a2b40' : 'none', padding:'8px 14px', overflowX:'auto' }}>
+                    <UnitExpansion school={school} unitType={unitType} currentWeek={week} season={2025} logos={teamLogos} />
                   </div>
                 )}
               </React.Fragment>
