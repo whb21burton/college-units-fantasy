@@ -776,6 +776,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
       setGameTimeMap(ctxRes.gameTimeMap ?? {});
       // Build unique entry numbers
       const entryNums = Array.from(new Set((allEntriesRes.data ?? []).map((r: any) => r.entry_number ?? 1))) as number[];
+      entryNums.sort((a, b) => a - b);
       if (entryNums.length === 0) entryNums.push(1);
       setMyEntries(entryNums.map(n => ({ entry_number: n })));
       setLoading(false);
