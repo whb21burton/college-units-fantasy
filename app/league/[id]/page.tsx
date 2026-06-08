@@ -974,20 +974,23 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
         <div style={{ background: '#0c1422', border: '1px solid #1a2b40', borderRadius: 10, overflow: 'hidden' }}>
           {(() => {
             const POS_WEIGHT: Record<string,number> = { QB:0, RB:1, WR:3, TE:5, FLEX:6, DEF:7, K:8 };
+            const normalize = (s: string) => s.replace(/\d+$/, '');
             const sortedPicks = [...(picks ?? [])].sort((a,b) => {
-              const aW = POS_WEIGHT[a.player_data?.unitType ?? ''] ?? 9;
-              const bW = POS_WEIGHT[b.player_data?.unitType ?? ''] ?? 9;
-              return aW - bW;
+              const aSlot = a.player_data?._slot ?? a.player_data?.unitType ?? '';
+              const bSlot = b.player_data?._slot ?? b.player_data?.unitType ?? '';
+              return (POS_WEIGHT[normalize(aSlot)] ?? 9) - (POS_WEIGHT[normalize(bSlot)] ?? 9);
             });
             return sortedPicks.map((pick: any, i: number) => {
             const school = pick.player_data?.school;
-            const unitType = pick.player_data?.unitType;
+            const slot = pick.player_data?._slot ?? pick.player_data?.unitType ?? '';
+            const unitType = pick.player_data?.unitType ?? '';
+            const displayPos = slot || unitType;
             const kickoff = gameTimeMap?.[school];
             const locked = kickoff ? new Date() >= new Date(kickoff) : false;
             const POS_COLORS: Record<string,string> = { QB:'#e05c2a',RB:'#2a9d8f',WR:'#3a86ff',TE:'#8338ec',DEF:'#2b9348',K:'#e9c46a' };
             return (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom: i < picks.length-1 ? '1px solid #1a2b40' : 'none', opacity: locked ? 0.6 : 1 }}>
-                <div style={{ background: POS_COLORS[unitType]??'#1a2b40', color:'#fff', fontFamily:'Oswald,sans-serif', fontSize:9, fontWeight:700, borderRadius:4, padding:'2px 6px', minWidth:28, textAlign:'center', flexShrink:0 }}>{unitType}</div>
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom: i < sortedPicks.length-1 ? '1px solid #1a2b40' : 'none', opacity: locked ? 0.6 : 1 }}>
+                <div style={{ background: POS_COLORS[normalize(displayPos)]??'#1a2b40', color:'#fff', fontFamily:'Oswald,sans-serif', fontSize:9, fontWeight:700, borderRadius:4, padding:'2px 6px', minWidth:28, textAlign:'center', flexShrink:0 }}>{displayPos}</div>
                 <div style={{ flex:1 }}>
                   <div style={{ fontFamily:"'Space Grotesk',sans-serif", fontSize:13, fontWeight:600, color:'#7eb8f7' }}>{pick.player_data?.playerName || school}</div>
                   <div style={{ fontFamily:'Oswald,sans-serif', fontSize:9, color:'#4a5d7a' }}>{school}</div>
@@ -1273,7 +1276,7 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
                       </div>
                     ) : (
                       <div>
-                        {(() => { const POS_WEIGHT: Record<string,number> = { QB:0, RB:1, WR:3, TE:5, FLEX:6, DEF:7, K:8 }; return [...picks].sort((a,b) => (POS_WEIGHT[a.player_data?.unitType??'']??9) - (POS_WEIGHT[b.player_data?.unitType??'']??9)); })().map((pick: any, pi: number) => {
+                        {(() => { const POS_WEIGHT: Record<string,number> = { QB:0, RB:1, WR:3, TE:5, FLEX:6, DEF:7, K:8 }; const norm = (s: string) => s.replace(/\d+$/, ''); return [...picks].sort((a,b) => (POS_WEIGHT[norm(a.player_data?._slot??a.player_data?.unitType??'')]??9) - (POS_WEIGHT[norm(b.player_data?._slot??b.player_data?.unitType??'')]??9)); })().map((pick: any, pi: number) => {
                           const school = pick.player_data?.school;
                           const unitType = pick.player_data?.unitType;
                           const opp = matchupCtx?.opponentMap?.[school];
