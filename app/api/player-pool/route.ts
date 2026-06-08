@@ -77,7 +77,7 @@ export async function GET(req: Request) {
       .is('player_name', null)
       .gte('value', 0)
       .lte('week', 4)
-      .limit(100000);
+      .range(0, 9999);
 
     let fptsQuery = admin
       .from('cached_stats')
@@ -86,7 +86,7 @@ export async function GET(req: Request) {
       .in('stat_type', ['unit_QB_fpts', 'unit_RB_fpts', 'unit_WR_fpts', 'unit_TE_fpts', 'unit_DEF_fpts', 'unit_K_fpts'])
       .is('player_name', null)
       .lte('week', 4)
-      .limit(100000);
+      .range(0, 9999);
 
     if (allowedSchools && allowedSchools.length > 0) {
       baseQuery = baseQuery.in('school', allowedSchools);
@@ -106,10 +106,6 @@ export async function GET(req: Request) {
         .limit(10000),
     ]);
 
-    console.log('[pool-query] baseResult count:', baseResult.data?.length ?? 'null',
-      'error:', baseResult.error?.message ?? 'none');
-    console.log('[pool-query] fptsResult count:', fptsResult.data?.length ?? 'null',
-      'error:', fptsResult.error?.message ?? 'none');
     const data  = [...(baseResult.data ?? []), ...(fptsResult.data ?? [])];
     const error = baseResult.error ?? fptsResult.error;
 
