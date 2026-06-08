@@ -201,6 +201,12 @@ export async function GET(req: Request) {
     const allKeys    = Object.keys(liveSums).slice(0, 10).join(', ');
     const totalKeys  = Object.keys(liveSums).length;
     console.log(`POOL_DEBUG: Florida||QB=${debugVal ?? 'MISSING'} weeks=${debugCount ?? 0} totalKeys=${totalKeys} sample=${allKeys}`);
+    console.log('[auburn-debug] Auburn||QB liveSums:', liveSums['Auburn||QB'],
+      'liveCounts:', liveCounts['Auburn||QB'],
+      'fptsSums:', fptsSums['Auburn||QB']);
+    // Also log all Auburn keys in liveSums to confirm school name matches
+    const auburnKeys = Object.keys(liveSums).filter(k => k.toLowerCase().startsWith('auburn'));
+    console.log('[auburn-debug] all Auburn liveSums keys:', auburnKeys);
 
     // Build complete pool: every CONFERENCES school × every unit type, no gaps
     type Entry = { school: string; unitType: UnitType; pts: number; seasonTotal: number; weeksPlayed: number; avgPerWeek: number; avgFpts: number; isLive: boolean };
