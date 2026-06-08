@@ -106,6 +106,10 @@ export async function GET(req: Request) {
         .limit(10000),
     ]);
 
+    console.log('[pool-query] base:', baseResult.data?.length,
+      'fpts:', fptsResult.data?.length,
+      'baseError:', baseResult.error?.message,
+      'fptsError:', fptsResult.error?.message);
     const data  = [...(baseResult.data ?? []), ...(fptsResult.data ?? [])];
     const error = baseResult.error ?? fptsResult.error;
 
