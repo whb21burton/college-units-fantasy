@@ -68,23 +68,46 @@ export async function GET(req: Request) {
       if (!(key in fullPoolMap)) fullPoolMap[key] = unit.projectedPoints;
     }
 
-    // Fetch unit-level rows for the season up to current week
-    let query = admin
+    // Fetch base stats, fpts stats, and game_mult in parallel
+    let baseQuery = admin
       .from('cached_stats')
       .select('school, stat_type, value, week')
       .eq('season', SEASON)
-      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K',
-                        'unit_QB_fpts', 'unit_RB_fpts', 'unit_WR_fpts', 'unit_TE_fpts', 'unit_DEF_fpts', 'unit_K_fpts'])
+      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'])
       .is('player_name', null)
-      .gte('value', 0)      // include 0-score weeks (bad games count); only true byes have no row
+      .gte('value', 0)
+      .lte('week', 4)
+      .limit(100000);
+
+    let fptsQuery = admin
+      .from('cached_stats')
+      .select('school, stat_type, value, week')
+      .eq('season', SEASON)
+      .in('stat_type', ['unit_QB_fpts', 'unit_RB_fpts', 'unit_WR_fpts', 'unit_TE_fpts', 'unit_DEF_fpts', 'unit_K_fpts'])
+      .is('player_name', null)
       .lte('week', 4)
       .limit(100000);
 
     if (allowedSchools && allowedSchools.length > 0) {
-      query = query.in('school', allowedSchools);
+      baseQuery = baseQuery.in('school', allowedSchools);
+      fptsQuery  = fptsQuery.in('school', allowedSchools);
     }
 
-    const { data, error } = await query;
+    const [baseResult, fptsResult, _multResult] = await Promise.all([
+      baseQuery,
+      fptsQuery,
+      admin
+        .from('cached_stats')
+        .select('school, week, value')
+        .eq('season', SEASON)
+        .eq('stat_type', 'game_mult')
+        .is('player_name', null)
+        .lte('week', 4)
+        .limit(10000),
+    ]);
+
+    const data  = [...(baseResult.data ?? []), ...(fptsResult.data ?? [])];
+    const error = baseResult.error ?? fptsResult.error;
 
     // ── RB pricing data: rb1_opportunity per school across all weeks ──────────
     const { data: rbOppRows } = await admin
