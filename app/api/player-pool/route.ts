@@ -68,7 +68,7 @@ export async function GET(req: Request) {
       if (!(key in fullPoolMap)) fullPoolMap[key] = unit.projectedPoints;
     }
 
-    // Fetch base stats, fpts stats, and game_mult in parallel
+    // Fetch base stats and fpts stats sequentially — service role bypasses row cap
     let baseQuery = admin
       .from('cached_stats')
       .select('school, stat_type, value, week')
@@ -76,8 +76,7 @@ export async function GET(req: Request) {
       .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'])
       .is('player_name', null)
       .gte('value', 0)
-      .lte('week', 4)
-      .range(0, 9999);
+      .lte('week', 4);
 
     let fptsQuery = admin
       .from('cached_stats')
@@ -85,31 +84,16 @@ export async function GET(req: Request) {
       .eq('season', SEASON)
       .in('stat_type', ['unit_QB_fpts', 'unit_RB_fpts', 'unit_WR_fpts', 'unit_TE_fpts', 'unit_DEF_fpts', 'unit_K_fpts'])
       .is('player_name', null)
-      .lte('week', 4)
-      .range(0, 9999);
+      .lte('week', 4);
 
     if (allowedSchools && allowedSchools.length > 0) {
       baseQuery = baseQuery.in('school', allowedSchools);
       fptsQuery  = fptsQuery.in('school', allowedSchools);
     }
 
-    const [baseResult, fptsResult, _multResult] = await Promise.all([
-      baseQuery,
-      fptsQuery,
-      admin
-        .from('cached_stats')
-        .select('school, week, value')
-        .eq('season', SEASON)
-        .eq('stat_type', 'game_mult')
-        .is('player_name', null)
-        .lte('week', 4)
-        .limit(10000),
-    ]);
+    const baseResult  = await baseQuery;
+    const fptsResult  = await fptsQuery;
 
-    console.log('[pool-query] base:', baseResult.data?.length,
-      'fpts:', fptsResult.data?.length,
-      'baseError:', baseResult.error?.message,
-      'fptsError:', fptsResult.error?.message);
     const data  = [...(baseResult.data ?? []), ...(fptsResult.data ?? [])];
     const error = baseResult.error ?? fptsResult.error;
 
