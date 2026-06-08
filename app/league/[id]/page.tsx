@@ -954,92 +954,53 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
     );
   }
 
-  // Restore lineup map from saved picks
-  const lineupMap: Record<string, any> = {};
-  let totalSalary = 0;
-  for (const pick of picks) {
-    const slot = pick.player_data?._slot ?? pick.slot;
-    if (slot) {
-      const { _slot: _s, _salary: _sal, ...unitData } = pick.player_data ?? {};
-      lineupMap[slot] = unitData;
-      totalSalary += pick.player_data?._salary ?? 0;
-    }
+  if (lineupSubmitted && picks && picks.length > 0) {
+    return (
+      <div style={{ maxWidth: 560 }}>
+        {entryHeader}
+        <button
+          onClick={() => router.push(`/league/${leagueId}/lineup?entry=${activeEntryNum}`)}
+          style={{
+            width: '100%', padding: '14px', marginBottom: 16,
+            background: 'linear-gradient(135deg,#f5a623,#ffd166)',
+            border: 'none', borderRadius: 8, cursor: 'pointer',
+            fontFamily: 'Anton,sans-serif', fontSize: 14,
+            letterSpacing: 2, color: '#070a12', textTransform: 'uppercase',
+          }}
+        >✏ Edit Lineup →</button>
+        <div style={{ background: '#0c1422', border: '1px solid #1a2b40', borderRadius: 10, overflow: 'hidden' }}>
+          {picks.map((pick: any, i: number) => {
+            const school = pick.player_data?.school;
+            const unitType = pick.player_data?.unitType;
+            const kickoff = gameTimeMap?.[school];
+            const locked = kickoff ? new Date() >= new Date(kickoff) : false;
+            const POS_COLORS: Record<string,string> = { QB:'#e05c2a',RB:'#2a9d8f',WR:'#3a86ff',TE:'#8338ec',DEF:'#2b9348',K:'#e9c46a' };
+            return (
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom: i < picks.length-1 ? '1px solid #1a2b40' : 'none', opacity: locked ? 0.6 : 1 }}>
+                <div style={{ background: POS_COLORS[unitType]??'#1a2b40', color:'#fff', fontFamily:'Oswald,sans-serif', fontSize:9, fontWeight:700, borderRadius:4, padding:'2px 6px', minWidth:28, textAlign:'center', flexShrink:0 }}>{unitType}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:"'Space Grotesk',sans-serif", fontSize:13, fontWeight:600, color:'#7eb8f7' }}>{pick.player_data?.playerName || school}</div>
+                  <div style={{ fontFamily:'Oswald,sans-serif', fontSize:9, color:'#4a5d7a' }}>{school}</div>
+                </div>
+                {locked && <span style={{ fontSize:12 }}>🔒</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
-  const lockLabel = firstGameTime
-    ? isLocked
-      ? 'Games in progress — lineup locked'
-      : `Locks at first kickoff: ${new Date(firstGameTime).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}`
-    : '';
+  // (unreachable — kept for lineupChanged/resubmit path if needed)
+  const lineupMap: Record<string, any> = {};
+  for (const pick of picks) {
+    const slot = pick.player_data?._slot ?? pick.slot;
+    if (slot) { const { _slot: _s, _salary: _sal, ...unitData } = pick.player_data ?? {}; lineupMap[slot] = unitData; }
+  }
 
   return (
-    <div style={{ maxWidth: 520 }}>
+    <div style={{ maxWidth: 560 }}>
       {entryHeader}
-      {/* Status row */}
-      {(() => {
-        const lockedCount   = LINEUP_SLOTS.filter(s => { const u = lineupMap[s.key]; if (!u) return false; const k = gameTimeMap[u.school]; return k ? new Date() >= new Date(k) : false; }).length;
-        const editableCount = LINEUP_SLOTS.filter(s => lineupMap[s.key]).length - lockedCount;
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {lockedCount > 0 && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.red }}>🔒 {lockedCount} locked</span>}
-              {lockedCount > 0 && editableCount > 0 && <span style={{ color: C.surf3, fontSize: 10 }}>·</span>}
-              {editableCount > 0
-                ? <button onClick={() => router.push(`/league/${leagueId}/lineup?entry=${activeEntryNum}`)}
-                    style={{ padding: '4px 12px', background: 'linear-gradient(135deg,#d4a828,#f0c94a)', border: 'none', borderRadius: 6, fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 1, color: C.bg, cursor: 'pointer', textTransform: 'uppercase' }}>
-                    ✏ Edit ({editableCount})
-                  </button>
-                : lockedCount === 0 && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green }}>✓ Submitted</span>
-              }
-            </div>
-            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${totalSalary} / $200</span>
-          </div>
-        );
-      })()}
-
-      {/* Slot rows */}
-      {LINEUP_SLOTS.map(slot => {
-        const unit     = lineupMap[slot.key];
-        const posColor = unit ? (LINEUP_POS_COLOR[unit.unitType] ?? C.sub) : C.muted;
-        const kickoff  = unit ? gameTimeMap[unit.school] : null;
-        const unitLocked = kickoff ? new Date() >= new Date(kickoff) : false;
-        return (
-          <div key={slot.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4, background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, opacity: unitLocked ? 0.7 : 1 }}>
-            <div style={{ width: 36, flexShrink: 0, fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: posColor }}>{slot.label}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {unit ? (
-                <>
-                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{unit.playerName || unit.school}</div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, letterSpacing: 0.5, marginTop: 1 }}>{unit.school} · {unit.conference}</div>
-                </>
-              ) : (
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Empty</div>
-              )}
-            </div>
-            {unitLocked && <span style={{ fontSize: 13, flexShrink: 0 }}>🔒</span>}
-          </div>
-        );
-      })}
-
-      {/* Submit / Resubmit */}
-      {(
-        lineupSubmitted && !lineupChanged ? null
-        : lineupSubmitted && lineupChanged ? (
-          <button
-            onClick={async () => {
-              const filled = LINEUP_SLOTS.map(s => s.key).filter(k => lineupMap[k]);
-              if (filled.length < LINEUP_SLOTS.length) { alert('Please fill all lineup slots before resubmitting.'); return; }
-              await Promise.all((picks ?? []).map(p =>
-                supabase.from('draft_picks').upsert(p, { onConflict: 'league_id,user_id,week,slot,entry_type' })
-              ));
-              setOriginalLineup(picks);
-            }}
-            style={{ width: '100%', marginTop: 12, padding: '12px 0', background: 'rgba(21,198,120,.1)', border: '1px solid rgba(21,198,120,.35)', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.green, cursor: 'pointer', textTransform: 'uppercase' }}
-          >
-            Resubmit Lineup
-          </button>
-        ) : null
-      )}
 
       {showAddEntryConfirm && (
         <div style={{
