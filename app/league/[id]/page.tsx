@@ -740,9 +740,6 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
   const [activeEntryNum,     setActiveEntryNum]     = useState(1);
   const [showAddEntryConfirm, setShowAddEntryConfirm] = useState(false);
   const [gameTimeMap,        setGameTimeMap]        = useState<Record<string, string>>({});
-  const [editMode,           setEditMode]           = useState(false);
-  const [swapSlot,           setSwapSlot]           = useState<string | null>(null);
-  const [swapping,           setSwapping]           = useState(false);
   const maxPerAccount = league?.max_entries_per_user ?? 1;
   const buyInCents = Math.round((league?.buy_in ?? 0) * 100);
 
@@ -979,98 +976,35 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
     <div style={{ maxWidth: 520 }}>
       {entryHeader}
       {/* Status row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        {editMode ? (
-          <button onClick={() => { setEditMode(false); setSwapSlot(null); }}
-            style={{ padding: '6px 16px', background: 'rgba(21,198,120,.12)', border: '1px solid rgba(21,198,120,.35)', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: C.green, cursor: 'pointer', textTransform: 'uppercase' }}>
-            ✓ Done Editing
-          </button>
-        ) : (
-          <button onClick={() => setEditMode(true)}
-            style={{ padding: '6px 16px', background: 'linear-gradient(135deg,#d4a828,#f0c94a)', border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: C.bg, cursor: 'pointer', textTransform: 'uppercase' }}>
-            ✏ Edit Lineup
-          </button>
-        )}
-        <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${totalSalary} / $200</span>
-      </div>
-
-      {/* Swap overlay */}
-      {swapSlot && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,.88)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ background: C.surf, borderBottom: '1px solid ' + C.surf3, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.text, letterSpacing: 1 }}>
-              SWAP {swapSlot.toUpperCase()} UNIT
+      {(() => {
+        const lockedCount   = LINEUP_SLOTS.filter(s => { const u = lineupMap[s.key]; if (!u) return false; const k = gameTimeMap[u.school]; return k ? new Date() >= new Date(k) : false; }).length;
+        const editableCount = LINEUP_SLOTS.filter(s => lineupMap[s.key]).length - lockedCount;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {lockedCount > 0 && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.red }}>🔒 {lockedCount} locked</span>}
+              {lockedCount > 0 && editableCount > 0 && <span style={{ color: C.surf3, fontSize: 10 }}>·</span>}
+              {editableCount > 0
+                ? <button onClick={() => router.push(`/league/${leagueId}/lineup?entry=${activeEntryNum}`)}
+                    style={{ padding: '4px 12px', background: 'linear-gradient(135deg,#d4a828,#f0c94a)', border: 'none', borderRadius: 6, fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 1, color: C.bg, cursor: 'pointer', textTransform: 'uppercase' }}>
+                    ✏ Edit ({editableCount})
+                  </button>
+                : lockedCount === 0 && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green }}>✓ Submitted</span>
+              }
             </div>
-            <button onClick={() => setSwapSlot(null)} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
+            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>${totalSalary} / $200</span>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-            {pool
-              .filter(u => {
-                const slotDef = LINEUP_SLOTS.find(s => s.key === swapSlot);
-                if (!slotDef) return false;
-                const accepts = slotDef.key === 'FLEX'
-                  ? ['RB', 'WR', 'TE']
-                  : [slotDef.key === 'QB' ? 'QB' : slotDef.key === 'DEF' ? 'DEF' : slotDef.key === 'K' ? 'K' : slotDef.key.replace(/\d/, '')];
-                if (!accepts.includes(u.unitType)) return false;
-                const kickoff = gameTimeMap[u.school];
-                return !(kickoff && new Date() >= new Date(kickoff));
-              })
-              .sort((a, b) => (b.avgFpts ?? b.avgPerWeek ?? 0) - (a.avgFpts ?? a.avgPerWeek ?? 0))
-              .map(u => {
-                const isCurrent = lineupMap[swapSlot]?.school === u.school && lineupMap[swapSlot]?.unitType === u.unitType;
-                return (
-                  <div key={u.id} onClick={async () => {
-                    if (isCurrent || swapping) return;
-                    setSwapping(true);
-                    // Build updated picks with this slot replaced
-                    const SLOT_KEY_MAP: Record<string, string> = { QB: 'QB', RB1: 'RB', RB2: 'RB', WR1: 'WR', WR2: 'WR', TE: 'TE', FLEX: u.unitType, DEF: 'DEF', K: 'K' };
-                    const salary = (u as any).salary ?? (u as any).price ?? 0;
-                    const newPick = { unit_id: u.id, slot: SLOT_KEY_MAP[swapSlot] ?? swapSlot, slot_key: swapSlot, salary_cost: salary, player_data: { ...u, _slot: swapSlot, _salary: salary } };
-                    const otherPicks = (picks ?? []).filter(p => (p.player_data?._slot ?? p.slot_key) !== swapSlot);
-                    const allPicks = [...otherPicks.map(p => ({ unit_id: p.player_id ?? p.unit_id, slot: p.slot, slot_key: p.player_data?._slot ?? p.slot_key, salary_cost: p.salary_cost ?? 0, player_data: p.player_data })), newPick];
-                    const res = await fetch('/api/lineup/submit', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ league_id: leagueId, week, picks: allPicks, entry_number: activeEntryNum }),
-                    });
-                    if (res.ok) {
-                      // Refresh picks
-                      const { data } = await supabase.from('draft_picks').select('*').eq('league_id', leagueId).eq('user_id', userId!).eq('week', week).eq('entry_type', 'lineup').eq('entry_number', activeEntryNum);
-                      setPicks(data ?? []);
-                      setOriginalLineup(data ?? []);
-                      setSwapSlot(null);
-                    } else {
-                      const d = await res.json().catch(() => ({}));
-                      alert(d.error ?? 'Swap failed');
-                    }
-                    setSwapping(false);
-                  }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, marginBottom: 6, background: isCurrent ? 'rgba(245,166,35,.1)' : C.surf2, border: `1px solid ${isCurrent ? C.gold : C.surf3}`, cursor: isCurrent ? 'default' : 'pointer', opacity: swapping ? 0.6 : 1 }}>
-                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1, color: LINEUP_POS_COLOR[u.unitType] ?? C.sub, width: 28, textTransform: 'uppercase' }}>{u.unitType}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.playerName || u.school}</div>
-                      {u.playerName && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub }}>{u.school}</div>}
-                    </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>{u.school}</div>
-                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: C.gold }}>{(u.avgFpts ?? u.avgPerWeek ?? 0).toFixed(1)} avg</div>
-                    </div>
-                    {isCurrent && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.gold, letterSpacing: 1 }}>CUR</span>}
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Slot rows */}
       {LINEUP_SLOTS.map(slot => {
-        const unit      = lineupMap[slot.key];
-        const posColor  = unit ? (LINEUP_POS_COLOR[unit.unitType] ?? C.sub) : C.muted;
-        const kickoff   = unit ? gameTimeMap[unit.school] : null;
+        const unit     = lineupMap[slot.key];
+        const posColor = unit ? (LINEUP_POS_COLOR[unit.unitType] ?? C.sub) : C.muted;
+        const kickoff  = unit ? gameTimeMap[unit.school] : null;
         const unitLocked = kickoff ? new Date() >= new Date(kickoff) : false;
         return (
-          <div key={slot.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4, background: C.surf2, border: `1px solid ${editMode && !unitLocked ? 'rgba(126,184,247,.25)' : C.surf3}`, borderRadius: 8 }}>
+          <div key={slot.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4, background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, opacity: unitLocked ? 0.7 : 1 }}>
             <div style={{ width: 36, flexShrink: 0, fontFamily: 'Oswald,sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: posColor }}>{slot.label}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               {unit ? (
@@ -1082,18 +1016,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>Empty</div>
               )}
             </div>
-            {editMode && (
-              <div style={{ flexShrink: 0 }}>
-                {unitLocked ? (
-                  <span style={{ fontSize: 14 }}>🔒</span>
-                ) : (
-                  <button onClick={() => setSwapSlot(slot.key)}
-                    style={{ padding: '4px 10px', background: 'rgba(126,184,247,.1)', border: '1px solid rgba(126,184,247,.3)', borderRadius: 4, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: '#7eb8f7' }}>
-                    SWAP
-                  </button>
-                )}
-              </div>
-            )}
+            {unitLocked && <span style={{ fontSize: 13, flexShrink: 0 }}>🔒</span>}
           </div>
         );
       })}
