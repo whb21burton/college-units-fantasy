@@ -928,10 +928,17 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
 
   if (lineupSubmitted && picks && picks.length > 0) {
     const totalProj = picks.reduce((sum: number, pick: any) => {
-      const p = pick.player_data?.projectedPoints
-        ?? ((pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0)
-            * (matchupCtx?.multMap?.[pick.player_data?.school] ?? 1.0));
-      return sum + p;
+      const pSchool = pick.player_data?.school;
+      const pType   = pick.player_data?.unitType ?? '';
+      const pOpp    = matchupCtx?.opponentMap?.[pSchool];
+      const pRank   = pType === 'DEF'
+        ? (matchupCtx?.offRankMap?.[pOpp] ?? 50)
+        : (matchupCtx?.defRankMap?.[pOpp] ?? 50);
+      const pMult   = !pOpp ? 1.0
+        : pRank <= 5 ? 1.3 : pRank <= 10 ? 1.2 : pRank <= 15 ? 1.1
+        : pRank <= 25 ? 1.0 : pRank <= 35 ? 0.9 : pRank <= 50 ? 0.8
+        : pRank <= 80 ? 0.7 : pRank <= 100 ? 0.6 : 0.50;
+      return sum + (pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0) * pMult;
     }, 0);
     return (
       <div style={{ maxWidth: 560 }}>
@@ -967,9 +974,15 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
             const game = scheduleMap[school];
             const bdKey = `${school}-${unitType}`;
             const isExpanded = expandedPick === bdKey;
-            const proj = pick.player_data?.projectedPoints
-              ?? ((pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0)
-                  * (matchupCtx?.multMap?.[school] ?? 1.0));
+            const opp      = matchupCtx?.opponentMap?.[school];
+            const oppRank  = unitType === 'DEF'
+              ? (matchupCtx?.offRankMap?.[opp] ?? 50)
+              : (matchupCtx?.defRankMap?.[opp] ?? 50);
+            const gameMult = !opp ? 1.0
+              : oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2 : oppRank <= 15 ? 1.1
+              : oppRank <= 25 ? 1.0 : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
+              : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.50;
+            const proj     = (pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0) * gameMult;
             return (
               <React.Fragment key={i}>
                 <div onClick={() => setExpandedPick(isExpanded ? null : bdKey)}
