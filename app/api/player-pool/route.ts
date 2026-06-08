@@ -182,6 +182,9 @@ export async function GET(req: Request) {
     const fptsSums:   Record<string, number> = {}; // sum of stored unit_*_fpts values
     for (const row of data ?? []) {
       const canonicalSchool = SCHOOL_ALIASES[row.school] ?? row.school;
+      if (canonicalSchool === 'Auburn' && row.stat_type === 'unit_QB') {
+        console.log('[auburn-loop] week:', row.week, 'value:', row.value, 'isFpts:', row.stat_type.endsWith('_fpts'));
+      }
       if (!schoolConf[canonicalSchool]) continue;
       const isFpts   = row.stat_type.endsWith('_fpts');
       const unitType = row.stat_type.replace('unit_', '').replace('_fpts', '') as UnitType;
