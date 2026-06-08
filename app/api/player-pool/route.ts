@@ -73,7 +73,8 @@ export async function GET(req: Request) {
       .from('cached_stats')
       .select('school, stat_type, value, week')
       .eq('season', SEASON)
-      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K'])
+      .in('stat_type', ['unit_QB', 'unit_RB', 'unit_WR', 'unit_TE', 'unit_DEF', 'unit_K',
+                        'unit_QB_fpts', 'unit_RB_fpts', 'unit_WR_fpts', 'unit_TE_fpts', 'unit_DEF_fpts', 'unit_K_fpts'])
       .is('player_name', null)
       .gte('value', 0)      // include 0-score weeks (bad games count); only true byes have no row
       .lte('week', 4)
@@ -83,24 +84,7 @@ export async function GET(req: Request) {
       query = query.in('school', allowedSchools);
     }
 
-    const [{ data, error }, multResult] = await Promise.all([
-      query,
-      admin
-        .from('cached_stats')
-        .select('school, week, value')
-        .eq('season', SEASON)
-        .eq('stat_type', 'game_mult')
-        .is('player_name', null)
-        .lte('week', 4)
-        .limit(10000),
-    ]);
-
-    // Build school||week → game_mult map
-    const multBySchoolWeek: Record<string, number> = {};
-    for (const row of multResult.data ?? []) {
-      const canonicalSchool = SCHOOL_ALIASES[row.school] ?? row.school;
-      multBySchoolWeek[`${canonicalSchool}||${row.week}`] = row.value ?? 1.0;
-    }
+    const { data, error } = await query;
 
     // ── RB pricing data: rb1_opportunity per school across all weeks ──────────
     const { data: rbOppRows } = await admin
@@ -172,41 +156,21 @@ export async function GET(req: Request) {
     // fairly against the static FULL_POOL 4-week projections).
     const liveSums:   Record<string, number> = {};
     const liveCounts: Record<string, number> = {};
-    const fptsSums:   Record<string, number> = {}; // sum of WGTD×ODR
-    let debugMisses = 0;
+    const fptsSums:   Record<string, number> = {}; // sum of stored unit_*_fpts values
     for (const row of data ?? []) {
       const canonicalSchool = SCHOOL_ALIASES[row.school] ?? row.school;
-      if (!schoolConf[canonicalSchool]) {
-        // Log first few unrecognized school names to catch future alias gaps
-        if (debugMisses < 5) {
-          console.log('[pool-debug] unrecognized school:', row.school, '→', canonicalSchool);
-          debugMisses++;
-        }
-        continue;
-      }
-      const unitType = row.stat_type.replace('unit_', '') as UnitType;
+      if (!schoolConf[canonicalSchool]) continue;
+      const isFpts   = row.stat_type.endsWith('_fpts');
+      const unitType = row.stat_type.replace('unit_', '').replace('_fpts', '') as UnitType;
       const key = `${canonicalSchool}||${unitType}`;
-      const wgtd = row.value ?? 0;
-      // Get the ODR mult for this specific week
-      const weekMult = multBySchoolWeek[`${canonicalSchool}||${row.week}`] ?? 1.0;
-      const fpts = wgtd * weekMult;
-      liveSums[key]   = (liveSums[key]   ?? 0) + wgtd;
-      liveCounts[key] = (liveCounts[key] ?? 0) + 1;
-      fptsSums[key]   = (fptsSums[key]   ?? 0) + fpts;
+      const val = row.value ?? 0;
+      if (isFpts) {
+        fptsSums[key] = (fptsSums[key] ?? 0) + val;
+      } else {
+        liveSums[key]   = (liveSums[key]   ?? 0) + val;
+        liveCounts[key] = (liveCounts[key] ?? 0) + 1;
+      }
     }
-
-    const debugKey   = `Florida||QB`;
-    const debugVal   = liveSums[debugKey];
-    const debugCount = liveCounts[debugKey];
-    const allKeys    = Object.keys(liveSums).slice(0, 10).join(', ');
-    const totalKeys  = Object.keys(liveSums).length;
-    console.log(`POOL_DEBUG: Florida||QB=${debugVal ?? 'MISSING'} weeks=${debugCount ?? 0} totalKeys=${totalKeys} sample=${allKeys}`);
-    console.log('[auburn-debug] Auburn||QB liveSums:', liveSums['Auburn||QB'],
-      'liveCounts:', liveCounts['Auburn||QB'],
-      'fptsSums:', fptsSums['Auburn||QB']);
-    // Also log all Auburn keys in liveSums to confirm school name matches
-    const auburnKeys = Object.keys(liveSums).filter(k => k.toLowerCase().startsWith('auburn'));
-    console.log('[auburn-debug] all Auburn liveSums keys:', auburnKeys);
 
     // Build complete pool: every CONFERENCES school × every unit type, no gaps
     type Entry = { school: string; unitType: UnitType; pts: number; seasonTotal: number; weeksPlayed: number; avgPerWeek: number; avgFpts: number; isLive: boolean };
