@@ -89,14 +89,6 @@ export default function UnitExpansion({
   const playedWeeks = weeks.filter((w: any) => w.completed);
   const fptsVals = playedWeeks.map((w: any) => weekBreakdown[w.week]?.fpts ?? w.fantasyPoints ?? null).filter((v: any) => v != null);
   const avgFpts = fptsVals.length > 0 ? fptsVals.reduce((s: number, v: number) => s + v, 0) / fptsVals.length : 0;
-  // Base average = fpts / past ODR, so upcoming projection isn't double-counted
-  const baseVals = playedWeeks.map((w: any) => {
-    const fpts = weekBreakdown[w.week]?.fpts ?? w.fantasyPoints ?? null;
-    const mult = w.multiplier ?? 1.0;
-    return fpts != null && mult > 0 ? fpts / mult : null;
-  }).filter((v: any) => v != null) as number[];
-  const avgBaseFpts = baseVals.length > 0 ? baseVals.reduce((s: number, v: number) => s + v, 0) / baseVals.length : 0;
-
   function loadBreakdown(wkNum: number) {
     if (weekBreakdown[wkNum]) return;
     fetch(`/api/unit-stats?school=${encodeURIComponent(school)}&unitType=${unitType}&season=${season}&week=${wkNum}`)
@@ -128,7 +120,7 @@ export default function UnitExpansion({
               const opp = wk.opponent;
               const oppRank = opp ? (unitType === 'DEF' ? (offRankMap[opp] ?? 50) : (defRankMap[opp] ?? 50)) : 50;
               const mult = odrMult(oppRank);
-              const proj = avgBaseFpts > 0 ? (avgBaseFpts * mult).toFixed(2) : '—';
+              const proj = avgFpts > 0 ? (avgFpts * mult).toFixed(2) : '—';
               const oppShort = opp ? (opp.length > 12 ? opp.slice(0, 12) + '…' : opp) : 'TBD';
               return (
                 <tr key={wk.week} style={{ outline: '2px solid rgba(21,198,120,.6)', outlineOffset: '-1px', background: 'rgba(21,198,120,.05)' }}>
@@ -152,7 +144,7 @@ export default function UnitExpansion({
               const opp = wk.opponent;
               const oppRank = opp ? (unitType === 'DEF' ? (offRankMap[opp] ?? 50) : (defRankMap[opp] ?? 50)) : 50;
               const mult = odrMult(oppRank);
-              const proj = avgBaseFpts > 0 ? (avgBaseFpts * mult).toFixed(2) : '—';
+              const proj = avgFpts > 0 ? (avgFpts * mult).toFixed(2) : '—';
               const oppShort = opp ? (opp.length > 12 ? opp.slice(0, 12) + '…' : opp) : '—';
               return (
                 <tr key={wk.week} style={{ opacity: 0.45 }}>
