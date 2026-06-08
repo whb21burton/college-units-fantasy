@@ -1141,7 +1141,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
               const price = unit ? (priceMap[unit.id] ?? 0) : 0;
               const posColor = POS_COLOR[slot.label] ?? POS_COLOR[unit?.unitType ?? ''] ?? C.muted;
               const opp = unit ? oppLabel(unit.school, opponentMap, homeMap) : '—';
-              const fp  = unit ? fppg(unit, opponentMap, defRankMap, offRankMap) : '—';
+              const freshUnit = pool.find(p => p.school === unit?.school && p.unitType === unit?.unitType) ?? unit;
+              const fp  = freshUnit ? fppg(freshUnit, opponentMap, defRankMap, offRankMap) : '—';
               const kickoff = unit ? gameTimeMap[unit.school] : null;
               const isUnitLocked = kickoff ? new Date() >= new Date(kickoff) : false;
 
@@ -1208,7 +1209,8 @@ export default function LineupPage({ params }: { params: { id: string } }) {
             {(() => {
               const projTotal = SLOTS.reduce((sum, s) => {
                 const u = lineup[s.key];
-                return sum + (u ? parseFloat(fppg(u, opponentMap, defRankMap, offRankMap)) : 0);
+                const fresh = pool.find(p => p.school === u?.school && p.unitType === u?.unitType) ?? u;
+                return sum + (fresh ? parseFloat(fppg(fresh, opponentMap, defRankMap, offRankMap)) : 0);
               }, 0);
               return projTotal > 0 ? (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
