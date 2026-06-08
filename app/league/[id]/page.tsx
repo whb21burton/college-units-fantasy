@@ -829,6 +829,8 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
     setPicks([]);
     setOriginalLineup([]);
     setLineupSubmitted(false);
+    // Navigate directly to lineup builder for the new entry
+    router.push(`/league/${leagueId}/lineup?entry=${nextNum}`);
   }
 
   // Lock only if ALL units in the current lineup have kicked off.
