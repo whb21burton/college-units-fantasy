@@ -194,6 +194,7 @@ export default function DraftPage() {
       setPicks(existingPicks);
 
       const rawPool: DraftUnit[] = Array.isArray(poolRes) ? poolRes : [];
+      console.log('[draft-pool] fetched:', rawPool.length, 'units');
       const allowedSchools: string[] | null = Array.isArray(lg?.settings?.allowed_schools)
         ? lg.settings.allowed_schools as string[]
         : null;
@@ -203,6 +204,7 @@ export default function DraftPage() {
         if (lg?.conference_filter && lg.conference_filter !== 'ALL') p = p.filter(u => u.conference === lg.conference_filter);
         return p;
       })();
+      console.log('[draft-pool] after filter:', livePool.length, 'available', '| conference_filter:', lg?.conference_filter, '| allowed_schools:', allowedSchools?.length ?? 'none');
       if (!cancelled) setFullPool(livePool); // store original pool for stable salary pricing
       const takenIds = new Set(existingPicks.map((p: any) => p.player_id));
       setAvail(sortByVORP(livePool).filter(u => !takenIds.has(u.id)));
