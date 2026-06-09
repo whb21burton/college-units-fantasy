@@ -482,8 +482,9 @@ export default function DraftPage() {
       );
     }
 
-    const leagueIsFull  = members.length >= (league?.league_size ?? 999);
-    const cpuTeamNames  = (league?.settings?.cpu_teams as string[]) ?? [];
+    const cpuTeamNames   = (league?.settings?.cpu_teams as string[]) ?? [];
+    const totalOccupied  = members.length + cpuTeamNames.length;
+    const leagueIsFull   = totalOccupied >= (league?.league_size ?? 999);
     const lobbyTeams = [
       ...members.map(m => ({ name: m.team_name, type: 'human' as const, isMe: m.user_id === userId })),
       ...cpuTeamNames.map(name => ({ name, type: 'cpu' as const, isMe: false })),
