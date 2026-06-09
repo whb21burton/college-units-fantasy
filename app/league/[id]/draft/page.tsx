@@ -166,10 +166,13 @@ export default function DraftPage() {
   // ── Initial load ──────────────────────────────────────────────────────────
 
   useEffect(() => {
+    console.log('[draft-pool] useEffect fired', { leagueId });
     let cancelled = false;
 
     async function init() {
+      console.log('[draft-pool] init() started');
       const { data: { user } } = await supabase.auth.getUser();
+      console.log('[draft-pool] auth user:', user?.id ?? 'null');
       if (!user) { router.push('/'); return; }
       if (!cancelled) setUserId(user.id);
 
