@@ -1892,12 +1892,14 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
 }) {
   const [stats,         setStats]         = useState<any | null>(null);
   const [loading,       setLoading]       = useState(true);
-  const [expandedWk, setExpandedWk] = useState<number | null>(null);
+  const [expandedWk,    setExpandedWk]    = useState<number | null>(null);
   const [logos,         setLogos]         = useState<Record<string, string>>({});
+  const [matchupCtx,    setMatchupCtx]    = useState<any>(null);
   const toggleWeek = (wk: number) => setExpandedWk(prev => prev === wk ? null : wk);
 
   useEffect(() => {
     fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d.logos ?? {})).catch(() => {});
+    fetch('/api/matchup-context?week=5&season=2025').then(r => r.json()).then(d => setMatchupCtx(d)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1976,6 +1978,23 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
   const rankLabels = (ut: string, idx: number) =>
     ut === 'QB' ? 'STARTER' : `${ut}${idx + 1}`;
 
+  // Canonical projection: avgFpts × odrMult(defRankMap[opponent])
+  const proj = (() => {
+    const avgF = (player.avgFpts ?? player.avgPerWeek ?? 0) > 0
+      ? (player.avgFpts ?? player.avgPerWeek ?? 0)
+      : liveProj(player);
+    if (!matchupCtx?.opponentMap) return avgF;
+    const opp = matchupCtx.opponentMap[player.school];
+    if (!opp) return avgF;
+    const oppRank = player.unitType === 'DEF'
+      ? (matchupCtx.offRankMap?.[opp] ?? 50)
+      : (matchupCtx.defRankMap?.[opp] ?? 50);
+    const mult = oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2 : oppRank <= 15 ? 1.1
+      : oppRank <= 25 ? 1.0 : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
+      : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.50;
+    return avgF * mult;
+  })();
+
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
       <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.sub, fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 500, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
@@ -2011,7 +2030,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.gold, lineHeight: 1 }}>{liveProj(player).toFixed(1)}</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.gold, lineHeight: 1 }}>{proj.toFixed(1)}</div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, marginBottom: 8, marginTop: 2, letterSpacing: 1, textTransform: 'uppercase' }}>pts/wk proj</div>
           {canAdd && (
             <button onClick={onAdd} style={{
@@ -2261,7 +2280,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                   const fpts = (wk.fpts ?? wk.fantasyPoints) != null
                     ? (wk.fpts ?? wk.fantasyPoints)!.toFixed(1)
                     : wk.opponent != null
-                      ? liveProj(player).toFixed(1)
+                      ? proj.toFixed(1)
                       : '—';
                   const isBye = wk.isBye === true
 
