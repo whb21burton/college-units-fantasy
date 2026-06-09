@@ -179,7 +179,7 @@ export default function DraftPage() {
           .order('draft_slot', { ascending: true }),
         supabase.from('draft_picks').select('*').eq('league_id', leagueId)
           .order('pick_number', { ascending: true }),
-        fetch('/api/player-pool').then(r => r.json()).catch(() => []),
+        fetch(`/api/player-pool?_t=${Date.now()}`).then(r => r.json()).catch(() => []),
       ]);
 
       if (cancelled) return;
@@ -194,9 +194,15 @@ export default function DraftPage() {
       setPicks(existingPicks);
 
       const rawPool: DraftUnit[] = Array.isArray(poolRes) ? poolRes : [];
-      const livePool = lg?.conference_filter && lg.conference_filter !== 'ALL'
-        ? rawPool.filter((u: DraftUnit) => u.conference === lg.conference_filter)
-        : rawPool;
+      const allowedSchools: string[] | null = Array.isArray(lg?.settings?.allowed_schools)
+        ? lg.settings.allowed_schools as string[]
+        : null;
+      const livePool = (() => {
+        let p = rawPool;
+        if (allowedSchools?.length) p = p.filter(u => allowedSchools.includes(u.school));
+        if (lg?.conference_filter && lg.conference_filter !== 'ALL') p = p.filter(u => u.conference === lg.conference_filter);
+        return p;
+      })();
       if (!cancelled) setFullPool(livePool); // store original pool for stable salary pricing
       const takenIds = new Set(existingPicks.map((p: any) => p.player_id));
       setAvail(sortByVORP(livePool).filter(u => !takenIds.has(u.id)));
@@ -311,7 +317,7 @@ export default function DraftPage() {
     }
 
     const best = autoPick(avail, cpuRoster);
-    if (best) setTimeout(() => insertPick(best), 500);
+    if (best) setTimeout(() => insertPick(best), 1000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPickNum, draftLive, draftDone, userId, isCpuTurn, teamIdx]);
 
