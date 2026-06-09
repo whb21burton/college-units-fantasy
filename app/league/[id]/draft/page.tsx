@@ -120,6 +120,7 @@ export default function DraftPage() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [fullPool,     setFullPool]     = useState<DraftUnit[]>([]); // original pool, never filtered
   const [cpuPicking,   setCpuPicking]   = useState(false);
+  const [poolOpen,     setPoolOpen]     = useState(true);
 
   const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoAttempted = useRef<Set<number>>(new Set());
@@ -602,7 +603,7 @@ export default function DraftPage() {
   // ── Live draft room ───────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden', fontFamily: "'Oswald', sans-serif", color: C.text }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: C.bg, overflow: 'hidden', fontFamily: "'Oswald', sans-serif", color: C.text }}>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -612,107 +613,182 @@ export default function DraftPage() {
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
       `}</style>
 
-      {/* ── Draft Board ─────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-        {/* Header */}
-        <div style={{ padding: '12px 20px', background: C.surf, borderBottom: `1px solid ${C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button onClick={() => goBack(leagueId, router)} style={{ background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '6px 12px', color: C.muted, cursor: 'pointer', fontSize: 11, letterSpacing: 1, fontFamily: "'Oswald', sans-serif" }}>← EXIT</button>
-            <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 16, letterSpacing: 2, color: C.gold }}>
-              {league?.name?.toUpperCase()} · DRAFT
-            </div>
-            <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1 }}>
-              Round {round + 1} · Pick {pickInRound} of {numTeams}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ fontSize: 11, letterSpacing: 1, color: isCpuTurn ? C.blue : isMyTurn ? C.gold : C.muted }}>
-              {isCpuTurn
-                ? `${onClockTeam?.teamName} (CPU) picking...`
-                : isMyTurn
-                ? '⚡ YOUR PICK'
-                : `${onClockTeam?.teamName ?? '...'} picking...`}
-            </div>
-            {!isCpuTurn && (
-              <div style={{ position: 'relative', width: 44, height: 44 }}>
-                <svg width="44" height="44" style={{ transform: 'rotate(-90deg)' }}>
-                  <circle cx="22" cy="22" r="18" fill="none" stroke={C.surf3} strokeWidth="3" />
-                  <circle cx="22" cy="22" r="18" fill="none"
-                    stroke={isMyTurn ? C.gold : C.muted} strokeWidth="3"
-                    strokeDasharray={`${2 * Math.PI * 18}`}
-                    strokeDashoffset={`${2 * Math.PI * 18 * (1 - timerPct / 100)}`}
-                    style={{ transition: 'stroke-dashoffset 1s linear' }} />
-                </svg>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Anton', sans-serif", fontSize: 13, color: isMyTurn ? C.gold : C.muted }}>
-                  {timer}
-                </div>
-              </div>
-            )}
+      {/* ── Header ──────────────────────────────────────────────── */}
+      <div style={{ padding: '10px 16px', background: C.surf, borderBottom: `1px solid ${C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <button onClick={() => goBack(leagueId, router)} style={{ background: 'none', border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '5px 10px', color: C.muted, cursor: 'pointer', fontSize: 11, letterSpacing: 1, fontFamily: "'Oswald', sans-serif" }}>← EXIT</button>
+          <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 15, letterSpacing: 2, color: C.gold }}>{league?.name?.toUpperCase()} · DRAFT</div>
+          <div style={{ fontSize: 11, color: C.muted, letterSpacing: 1 }}>R{round + 1} · P{pickInRound}/{numTeams}</div>
+          <div style={{ fontSize: 11, letterSpacing: 1, color: isCpuTurn ? C.blue : isMyTurn ? C.gold : C.muted }}>
+            {isCpuTurn ? `${onClockTeam?.teamName} (CPU) picking…` : isMyTurn ? '⚡ YOUR PICK' : `${onClockTeam?.teamName ?? '…'} picking…`}
           </div>
         </div>
-
-        {/* Board grid */}
-        <div style={{ flex: 1, overflowX: 'auto', overflowY: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', minWidth: '100%', fontSize: 11 }}>
-            <thead>
-              <tr style={{ background: C.surf2, position: 'sticky', top: 0, zIndex: 10 }}>
-                <th style={{ padding: '8px 12px', color: C.muted, fontWeight: 400, letterSpacing: 1, textAlign: 'left', borderRight: `1px solid ${C.surf3}`, minWidth: 44 }}>RD</th>
-                {allTeams.map((t, i) => (
-                  <th key={i} style={{
-                    padding: '8px 10px', textAlign: 'center', minWidth: 110,
-                    borderRight: `1px solid ${C.surf3}`,
-                    color: t.type === 'cpu' ? C.blue : t.userId === userId ? C.gold : C.sub,
-                    fontWeight: t.userId === userId ? 700 : 400, letterSpacing: .5,
-                  }}>
-                    {t.teamName}
-                    {t.userId === userId && <span style={{ fontSize: 8, marginLeft: 4, color: C.gold }}>★</span>}
-                    {t.type === 'cpu' && <span style={{ fontSize: 8, marginLeft: 4, color: C.blue }}>CPU</span>}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {Array.from({ length: TOTAL_ROUNDS }).map((_, r) => (
-                <tr key={r} style={{ borderBottom: `1px solid ${C.surf3}` }}>
-                  <td style={{ padding: '6px 12px', color: C.muted, borderRight: `1px solid ${C.surf3}`, fontFamily: "'Anton', sans-serif", fontSize: 12 }}>{r + 1}</td>
-                  {Array.from({ length: numTeams }).map((_, col) => {
-                    const pickNum  = r % 2 === 0 ? r * numTeams + col : r * numTeams + (numTeams - 1 - col);
-                    const pick     = picks.find(p => p.pick_number === pickNum);
-                    const isActive = pickNum === currentPickNum;
-                    const colTeam  = allTeams[col];
-                    const isOwn    = colTeam?.userId === userId;
-                    const isCpuCol = colTeam?.type === 'cpu';
-                    return (
-                      <td key={col} style={{
-                        padding: '4px 6px', minWidth: 110,
-                        borderRight: `1px solid ${C.surf3}`,
-                        background: isActive ? (isCpuCol ? 'rgba(58,130,246,.12)' : `${C.gold}15`) : 'transparent',
-                      }}>
-                        {pick ? (
-                          <div style={{ padding: '4px 6px', borderRadius: 4, background: `${POS_COLORS[pick.player_data?.unitType as UnitType] ?? C.muted}${isOwn ? '28' : '14'}`, borderLeft: `2px solid ${POS_COLORS[pick.player_data?.unitType as UnitType] ?? C.muted}` }}>
-                            <div style={{ fontSize: 10, letterSpacing: 1, color: POS_COLORS[pick.player_data?.unitType as UnitType] ?? C.muted }}>{pick.player_data?.unitType}</div>
-                            <div style={{ fontSize: 11, fontWeight: isOwn ? 700 : 400, color: isOwn ? C.text : C.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pick.player_data?.school}</div>
-                          </div>
-                        ) : isActive ? (
-                          <div style={{ padding: '4px 6px', color: isCpuCol ? C.blue : C.gold, fontSize: 10, letterSpacing: 1, animation: 'pulse 1.5s infinite' }}>
-                            {isCpuCol ? 'CPU...' : 'ON THE CLOCK'}
-                          </div>
-                        ) : (
-                          <div style={{ padding: '4px 6px', color: C.surf3, fontSize: 10 }}>—</div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {isSalaryDraft && (
+            <span style={{ fontSize: 11, color: myBudgetLeft < 20 ? C.red : C.gold, fontFamily: "'Anton', sans-serif", letterSpacing: 1 }}>${myBudgetLeft}<span style={{ color: C.muted, fontSize: 9 }}>/200</span></span>
+          )}
+          {!isCpuTurn && (
+            <div style={{ position: 'relative', width: 38, height: 38 }}>
+              <svg width="38" height="38" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="19" cy="19" r="15" fill="none" stroke={C.surf3} strokeWidth="3" />
+                <circle cx="19" cy="19" r="15" fill="none" stroke={isMyTurn ? C.gold : C.muted} strokeWidth="3"
+                  strokeDasharray={`${2 * Math.PI * 15}`}
+                  strokeDashoffset={`${2 * Math.PI * 15 * (1 - timerPct / 100)}`}
+                  style={{ transition: 'stroke-dashoffset 1s linear' }} />
+              </svg>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Anton', sans-serif", fontSize: 12, color: isMyTurn ? C.gold : C.muted }}>{timer}</div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Unit Stats Panel ────────────────────────────────────── */}
+      {/* ── Draft Board — full width, auto-fit columns ───────────── */}
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed', fontSize: 11 }}>
+          <thead>
+            <tr style={{ background: C.surf2, position: 'sticky', top: 0, zIndex: 10 }}>
+              <th style={{ width: 32, padding: '7px 8px', color: C.muted, fontWeight: 400, letterSpacing: 1, textAlign: 'center', borderRight: `1px solid ${C.surf3}` }}>R</th>
+              {allTeams.map((t, i) => (
+                <th key={i} style={{
+                  padding: '7px 4px', textAlign: 'center',
+                  borderRight: `1px solid ${C.surf3}`,
+                  color: t.type === 'cpu' ? C.blue : t.userId === userId ? C.gold : C.sub,
+                  fontWeight: t.userId === userId ? 700 : 400,
+                  fontSize: 10, letterSpacing: .3,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {t.teamName.length > 12 ? t.teamName.slice(0, 11) + '…' : t.teamName}
+                  {t.userId === userId && <span style={{ color: C.gold }}> ★</span>}
+                  {t.type === 'cpu' && <span style={{ color: C.blue, fontSize: 8 }}> CPU</span>}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: TOTAL_ROUNDS }).map((_, r) => (
+              <tr key={r} style={{ borderBottom: `1px solid ${C.surf3}22` }}>
+                <td style={{ padding: '4px 6px', color: C.muted, borderRight: `1px solid ${C.surf3}`, fontFamily: "'Anton', sans-serif", fontSize: 11, textAlign: 'center' }}>{r + 1}</td>
+                {Array.from({ length: numTeams }).map((_, col) => {
+                  const pickNum  = r % 2 === 0 ? r * numTeams + col : r * numTeams + (numTeams - 1 - col);
+                  const pick     = picks.find(p => p.pick_number === pickNum);
+                  const isActive = pickNum === currentPickNum;
+                  const colTeam  = allTeams[col];
+                  const isOwn    = colTeam?.userId === userId;
+                  const isCpuCol = colTeam?.type === 'cpu';
+                  const posColor = POS_COLORS[pick?.player_data?.unitType as UnitType] ?? C.muted;
+                  return (
+                    <td key={col} style={{
+                      padding: '3px 4px',
+                      borderRight: `1px solid ${C.surf3}22`,
+                      background: isActive ? (isCpuCol ? 'rgba(58,130,246,.1)' : `${C.gold}12`) : 'transparent',
+                    }}>
+                      {pick ? (
+                        <div style={{ padding: '3px 5px', borderRadius: 3, background: `${posColor}${isOwn ? '28' : '12'}`, borderLeft: `2px solid ${posColor}` }}>
+                          <div style={{ fontSize: 8, letterSpacing: .5, color: posColor, lineHeight: 1.2 }}>{pick.player_data?.unitType}</div>
+                          <div style={{ fontSize: 10, fontWeight: isOwn ? 700 : 400, color: isOwn ? C.text : C.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {(pick.player_data?.school ?? '').length > 9 ? pick.player_data.school.slice(0, 9) + '…' : pick.player_data?.school}
+                          </div>
+                        </div>
+                      ) : isActive ? (
+                        <div style={{ padding: '3px 5px', color: isCpuCol ? C.blue : C.gold, fontSize: 9, letterSpacing: .5, animation: 'pulse 1.5s infinite' }}>
+                          {isCpuCol ? 'CPU…' : '⚡ PICK'}
+                        </div>
+                      ) : (
+                        <div style={{ padding: '3px 5px', color: C.surf3, fontSize: 9 }}>—</div>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── My Roster strip ─────────────────────────────────────── */}
+      <div style={{ flexShrink: 0, padding: '5px 14px', background: C.surf2, borderTop: `1px solid ${C.surf3}`, display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 9, color: C.muted, letterSpacing: 1.5, marginRight: 4, textTransform: 'uppercase' }}>Roster</span>
+        {(Object.keys(POSITION_CAPS) as UnitType[]).map(pos => (
+          <div key={pos} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 3, background: myRoster[pos] > 0 ? `${POS_COLORS[pos]}22` : C.surf, color: myRoster[pos] > 0 ? POS_COLORS[pos] : C.muted, border: `1px solid ${myRoster[pos] > 0 ? POS_COLORS[pos] + '44' : C.surf3}` }}>
+            {pos} {myRoster[pos]}/{POSITION_CAPS[pos]}
+          </div>
+        ))}
+        <span style={{ marginLeft: 'auto', fontSize: 9, color: C.muted }}>{mySlotPicks.length}/{TOTAL_ROUNDS} picked</span>
+      </div>
+
+      {/* ── Collapsible Pool Panel ───────────────────────────────── */}
+      <div style={{ flexShrink: 0, height: poolOpen ? '40vh' : 40, transition: 'height .2s ease', display: 'flex', flexDirection: 'column', borderTop: `1px solid ${C.surf3}`, background: C.surf, minHeight: 0, overflow: 'hidden' }}>
+
+        {/* Panel header / toggle */}
+        <div
+          onClick={() => setPoolOpen(o => !o)}
+          style={{ flexShrink: 0, height: 40, padding: '0 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', borderBottom: poolOpen ? `1px solid ${C.surf3}` : 'none', background: C.surf2, userSelect: 'none' }}
+        >
+          <span style={{ fontSize: 10, letterSpacing: 1.5, color: C.sub, textTransform: 'uppercase' as const }}>Available Players</span>
+          {(isCpuTurn || cpuPicking) && (
+            <span style={{ fontSize: 10, color: C.blue, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: C.blue, animation: 'pulse 0.8s ease-in-out infinite' }} />
+              {onClockTeam?.teamName} (CPU) picking…
+            </span>
+          )}
+          {isMyTurn && !isCpuTurn && (
+            <span style={{ fontSize: 10, color: C.gold, fontWeight: 700 }}>⚡ Your pick</span>
+          )}
+          {/* pos filters */}
+          {poolOpen && (
+            <div style={{ display: 'flex', gap: 5, marginLeft: 8 }} onClick={e => e.stopPropagation()}>
+              {(['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'] as const).map(pos => (
+                <button key={pos} onClick={() => setFilter(pos)} style={{
+                  padding: '3px 8px', borderRadius: 3, border: 'none', cursor: 'pointer',
+                  fontSize: 9, letterSpacing: .5, fontFamily: "'Oswald', sans-serif",
+                  background: filter === pos ? (pos === 'ALL' ? C.gold : POS_COLORS[pos as UnitType]) : C.surf3,
+                  color: filter === pos ? C.bg : C.sub,
+                }}>{pos}</button>
+              ))}
+            </div>
+          )}
+          <span style={{ marginLeft: 'auto', fontSize: 14, color: C.muted, lineHeight: 1 }}>{poolOpen ? '▼' : '▲'}</span>
+        </div>
+
+        {/* Player list */}
+        {poolOpen && (
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            {filtered.slice(0, 100).map((unit) => {
+              const overCap   = (myRoster[unit.unitType] ?? 0) >= POSITION_CAPS[unit.unitType];
+              const unitPrice = isSalaryDraft ? positionRankPrice(unit, fullPool, isConference) : null;
+              const overBudget = isSalaryDraft && (unitPrice ?? 0) > myBudgetLeft;
+              const canPick   = isMyTurn && !overCap && !draftDone && !overBudget;
+              return (
+                <div key={unit.id} className="pick-row" onClick={() => setViewingUnit(unit)}
+                  style={{ display: 'grid', gridTemplateColumns: '26px 1fr 52px 44px', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22`, opacity: (overCap || overBudget) ? 0.35 : 1, cursor: 'pointer', background: viewingUnit?.id === unit.id ? C.surf2 : 'transparent' }}
+                >
+                  {/* POS badge */}
+                  <div style={{ width: 26, height: 22, borderRadius: 4, background: `${POS_COLORS[unit.unitType]}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: POS_COLORS[unit.unitType], fontWeight: 700, letterSpacing: .5 }}>{unit.unitType}</div>
+                  {/* Player info */}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {unit.school}{unit.playerName ? <span style={{ color: C.sub, fontWeight: 400 }}> · {unit.playerName}</span> : null}
+                    </div>
+                    <div style={{ fontSize: 9, color: C.muted }}>{unit.tier}{isSalaryDraft && unitPrice != null ? <span style={{ color: overBudget ? C.red : C.gold }}> · ${unitPrice}</span> : null}</div>
+                  </div>
+                  {/* Projected */}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 13, color: C.gold }}>{(unit.avgFpts ?? unit.avgPerWeek ?? 0) > 0 ? (unit.avgFpts ?? unit.avgPerWeek ?? 0).toFixed(1) : '—'}</div>
+                    <div style={{ fontSize: 8, color: C.muted, letterSpacing: .5 }}>PROJ</div>
+                  </div>
+                  {/* Draft button */}
+                  <button onClick={e => { e.stopPropagation(); if (canPick) insertPick(unit); }} disabled={!canPick}
+                    style={{ padding: '5px 6px', borderRadius: 4, border: canPick ? `1px solid ${C.gold}88` : `1px solid ${C.surf3}`, background: canPick ? `${C.gold}18` : 'transparent', color: canPick ? C.gold : C.surf3, fontFamily: "'Anton', sans-serif", fontSize: 9, letterSpacing: 1, cursor: canPick ? 'pointer' : 'default' }}>
+                    +
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Unit Stats Panel (overlay) ───────────────────────────── */}
       {viewingUnit && (() => {
         const S = { passYd: 0.05, passTd: 4, int: -2, rushYd: 0.05, rushTd: 6, recYd: 0.05, recTd: 6 };
         const ut = viewingUnit.unitType;
@@ -865,160 +941,6 @@ export default function DraftPage() {
           </div>
         );
       })()}
-
-      {/* ── Player Pool ─────────────────────────────────────────── */}
-      <div style={{ width: 320, background: C.surf, borderLeft: `1px solid ${C.surf3}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-
-        <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.surf3}`, flexShrink: 0 }}>
-          <div style={{ fontSize: 12, color: C.text, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>AVAILABLE PLAYERS</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {(['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'] as const).map(pos => (
-              <button key={pos} onClick={() => setFilter(pos)} style={{
-                padding: '4px 10px', borderRadius: 4, border: 'none', cursor: 'pointer',
-                fontSize: 10, letterSpacing: 1, fontFamily: "'Oswald', sans-serif",
-                background: filter === pos ? (pos === 'ALL' ? C.gold : POS_COLORS[pos as UnitType]) : C.surf2,
-                color: filter === pos ? C.bg : C.sub,
-              }}>{pos}</button>
-            ))}
-          </div>
-        </div>
-
-        {(isCpuTurn || cpuPicking) && (
-          <div style={{ padding: '8px 16px', background: 'rgba(58,130,246,.12)', borderBottom: `1px solid rgba(58,130,246,.3)`, fontSize: 11, color: C.blue, letterSpacing: .5, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: C.blue, animation: 'pulse 0.8s ease-in-out infinite' }} />
-            {onClockTeam?.teamName} (CPU) picking...
-          </div>
-        )}
-        {!isCpuTurn && !isMyTurn && (
-          <div style={{ padding: '8px 16px', background: `${C.muted}22`, borderBottom: `1px solid ${C.surf3}`, fontSize: 11, color: C.muted, flexShrink: 0 }}>
-            Waiting for {onClockTeam?.teamName ?? '...'}...
-          </div>
-        )}
-        {isMyTurn && (
-          <div style={{ padding: '8px 16px', background: `${C.gold}18`, borderBottom: `1px solid ${C.gold}44`, fontSize: 11, color: C.gold, letterSpacing: .5, fontWeight: 600, flexShrink: 0 }}>
-            ⚡ Your turn — {timer}s remaining
-          </div>
-        )}
-
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {filtered.slice(0, 100).map((unit, i) => {
-            const overCap  = (myRoster[unit.unitType] ?? 0) >= POSITION_CAPS[unit.unitType];
-            const unitPrice = isSalaryDraft ? positionRankPrice(unit, fullPool, isConference) : null;
-            const overBudget = isSalaryDraft && (unitPrice ?? 0) > myBudgetLeft;
-            const canPick  = isMyTurn && !overCap && !draftDone && !overBudget;
-            return (
-              <div
-                key={unit.id}
-                className="pick-row"
-                onClick={() => setViewingUnit(unit)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '8px 12px', borderBottom: `1px solid ${C.surf3}22`,
-                  opacity: (overCap || overBudget) ? 0.35 : 1,
-                  background: viewingUnit?.id === unit.id ? C.surf2 : 'transparent',
-                  transition: 'background .1s', cursor: 'pointer',
-                }}
-              >
-                {/* DRAFT button — LEFT side */}
-                <button
-                  onClick={e => { e.stopPropagation(); if (canPick) insertPick(unit); }}
-                  disabled={!canPick}
-                  style={{
-                    padding: '5px 7px', borderRadius: 5, flexShrink: 0, minWidth: 46,
-                    border: canPick ? `1px solid ${C.gold}88` : `1px solid ${C.surf3}`,
-                    background: canPick ? `${C.gold}18` : 'transparent',
-                    color: canPick ? C.gold : C.surf3,
-                    fontFamily: "'Anton', sans-serif", fontSize: 9, letterSpacing: 1,
-                    cursor: canPick ? 'pointer' : 'default',
-                    boxShadow: canPick ? `0 0 8px ${C.gold}33` : 'none',
-                    transition: 'all .15s',
-                  }}
-                >DRAFT</button>
-
-                {/* rank */}
-                <div style={{ width: 18, fontSize: 10, color: C.muted, flexShrink: 0, textAlign: 'right' }}>{i + 1}</div>
-
-                {/* pos badge */}
-                <div style={{ width: 26, height: 26, borderRadius: 5, flexShrink: 0, background: `${POS_COLORS[unit.unitType]}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, fontWeight: 700 }}>
-                  {unit.unitType}
-                </div>
-
-                {/* info */}
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {unit.school}{unit.playerName && <span style={{ color: C.sub, fontWeight: 400 }}> · {unit.playerName}</span>}
-                  </div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>VORP: {(unit.vorp ?? 0).toFixed(1)}</div>
-                  <div style={{ display: 'flex', gap: 5, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span style={{ fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, padding: '1px 5px', background: `${POS_COLORS[unit.unitType]}18`, borderRadius: 3 }}>{unit.tier}</span>
-                    <span style={{ fontSize: 9, color: C.muted }}>{unit.projectedPoints} pts</span>
-                    {unit.isOutlier && (
-                      <span style={{ padding: '2px 6px', background: 'rgba(245,166,35,.2)', border: '1px solid rgba(245,166,35,.4)', borderRadius: 4, fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.gold, letterSpacing: 1, textTransform: 'uppercase' as const }}>⭐ OUTLIER</span>
-                    )}
-                    {isSalaryDraft && unitPrice != null && (
-                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, padding: '1px 6px', background: overBudget ? `${C.red}18` : `${C.gold}22`, color: overBudget ? C.red : C.gold, borderRadius: 3 }}>
-                        ${unitPrice}
-                      </span>
-                    )}
-                    {effMap[unit.school] && (() => {
-                      const eff = effMap[unit.school];
-                      return (
-                        <>
-                          <span title={`OFF ${eff.off_percentile}th percentile`} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: effBadgeBg(eff.off_multiplier), color: '#fff', fontWeight: 700, letterSpacing: .5 }}>
-                            OFF {eff.off_multiplier.toFixed(2)}×
-                          </span>
-                          <span title={`DEF ${eff.def_percentile}th percentile`} style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: effBadgeBg(eff.def_multiplier), color: '#fff', fontWeight: 700, letterSpacing: .5 }}>
-                            DEF {eff.def_multiplier.toFixed(2)}×
-                          </span>
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div style={{ padding: '10px 14px', borderTop: `1px solid ${C.surf3}`, background: C.surf2, flexShrink: 0 }}>
-          <div style={{ fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 8 }}>
-            MY ROSTER ({mySlotPicks.length}/{TOTAL_ROUNDS})
-          </div>
-
-          {/* Salary cap budget bar */}
-          {isSalaryDraft && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 10, color: C.sub, letterSpacing: 1 }}>
-                  💰 BUDGET
-                </span>
-                <span style={{ fontSize: 11, fontFamily: "'Anton', sans-serif", color: myBudgetLeft < 20 ? C.red : C.gold, letterSpacing: 1 }}>
-                  ${myBudgetLeft} <span style={{ fontSize: 9, color: C.muted }}>/ $200</span>
-                </span>
-              </div>
-              <div style={{ height: 5, background: C.surf3, borderRadius: 3 }}>
-                <div style={{
-                  height: '100%', borderRadius: 3, transition: 'width .3s',
-                  width: `${(myBudgetLeft / SALARY_BUDGET) * 100}%`,
-                  background: myBudgetLeft < 20
-                    ? C.red
-                    : myBudgetLeft < 60
-                    ? C.orange
-                    : `linear-gradient(90deg, ${C.gold}, ${C.goldLight})`,
-                }} />
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {(Object.keys(POSITION_CAPS) as UnitType[]).map(pos => (
-              <div key={pos} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, background: C.surf, color: myRoster[pos] > 0 ? POS_COLORS[pos] : C.muted, border: `1px solid ${myRoster[pos] > 0 ? POS_COLORS[pos] + '44' : C.surf3}` }}>
-                {pos} {myRoster[pos]}/{POSITION_CAPS[pos]}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
