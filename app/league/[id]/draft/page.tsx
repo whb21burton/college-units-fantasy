@@ -201,10 +201,11 @@ export default function DraftPage() {
       const allowedSchools: string[] | null = Array.isArray(lg?.settings?.allowed_schools)
         ? lg.settings.allowed_schools as string[]
         : null;
+      const NO_CONF_FILTER = new Set(['', 'all', 'ALL', 'All D1', 'all d1']);
       const livePool = (() => {
         let p = rawPool;
         if (allowedSchools?.length) p = p.filter(u => allowedSchools.includes(u.school));
-        if (lg?.conference_filter && lg.conference_filter !== 'ALL') p = p.filter(u => u.conference === lg.conference_filter);
+        if (lg?.conference_filter && !NO_CONF_FILTER.has(lg.conference_filter)) p = p.filter(u => u.conference === lg.conference_filter);
         return p;
       })();
       console.log('[draft-pool] after filter:', livePool.length, 'available', '| conference_filter:', lg?.conference_filter, '| allowed_schools:', allowedSchools?.length ?? 'none');
@@ -226,7 +227,10 @@ export default function DraftPage() {
       if (!cancelled) setLoading(false);
     }
 
-    init();
+    init().catch(err => {
+      console.error('[draft-pool] init() threw:', err);
+      if (!cancelled) setLoading(false);
+    });
     return () => { cancelled = true; };
   }, [leagueId, router]);
 
