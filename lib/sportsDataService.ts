@@ -363,6 +363,9 @@ export async function syncStats(
         } else if (!pos && kickE && (kickE.PTS || 0) > 0) {
           // Player has kicking stats but no roster position — treat as K
           unit = 'K'
+        } else if (!pos && passE && ((passE.YDS || 0) > 0 || (passE.TD || 0) > 0)) {
+          // Player has passing stats but no roster position — treat as QB
+          unit = 'QB'
         } else if (!pos) {
           // No position found in cached_players — skip this player entirely
           // This ensures sync and breakdown use identical player sets
