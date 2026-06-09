@@ -27,13 +27,14 @@ export const ROSTER_SLOTS = {
   bench: ['QB_BENCH', 'BENCH1', 'BENCH2', 'BENCH3', 'BENCH4', 'BENCH5'],
 };
 
+// No per-position caps — only the total roster limit (15 rounds) applies
 export const POSITION_CAPS: Record<UnitType, number> = {
-  QB: 3,
-  RB: 4,
-  WR: 4,
-  TE: 2,
-  DEF: 3,
-  K: 3,
+  QB: 15,
+  RB: 15,
+  WR: 15,
+  TE: 15,
+  DEF: 15,
+  K: 15,
 };
 
 // ── Conferences ──────────────────────────────────────────────

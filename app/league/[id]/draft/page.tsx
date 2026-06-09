@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
-import { POSITION_CAPS, ROSTER_SLOTS, sortByVORP, type DraftUnit, type UnitType } from '@/lib/playerPool';
+import { ROSTER_SLOTS, sortByVORP, type DraftUnit, type UnitType } from '@/lib/playerPool';
 import type { TeamEfficiency } from '@/types';
 
 function goBack(leagueId: string, router: any) {
@@ -61,11 +61,8 @@ function snakeIndex(pickNum: number, numTeams: number): number {
   return round % 2 === 0 ? pos : numTeams - 1 - pos;
 }
 
-function autoPick(available: DraftUnit[], rosterCount: Record<UnitType, number>): DraftUnit | null {
+function autoPick(available: DraftUnit[], _rosterCount: Record<UnitType, number>): DraftUnit | null {
   const sorted = [...available].sort((a, b) => b.projectedPoints - a.projectedPoints);
-  for (const unit of sorted) {
-    if ((rosterCount[unit.unitType] ?? 0) < POSITION_CAPS[unit.unitType]) return unit;
-  }
   return sorted[0] ?? null;
 }
 
@@ -398,7 +395,7 @@ export default function DraftPage() {
   }
 
   function handlePickClick(unit: DraftUnit) {
-    if (!isMyTurn || (myRoster[unit.unitType] ?? 0) >= POSITION_CAPS[unit.unitType] || draftDone) return;
+    if (!isMyTurn || draftDone) return;
     if (isSalaryDraft && positionRankPrice(unit, fullPool, isConference) > myBudgetLeft) return;
     insertPick(unit);
   }
@@ -708,9 +705,9 @@ export default function DraftPage() {
       {/* ── My Roster strip ─────────────────────────────────────── */}
       <div style={{ flexShrink: 0, padding: '5px 14px', background: C.surf2, borderTop: `1px solid ${C.surf3}`, display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 9, color: C.muted, letterSpacing: 1.5, marginRight: 4, textTransform: 'uppercase' }}>Roster</span>
-        {(Object.keys(POSITION_CAPS) as UnitType[]).map(pos => (
+        {(Object.keys(POS_COLORS) as UnitType[]).map(pos => (
           <div key={pos} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 3, background: myRoster[pos] > 0 ? `${POS_COLORS[pos]}22` : C.surf, color: myRoster[pos] > 0 ? POS_COLORS[pos] : C.muted, border: `1px solid ${myRoster[pos] > 0 ? POS_COLORS[pos] + '44' : C.surf3}` }}>
-            {pos} {myRoster[pos]}/{POSITION_CAPS[pos]}
+            {pos} {myRoster[pos] ?? 0}
           </div>
         ))}
         <span style={{ marginLeft: 'auto', fontSize: 9, color: C.muted }}>{mySlotPicks.length}/{TOTAL_ROUNDS} picked</span>
@@ -754,13 +751,12 @@ export default function DraftPage() {
         {poolOpen && (
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {filtered.slice(0, 100).map((unit) => {
-              const overCap   = (myRoster[unit.unitType] ?? 0) >= POSITION_CAPS[unit.unitType];
               const unitPrice = isSalaryDraft ? positionRankPrice(unit, fullPool, isConference) : null;
               const overBudget = isSalaryDraft && (unitPrice ?? 0) > myBudgetLeft;
-              const canPick   = isMyTurn && !overCap && !draftDone && !overBudget;
+              const canPick   = isMyTurn && !draftDone && !overBudget;
               return (
                 <div key={unit.id} className="pick-row" onClick={() => setViewingUnit(unit)}
-                  style={{ display: 'grid', gridTemplateColumns: '26px 1fr 52px 44px', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22`, opacity: (overCap || overBudget) ? 0.35 : 1, cursor: 'pointer', background: viewingUnit?.id === unit.id ? C.surf2 : 'transparent' }}
+                  style={{ display: 'grid', gridTemplateColumns: '26px 1fr 52px 44px', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22`, opacity: overBudget ? 0.35 : 1, cursor: 'pointer', background: viewingUnit?.id === unit.id ? C.surf2 : 'transparent' }}
                 >
                   {/* POS badge */}
                   <div style={{ width: 26, height: 22, borderRadius: 4, background: `${POS_COLORS[unit.unitType]}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: POS_COLORS[unit.unitType], fontWeight: 700, letterSpacing: .5 }}>{unit.unitType}</div>
@@ -793,7 +789,7 @@ export default function DraftPage() {
         const S = { passYd: 0.05, passTd: 4, int: -2, rushYd: 0.05, rushTd: 6, recYd: 0.05, recTd: 6 };
         const ut = viewingUnit.unitType;
         const price        = isSalaryDraft ? positionRankPrice(viewingUnit, fullPool, isConference) : null;
-        const canPickPanel = isMyTurn && !draftDone && (myRoster[ut] ?? 0) < POSITION_CAPS[ut]
+        const canPickPanel = isMyTurn && !draftDone
           && (!isSalaryDraft || (price ?? 0) <= myBudgetLeft);
         const weeks: any[] = unitStats?.weeks ?? [];
         const completedWeeks = weeks.filter(w => w.completed);
