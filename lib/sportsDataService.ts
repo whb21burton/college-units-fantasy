@@ -366,6 +366,14 @@ export async function syncStats(
         } else if (!pos && passE && ((passE.YDS || 0) > 0 || (passE.TD || 0) > 0)) {
           // Player has passing stats but no roster position — treat as QB
           unit = 'QB'
+        } else if (!pos && rushE && !recvE && !passE) {
+          unit = 'RB'
+        } else if (!pos && recvE && !rushE && !passE) {
+          unit = 'WR'
+        } else if (!pos && rushE && recvE && !passE) {
+          const rPts = (rushE.YDS || 0) * 0.1 + (rushE.TD || 0) * 6
+          const cPts = (recvE.YDS || 0) * 0.1 + (recvE.TD || 0) * 6
+          unit = rPts >= cPts ? 'RB' : 'WR'
         } else if (!pos) {
           // No position found in cached_players — skip this player entirely
           // This ensures sync and breakdown use identical player sets
