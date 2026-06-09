@@ -28,13 +28,18 @@ const WEEKLY_SLOTS = [
 ];
 
 const SEASON_GAMES = 14;
+function liveProj(unit: any): number {
+  if ((unit?.avgFpts ?? 0) > 0) return unit.avgFpts;
+  if ((unit?.avgPerWeek ?? 0) > 0) return unit.avgPerWeek;
+  return (unit?.projectedPoints ?? 0) / SEASON_GAMES;
+}
 
 // Schools per unitType sorted by projected points descending
 function schoolOptions(unitType: string) {
   return FULL_POOL
     .filter(p => p.unitType === unitType)
     .sort((a, b) => b.projectedPoints - a.projectedPoints)
-    .map(p => ({ school: p.school, conf: p.conference, weeklyProj: p.projectedPoints / SEASON_GAMES }));
+    .map(p => ({ school: p.school, conf: p.conference, weeklyProj: liveProj(p) }));
 }
 
 type WeeklyPick = { user_id: string; picks: Record<string, string>; total_points: number | null };
@@ -143,7 +148,7 @@ export function WeeklyLeaguePage({ leagueId }: { leagueId: string }) {
     const school = myPicks[slot.key];
     if (!school) return sum;
     const unit = FULL_POOL.find(p => p.school === school && p.unitType === slot.unitType);
-    return sum + (unit ? unit.projectedPoints / SEASON_GAMES : 0);
+    return sum + (unit ? liveProj(unit) : 0);
   }, 0);
 
   // ── Leaderboard rows ──────────────────────────────────────
@@ -313,7 +318,7 @@ export function WeeklyLeaguePage({ leagueId }: { leagueId: string }) {
                               {selected ? (
                                 <>
                                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected}</div>
-                                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{unit ? `~${(unit.projectedPoints / SEASON_GAMES).toFixed(1)} pts` : ''}</div>
+                                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{unit ? `~${liveProj(unit).toFixed(1)} pts` : ''}</div>
                                 </>
                               ) : (
                                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Pick a school…</div>

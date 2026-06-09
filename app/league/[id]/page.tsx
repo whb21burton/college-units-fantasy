@@ -29,6 +29,11 @@ const SEASON_GAMES = 14;
 function weeklyProj(seasonPts: number): number {
   return seasonPts / SEASON_GAMES;
 }
+function liveProj(unit: any): number {
+  if ((unit?.avgFpts ?? 0) > 0) return unit.avgFpts;
+  if ((unit?.avgPerWeek ?? 0) > 0) return unit.avgPerWeek;
+  return weeklyProj(unit?.projectedPoints ?? 0);
+}
 
 function poolUrl(unitType: string, allowedSchools?: string[] | null): string {
   const params = new URLSearchParams();
@@ -2006,7 +2011,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.gold, lineHeight: 1 }}>{weeklyProj(player.projectedPoints).toFixed(1)}</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.gold, lineHeight: 1 }}>{liveProj(player).toFixed(1)}</div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, marginBottom: 8, marginTop: 2, letterSpacing: 1, textTransform: 'uppercase' }}>pts/wk proj</div>
           {canAdd && (
             <button onClick={onAdd} style={{
@@ -2256,7 +2261,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                   const fpts = (wk.fpts ?? wk.fantasyPoints) != null
                     ? (wk.fpts ?? wk.fantasyPoints)!.toFixed(1)
                     : wk.opponent != null
-                      ? weeklyProj(player.projectedPoints).toFixed(1)
+                      ? liveProj(player).toFixed(1)
                       : '—';
                   const isBye = wk.isBye === true
 
@@ -2698,7 +2703,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{adding.school}</div>
           </div>
           <div style={{ background: C.surf3, color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, borderRadius: 4, padding: '3px 7px' }}>BN</div>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.green, minWidth: 40, textAlign: 'right' }}>{weeklyProj(adding.projectedPoints ?? 0).toFixed(1)}</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.green, minWidth: 40, textAlign: 'right' }}>{liveProj(adding).toFixed(1)}</div>
         </div>
 
         {/* Empty slot warning */}
@@ -2748,7 +2753,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{pd?.school}</div>
                   </div>
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.sub, textAlign: 'right' }}>
-                    {weeklyProj(pd?.projectedPoints ?? 0).toFixed(1)}
+                    {liveProj(pd).toFixed(1)}
                   </div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isSelected ? C.red : C.muted, textAlign: 'right', letterSpacing: .5 }}>
                     {isSelected ? 'DROP' : '—'}
@@ -2906,7 +2911,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
               <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold }}>
                 {(p.avgPerWeek ?? 0) > 0
                   ? p.avgPerWeek!.toFixed(1)
-                  : weeklyProj(p.projectedPoints).toFixed(1)}
+                  : liveProj(p).toFixed(1)}
               </div>
               <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>
                 avg/wk
@@ -3158,7 +3163,7 @@ function TradeTab({ league, userId, members }: { league: any; userId: string | n
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: checked ? C.gold : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {pick.player_data?.playerName || pick.player_data?.school}
                     </div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1)} pts/wk</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {liveProj(pick.player_data).toFixed(1)} pts/wk</div>
                   </div>
                 </div>
               )
@@ -3186,7 +3191,7 @@ function TradeTab({ league, userId, members }: { league: any; userId: string | n
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: checked ? C.green : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {pick.player_data?.playerName || pick.player_data?.school}
                     </div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1)} pts/wk</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {liveProj(pick.player_data).toFixed(1)} pts/wk</div>
                   </div>
                 </div>
               )
@@ -3198,11 +3203,11 @@ function TradeTab({ league, userId, members }: { league: any; userId: string | n
         {(offer.size > 0 || request.size > 0) && (() => {
           const offerVal = Array.from(offer).reduce((s, id) => {
             const p = allPicks.find(x => x.id === id)
-            return s + weeklyProj(p?.player_data?.projectedPoints ?? 0)
+            return s + liveProj(p?.player_data)
           }, 0)
           const requestVal = Array.from(request).reduce((s, id) => {
             const p = allPicks.find(x => x.id === id)
-            return s + weeklyProj(p?.player_data?.projectedPoints ?? 0)
+            return s + liveProj(p?.player_data)
           }, 0)
           const total = offerVal + requestVal || 1
           const offerPct = Math.round((offerVal / total) * 100)
@@ -4335,7 +4340,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         const color   = POS_COLORS[label] || C.muted;
         const isTarget = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
         const ep      = effectivePts(pick?.player_data?.school, pick?.player_data?.unitType, pick?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats);
-        const mp      = matchupProj(pick?.player_data?.avgPerWeek ?? weeklyProj(pick?.player_data?.projectedPoints ?? 0), pick?.player_data?.school ?? '', pick?.player_data?.unitType ?? '', matchupCtx);
+        const mp      = matchupProj(liveProj(pick?.player_data), pick?.player_data?.school ?? '', pick?.player_data?.unitType ?? '', matchupCtx);
         const pts     = ep.pts.toFixed(1);
         const name    = pick?.player_data?.playerName || pick?.player_data?.school;
         const sub     = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;
@@ -4486,7 +4491,7 @@ function PickCheckbox({ pick, checked, onToggle, accent }: { pick: any; checked:
       <div style={{ width: 4, height: 4, borderRadius: '50%', background: col, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pick.player_data?.playerName || pick.player_data?.school}</div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {weeklyProj(pick.player_data?.projectedPoints ?? 0).toFixed(1)} pts</div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {liveProj(pick.player_data).toFixed(1)} pts</div>
       </div>
     </div>
   );
