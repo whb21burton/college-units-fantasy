@@ -2323,7 +2323,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
                       {canExpand && isExpanded && (
                         <tr>
                           <td colSpan={tableCols.length} style={{ padding: 0, borderBottom: `1px solid ${C.surf3}33` }}>
-                            <SafeBreakdown week={wk} unit={player.unitType} />
+                            <UnitExpansion school={player.school} unitType={player.unitType} currentWeek={5} season={2025} />
                           </td>
                         </tr>
                       )}
