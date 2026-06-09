@@ -1892,10 +1892,8 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
 }) {
   const [stats,         setStats]         = useState<any | null>(null);
   const [loading,       setLoading]       = useState(true);
-  const [expandedWk,    setExpandedWk]    = useState<number | null>(null);
   const [logos,         setLogos]         = useState<Record<string, string>>({});
   const [matchupCtx,    setMatchupCtx]    = useState<any>(null);
-  const toggleWeek = (wk: number) => setExpandedWk(prev => prev === wk ? null : wk);
 
   useEffect(() => {
     fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d.logos ?? {})).catch(() => {});
@@ -1910,7 +1908,6 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
       .catch(() => setLoading(false));
   }, [player.school, player.unitType]);
 
-  const cols    = STAT_COLS[player.unitType] ?? [];
   const weeks   = stats?.weeks ?? [];
   const posColor = UNIT_COLORS[player.unitType] ?? C.muted;
 
@@ -1946,8 +1943,6 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
     if (player.unitType === 'K')  return (b.pts    || 0) - (a.pts    || 0);
     return (b.recYd || 0) - (a.recYd || 0);
   });
-
-  const colTemplate = `32px 1fr 64px 44px${cols.map(() => ' 64px').join('')}`;
 
   // Scoring constants (mirror sportsDataService.ts)
   const S = { passYd: 0.1, passTd: 4, int: -2, rushYd: 0.1, rushTd: 6, rec: 1.0, recYd: 0.1, recTd: 6 };
@@ -2169,191 +2164,13 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
         </div>
       )}
 
-      {/* Game Logs */}
-      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>Game Logs</div>
-
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>Loading stats…</div>
-      ) : (() => {
-        const ut = player.unitType;
-
-        // Per-unit colgroup definitions — ODR column is wider to fit label+mult
-        // Columns: WK | OPP | FPTS | ODR | ...stat cols | chevron
-        const unitCols: Record<string, { label: string; key: string; align: 'left' | 'right'; w: string }[]> = {
-          QB: [
-            { label: 'WK',       key: '_wk',   align: 'left',  w: '6%'  },
-            { label: 'OPP',      key: '_opp',  align: 'left',  w: '20%' },
-            { label: 'FPTS',     key: '_fpts', align: 'right', w: '10%' },
-            { label: 'ODR',      key: '_odr',  align: 'right', w: '14%' },
-            { label: 'PASS YDS', key: 'passYd', align: 'right', w: '11%' },
-            { label: 'PASS TD',  key: 'passTd', align: 'right', w: '9%'  },
-            { label: 'INT',      key: 'int',    align: 'right', w: '8%'  },
-            { label: 'RUSH YDS', key: 'rushYd', align: 'right', w: '11%' },
-            { label: 'RUSH TD',  key: 'rushTd', align: 'right', w: '11%' },
-          ],
-          RB: [
-            { label: 'WK',       key: '_wk',     align: 'left',  w: '6%'  },
-            { label: 'OPP',      key: '_opp',    align: 'left',  w: '20%' },
-            { label: 'FPTS',     key: '_fpts',   align: 'right', w: '10%' },
-            { label: 'ODR',      key: '_odr',    align: 'right', w: '14%' },
-            { label: 'ATT',      key: 'rushAtt', align: 'right', w: '8%'  },
-            { label: 'RUSH YDS', key: 'rushYd',  align: 'right', w: '11%' },
-            { label: 'RUSH TD',  key: 'rushTd',  align: 'right', w: '9%'  },
-            { label: 'REC',      key: 'rec',     align: 'right', w: '7%'  },
-            { label: 'REC YDS',  key: 'recYd',   align: 'right', w: '11%' },
-            { label: '',         key: '_exp',    align: 'right', w: '4%'  },
-          ],
-          WR: [
-            { label: 'WK',   key: '_wk',   align: 'left',  w: '6%'  },
-            { label: 'OPP',  key: '_opp',  align: 'left',  w: '22%' },
-            { label: 'FPTS', key: '_fpts', align: 'right', w: '12%' },
-            { label: 'ODR',  key: '_odr',  align: 'right', w: '16%' },
-            { label: 'REC',  key: 'rec',   align: 'right', w: '14%' },
-            { label: 'YDS',  key: 'recYd', align: 'right', w: '15%' },
-            { label: 'TD',   key: 'recTd', align: 'right', w: '15%' },
-          ],
-          TE: [
-            { label: 'WK',   key: '_wk',   align: 'left',  w: '6%'  },
-            { label: 'OPP',  key: '_opp',  align: 'left',  w: '22%' },
-            { label: 'FPTS', key: '_fpts', align: 'right', w: '12%' },
-            { label: 'ODR',  key: '_odr',  align: 'right', w: '16%' },
-            { label: 'REC',  key: 'rec',   align: 'right', w: '14%' },
-            { label: 'YDS',  key: 'recYd', align: 'right', w: '15%' },
-            { label: 'TD',   key: 'recTd', align: 'right', w: '15%' },
-          ],
-          DEF: [
-            { label: 'WK',      key: '_wk',      align: 'left',  w: '6%'  },
-            { label: 'OPP',     key: '_opp',     align: 'left',  w: '20%' },
-            { label: 'FPTS',    key: '_fpts',    align: 'right', w: '10%' },
-            { label: 'ODR',     key: '_odr',     align: 'right', w: '14%' },
-            { label: 'SACKS',   key: 'sacks',    align: 'right', w: '10%' },
-            { label: 'INT',     key: 'ints',     align: 'right', w: '10%' },
-            { label: 'FUM REC', key: 'fumRec',   align: 'right', w: '10%' },
-            { label: 'DEF TD',  key: 'defTd',    align: 'right', w: '10%' },
-            { label: 'SAFETY',  key: 'safeties', align: 'right', w: '10%' },
-          ],
-          K: [
-            { label: 'WK',   key: '_wk',   align: 'left',  w: '8%'  },
-            { label: 'OPP',  key: '_opp',  align: 'left',  w: '30%' },
-            { label: 'FPTS', key: '_fpts', align: 'right', w: '15%' },
-            { label: 'ODR',  key: '_odr',  align: 'right', w: '20%' },
-            { label: 'PTS',  key: 'pts',   align: 'right', w: '27%' },
-          ],
-        };
-        const tableCols = unitCols[ut] ?? unitCols['QB'];
-
-        const thStyle = (align: 'left' | 'right'): React.CSSProperties => ({
-          padding: '7px 6px', fontFamily: 'Oswald,sans-serif', fontSize: 11,
-          color: C.muted, fontWeight: 400, textAlign: align,
-          letterSpacing: 0.5, textTransform: 'uppercase' as const,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
-          background: C.surf2, borderBottom: `1px solid ${C.surf3}`,
-        });
-        const tdStyle = (align: 'left' | 'right', extra?: React.CSSProperties): React.CSSProperties => ({
-          padding: '9px 6px', fontFamily: 'Oswald,sans-serif', fontSize: 11,
-          color: C.sub, textAlign: align,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
-          ...extra,
-        });
-
-        return (
-          <div style={{ background: C.surf, borderRadius: 10, border: `1px solid ${C.surf3}`, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-              <colgroup>
-                {tableCols.map((c, i) => <col key={i} style={{ width: c.w }} />)}
-              </colgroup>
-              <thead>
-                <tr>
-                  {tableCols.map((c, i) => (
-                    <th key={i} style={thStyle(c.align)}>{c.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {weeks.map((wk: any) => {
-                  const p0        = wk.players?.[0] ?? {};
-                  const defStats  = wk.defStats ?? p0;
-                  const isPlayoff = wk.week > 11;
-                  const canExpand = wk.completed;
-                  const isExpanded = expandedWk === wk.week;
-                  const multColor = wk.multiplier == null ? C.muted : wk.multiplier > 1 ? C.green : wk.multiplier < 1 ? C.red : C.sub;
-                  const fpts = (wk.fpts ?? wk.fantasyPoints) != null
-                    ? (wk.fpts ?? wk.fantasyPoints)!.toFixed(1)
-                    : wk.opponent != null
-                      ? proj.toFixed(1)
-                      : '—';
-                  const isBye = wk.isBye === true
-
-                  const statVal = (key: string): string | number => {
-                    if (!wk.completed) return '—';
-                    const src = ut === 'DEF' ? defStats : p0;
-                    const v = src[key];
-                    return v != null ? v : '—';
-                  };
-
-                  return (
-                    <React.Fragment key={wk.week}>
-                      <tr
-                        onClick={canExpand ? () => toggleWeek(wk.week) : undefined}
-                        style={{
-                          borderBottom: canExpand && isExpanded ? 'none' : `1px solid ${C.surf3}33`,
-                          background: isPlayoff ? 'rgba(139,92,246,.04)' : 'transparent',
-                          cursor: canExpand ? 'pointer' : 'default',
-                        }}
-                      >
-                        {tableCols.map((c, i) => {
-                          if (c.key === '_wk') return (
-                            <td key={i} style={tdStyle('left', { color: isPlayoff ? '#a855f7' : C.muted })}>{wk.week}</td>
-                          );
-                          if (c.key === '_opp') return (
-                            <td key={i} style={tdStyle('left')}>
-                              {wk.opponent ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                  {logos[wk.opponent] && (
-                                    <img src={logos[wk.opponent]} alt={wk.opponent}
-                                      style={{ width: 16, height: 16, objectFit: 'contain' }}
-                                      onError={e => { (e.currentTarget as HTMLImageElement).style.display='none' }} />
-                                  )}
-                                  <span>
-                                    {isBye ? '🛌 BYE' : (wk.isHome ? 'vs ' : '@ ') + (wk.opponent.length > 12 ? wk.opponent.slice(0,12)+'…' : wk.opponent)}
-                                  </span>
-                                </div>
-                              ) : (
-                                <span style={{ color: C.muted }}>—</span>
-                              )}
-                            </td>
-                          );
-                          if (c.key === '_fpts') return (
-                            <td key={i} style={tdStyle('right', { color: wk.fantasyPoints != null ? C.gold : C.muted, fontFamily: 'Anton,sans-serif', fontWeight: 700, fontSize: 12 })}>{fpts}</td>
-                          );
-                          if (c.key === '_odr') return (
-                            <td key={i} style={tdStyle('right', { color: multColor })}>{wk.multiplier != null ? `×${wk.multiplier.toFixed(1)}` : '—'}</td>
-                          );
-                          if (c.key === '_exp') return (
-                            <td key={i} style={tdStyle('right', { color: C.muted, fontSize: 9 })}>
-                              {canExpand ? (isExpanded ? '▲' : '▼') : ''}
-                            </td>
-                          );
-                          return (
-                            <td key={i} style={tdStyle('right')}>{statVal(c.key)}</td>
-                          );
-                        })}
-                      </tr>
-                      {canExpand && isExpanded && (
-                        <tr>
-                          <td colSpan={tableCols.length} style={{ padding: 0, borderBottom: `1px solid ${C.surf3}33` }}>
-                            <UnitExpansion school={player.school} unitType={player.unitType} currentWeek={5} season={2025} />
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        );
-      })()}
+      {/* Game Log — full week-by-week breakdown via UnitExpansion */}
+      <UnitExpansion
+        school={player.school}
+        unitType={player.unitType}
+        currentWeek={5}
+        season={2025}
+      />
 
       {/* Unit Players (season totals) — all unit types */}
       {!loading && (
