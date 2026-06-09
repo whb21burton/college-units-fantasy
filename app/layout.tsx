@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import FooterWrapper from '@/components/layout/FooterWrapper';
 import MobileInstallBanner from '@/components/MobileInstallBanner';
 import { WalletProvider } from '@/context/WalletContext';
+import { ComplianceProvider } from '@/context/ComplianceContext';
+import ComplianceBanner from '@/components/ComplianceBanner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -44,9 +46,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body style={{ margin: 0, background: '#070a12', color: '#e4edf7', fontFamily: "'Space Grotesk', Inter, sans-serif", display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <WalletProvider>
-          <div style={{ flex: 1 }}>{children}</div>
-          <FooterWrapper />
-          <MobileInstallBanner />
+          <ComplianceProvider>
+            <ComplianceBanner />
+            <div style={{ flex: 1 }}>{children}</div>
+            <FooterWrapper />
+            <MobileInstallBanner />
+          </ComplianceProvider>
         </WalletProvider>
       </body>
     </html>

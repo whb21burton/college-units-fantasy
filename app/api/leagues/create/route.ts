@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { getStateFromIP, checkStateRestriction, logComplianceEvent } from '@/lib/compliance';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,23 @@ export async function POST(req: NextRequest) {
   const isCapped = body.is_capped !== undefined ? Boolean(body.is_capped) : maxEntriesPerUser != null;
 
   const storedConferenceFilter = isPublic ? (body.conference_filter ?? 'All D1') : 'All D1';
+
+  // ── State restriction check (paid leagues only) ──────────────────────────
+  if (buyIn > 0) {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? '';
+    const stateCode = await getStateFromIP(ip);
+    if (stateCode) {
+      const { restricted, stateName } = await checkStateRestriction(stateCode);
+      if (restricted) {
+        await logComplianceEvent(user.id, 'blocked_entry', { route: 'leagues/create', stateCode }, ip, req.headers.get('user-agent') ?? '');
+        return NextResponse.json({
+          error: `Cash contests and deposits are unavailable while you are located in ${stateName}. You may still access your account and withdraw funds.`,
+          restricted: true,
+          state_code: stateCode,
+        }, { status: 403 });
+      }
+    }
+  }
 
   const created: { id: string; invite_code: string; name: string }[] = [];
 

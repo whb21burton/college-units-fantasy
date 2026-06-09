@@ -14,7 +14,7 @@ const C = {
 
 const ADMIN_EMAIL = 'whb21burton@gmail.com';
 
-type Tab = 'overview' | 'terms' | 'verifications' | 'logs';
+type Tab = 'overview' | 'terms' | 'verifications' | 'logs' | 'states';
 
 interface TermsRow {
   user_id: string;
@@ -68,6 +68,13 @@ export default function AdminCompliancePage() {
   const [verifs, setVerifs] = useState<VerificationRow[]>([]);
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [states, setStates] = useState<{ state_code: string; state_name: string; reason: string | null; active: boolean }[]>([]);
+  const [statesLoaded, setStatesLoaded] = useState(false);
+  const [stateSaving, setStateSaving] = useState<string | null>(null);
+  const [newCode, setNewCode] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newReason, setNewReason] = useState('');
+  const [blockedLogs, setBlockedLogs] = useState<any[]>([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -125,11 +132,43 @@ export default function AdminCompliancePage() {
     setLoading(false);
   }
 
+  async function loadStates() {
+    const res = await fetch('/api/admin/compliance');
+    const d = await res.json();
+    setStates(d.states ?? []);
+    setBlockedLogs(d.logs ?? []);
+    setStatesLoaded(true);
+  }
+
+  async function toggleState(state_code: string, active: boolean) {
+    setStateSaving(state_code);
+    await fetch('/api/admin/compliance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'toggle', state_code, active }) });
+    setStates(prev => prev.map(s => s.state_code === state_code ? { ...s, active } : s));
+    setStateSaving(null);
+  }
+
+  async function addState() {
+    if (!newCode.trim() || !newName.trim()) return;
+    setStateSaving('add');
+    await fetch('/api/admin/compliance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'upsert', state_code: newCode.toUpperCase(), state_name: newName, reason: newReason || null, active: true }) });
+    setNewCode(''); setNewName(''); setNewReason('');
+    setStateSaving(null);
+    loadStates();
+  }
+
+  async function removeState(state_code: string) {
+    setStateSaving(state_code);
+    await fetch('/api/admin/compliance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', state_code }) });
+    setStates(prev => prev.filter(s => s.state_code !== state_code));
+    setStateSaving(null);
+  }
+
   function switchTab(t: Tab) {
     setTab(t);
     if (t === 'terms' && terms.length === 0) loadTerms();
     if (t === 'verifications' && verifs.length === 0) loadVerifications();
     if (t === 'logs' && logs.length === 0) loadLogs();
+    if (t === 'states' && !statesLoaded) loadStates();
   }
 
   if (!authed) return null;
@@ -171,6 +210,7 @@ export default function AdminCompliancePage() {
           {tabBtn('terms', 'Terms Acceptance')}
           {tabBtn('verifications', 'Age Verifications')}
           {tabBtn('logs', 'Audit Log')}
+          {tabBtn('states', 'State Restrictions')}
         </div>
 
         {/* Overview */}
@@ -250,6 +290,77 @@ export default function AdminCompliancePage() {
                   </div>
                   <div key={`at-${i}`} style={{ padding: '10px 12px', borderTop: `1px solid ${C.surf3}`, fontSize: 12, color: C.sub }}>{v.verified_at ? new Date(v.verified_at).toLocaleDateString() : '—'}</div>
                 </>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* State Restrictions */}
+        {tab === 'states' && (
+          <div>
+            {/* Add state form */}
+            <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '18px 20px', marginBottom: 20 }}>
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 12 }}>Add Restricted State</div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <input value={newCode} onChange={e => setNewCode(e.target.value)} placeholder="Code (e.g. NY)" maxLength={2}
+                  style={{ width: 72, background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '8px 10px', color: C.text, fontFamily: "'Oswald', sans-serif", fontSize: 12, outline: 'none', textTransform: 'uppercase' }} />
+                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Full state name"
+                  style={{ flex: 1, minWidth: 140, background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '8px 10px', color: C.text, fontFamily: "'Oswald', sans-serif", fontSize: 12, outline: 'none' }} />
+                <input value={newReason} onChange={e => setNewReason(e.target.value)} placeholder="Reason (optional)"
+                  style={{ flex: 2, minWidth: 180, background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, padding: '8px 10px', color: C.text, fontFamily: "'Oswald', sans-serif", fontSize: 12, outline: 'none' }} />
+                <button onClick={addState} disabled={stateSaving === 'add' || !newCode || !newName}
+                  style={{ padding: '8px 20px', background: C.gold, border: 'none', borderRadius: 6, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 12, letterSpacing: 1, color: C.bg, opacity: (!newCode || !newName) ? 0.5 : 1 }}>
+                  {stateSaving === 'add' ? '…' : 'ADD'}
+                </button>
+              </div>
+            </div>
+
+            {/* State list */}
+            <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, overflow: 'hidden', marginBottom: 24 }}>
+              {hdr('Restricted States')}
+              <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr 1fr 90px 90px', gap: 0 }}>
+                {['Code', 'State', 'Reason', 'Status', ''].map(h => (
+                  <div key={h} style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 2, color: C.hdrText, padding: '8px 12px', background: C.hdrBg, textTransform: 'uppercase' }}>{h}</div>
+                ))}
+                {states.length === 0 ? (
+                  <div style={{ gridColumn: '1/-1', padding: '20px 12px', color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 12 }}>No restricted states configured</div>
+                ) : states.map((s, i) => (
+                  <>
+                    <div key={`c${i}`} style={{ padding: '10px 12px', borderTop: `1px solid ${C.surf3}`, fontFamily: "'Anton', sans-serif", fontSize: 14, color: C.gold }}>{s.state_code}</div>
+                    <div key={`n${i}`} style={{ padding: '10px 12px', borderTop: `1px solid ${C.surf3}`, fontFamily: "'Oswald', sans-serif", fontSize: 12, color: C.text }}>{s.state_name}</div>
+                    <div key={`r${i}`} style={{ padding: '10px 12px', borderTop: `1px solid ${C.surf3}`, fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted }}>{s.reason ?? '—'}</div>
+                    <div key={`t${i}`} style={{ padding: '10px 12px', borderTop: `1px solid ${C.surf3}` }}>
+                      <button onClick={() => toggleState(s.state_code, !s.active)} disabled={stateSaving === s.state_code}
+                        style={{ padding: '4px 10px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: "'Oswald', sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 1,
+                          background: s.active ? 'rgba(240,58,90,.15)' : 'rgba(21,198,120,.15)',
+                          color: s.active ? C.red : C.green }}>
+                        {stateSaving === s.state_code ? '…' : s.active ? 'ACTIVE' : 'INACTIVE'}
+                      </button>
+                    </div>
+                    <div key={`d${i}`} style={{ padding: '10px 12px', borderTop: `1px solid ${C.surf3}` }}>
+                      <button onClick={() => removeState(s.state_code)} disabled={stateSaving === s.state_code}
+                        style={{ padding: '4px 10px', borderRadius: 4, border: `1px solid ${C.surf3}`, cursor: 'pointer', background: 'none', fontFamily: "'Oswald', sans-serif", fontSize: 10, color: C.muted }}>
+                        Remove
+                      </button>
+                    </div>
+                  </>
+                ))}
+              </div>
+            </div>
+
+            {/* Blocked attempts */}
+            <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>Recent Blocked Attempts ({blockedLogs.length})</div>
+            <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, overflow: 'hidden' }}>
+              {blockedLogs.length === 0 ? (
+                <div style={{ padding: '20px 12px', color: C.muted, fontFamily: "'Oswald', sans-serif", fontSize: 12 }}>No blocked attempts yet</div>
+              ) : blockedLogs.map((log: any, i: number) => (
+                <div key={i} style={{ padding: '10px 16px', borderBottom: `1px solid ${C.surf3}`, display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                  <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 13, color: C.red, minWidth: 40 }}>{log.event_data?.stateCode ?? '??'}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: C.sub }}>{log.event_data?.route ?? log.event_type} · {log.ip_address}</div>
+                    <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, color: C.muted, marginTop: 2 }}>user: {log.user_id?.slice(0, 8)}… · {new Date(log.created_at).toLocaleString()}</div>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
