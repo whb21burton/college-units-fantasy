@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import type { DraftUnit } from '@/lib/playerPool';
+import { CONFERENCES } from '@/lib/playerPool';
 import DraftOrderEditor from '@/components/league/DraftOrderEditor';
 import { useWallet } from '@/context/WalletContext';
 import UnitExpansion from '@/components/UnitExpansion';
@@ -5104,9 +5105,36 @@ const SETTINGS_NAV: { key: SettingsSection; label: string; commOnly: boolean }[]
 ];
 
 // ── CommissionerSettingsModal ─────────────────────────────────────────────────
-const COMM_ROSTER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K', 'FLEX'];
-const COMM_ROSTER_DEFAULTS: Record<string, number> = { QB: 1, RB: 2, WR: 2, TE: 1, DEF: 1, K: 1, FLEX: 1 };
-const COMM_ALL_CONFS = ['SEC', 'ACC', 'Big Ten', 'Big 12', 'FBS Independents'];
+type CommPos = 'QB' | 'RB' | 'WR' | 'TE' | 'DEF' | 'K' | 'FLEX';
+type CommSlot = { enabled: boolean; count: number };
+
+const COMM_POS_META: { key: CommPos; emoji: string; label: string; max: number }[] = [
+  { key: 'QB',   emoji: '🏈', label: 'QB',             max: 5 },
+  { key: 'RB',   emoji: '🏃', label: 'RB',             max: 5 },
+  { key: 'WR',   emoji: '📡', label: 'WR',             max: 5 },
+  { key: 'TE',   emoji: '🎯', label: 'TE',             max: 5 },
+  { key: 'DEF',  emoji: '🛡️', label: 'DEF',            max: 4 },
+  { key: 'K',    emoji: '👟', label: 'K',              max: 4 },
+  { key: 'FLEX', emoji: '🔀', label: 'FLEX (RB/WR/TE)', max: 5 },
+];
+
+const COMM_POS_DEFAULTS: Record<CommPos, CommSlot> = {
+  QB:   { enabled: true, count: 1 },
+  RB:   { enabled: true, count: 2 },
+  WR:   { enabled: true, count: 2 },
+  TE:   { enabled: true, count: 1 },
+  DEF:  { enabled: true, count: 1 },
+  K:    { enabled: true, count: 1 },
+  FLEX: { enabled: true, count: 1 },
+};
+
+/** Read a slot value regardless of whether it was stored as a number or {enabled,count}. */
+function parseSlot(v: any, def: CommSlot): CommSlot {
+  if (v == null) return def;
+  if (typeof v === 'number') return { enabled: v > 0, count: v };
+  if (typeof v === 'object' && 'count' in v) return { enabled: v.enabled ?? true, count: Number(v.count) || 0 };
+  return def;
+}
 
 function CommissionerSettingsModal({ league, onClose, onUpdate }: {
   league: any; onClose: () => void; onUpdate: () => void;
@@ -5115,59 +5143,81 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
   const [saved,  setSaved]  = useState(false);
   const [error,  setError]  = useState('');
 
-  // League Info
+  // ── League Info ─────────────────────────────────────────────────────────────
   const [name,       setName]       = useState<string>(league?.name ?? '');
   const [leagueSize, setLeagueSize] = useState<number>(league?.league_size ?? 8);
 
-  // Playoff
-  const [playoffFormat,    setPlayoffFormat]    = useState<string>(league?.settings?.playoff_format    ?? '4-team');
-  const [divisionAutoBids, setDivisionAutoBids] = useState<boolean>(league?.settings?.division_auto_bids ?? false);
+  // ── Playoff ─────────────────────────────────────────────────────────────────
+  const [playoffFormat,    setPlayoffFormat]    = useState<string>(league?.settings?.playoff_format ?? '4-team');
+  const [divisionAutoBids, setDivisionAutoBids] = useState<boolean>(league?.settings?.auto_division_bids ?? league?.settings?.division_auto_bids ?? false);
 
-  // Draft
+  // ── Draft ───────────────────────────────────────────────────────────────────
   const [draftType, setDraftType] = useState<string>(league?.draft_type ?? 'snake');
-  const existingDraftAt = league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at ?? '';
+  const existingDraftAt = league?.draft_start_time ?? league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at ?? '';
   const [draftDate, setDraftDate] = useState<string>(existingDraftAt ? existingDraftAt.slice(0, 10)  : '');
   const [draftTime, setDraftTime] = useState<string>(existingDraftAt ? existingDraftAt.slice(11, 16) : '');
 
-  // Roster
-  const existingRoster = league?.settings?.roster_config ?? {};
+  // ── Roster ──────────────────────────────────────────────────────────────────
+  // roster_config may have been saved as flat numbers OR as {enabled,count} objects
+  const rc  = league?.settings?.roster_config ?? {};
+  const ssl = league?.settings?.starter_slots  ?? {};
   const [totalRoster, setTotalRoster] = useState<number>(
-    existingRoster.total ?? league?.settings?.roster_size ?? 15
+    Number(rc.total) || Number(league?.settings?.roster_size) || 15
   );
-  const initSlots = Object.fromEntries(
-    COMM_ROSTER_POSITIONS.map(pos => [
-      pos,
-      existingRoster[pos] ?? league?.settings?.starter_slots?.[pos] ?? COMM_ROSTER_DEFAULTS[pos] ?? 0,
-    ])
-  );
-  const [slots, setSlots] = useState<Record<string, number>>(initSlots);
-  const totalStarters = COMM_ROSTER_POSITIONS.reduce((s, pos) => s + (slots[pos] ?? 0), 0);
-  const benchSpots    = Math.max(0, totalRoster - totalStarters);
+  const initSlots = (): Record<CommPos, CommSlot> => {
+    const result = {} as Record<CommPos, CommSlot>;
+    for (const { key } of COMM_POS_META) {
+      const stored = rc[key] ?? ssl[key];
+      result[key] = parseSlot(stored, COMM_POS_DEFAULTS[key]);
+    }
+    return result;
+  };
+  const [slots, setSlots] = useState<Record<CommPos, CommSlot>>(initSlots);
+
+  const totalStarters  = COMM_POS_META.reduce((s, { key }) => s + (slots[key].enabled ? slots[key].count : 0), 0);
+  const benchSpots     = Math.max(0, totalRoster - totalStarters);
   const rosterOverflow = totalStarters > totalRoster;
 
-  // Conference filter
-  const existingConf = league?.settings?.conference_filter ?? league?.conference_filter ?? '';
-  const initConfs = existingConf && existingConf !== 'ALL'
-    ? existingConf.split(',').map((s: string) => s.trim()).filter(Boolean)
-    : [...COMM_ALL_CONFS];
-  const [selectedConfs, setSelectedConfs] = useState<string[]>(initConfs);
-  function toggleConf(conf: string) {
-    setSelectedConfs(prev => prev.includes(conf) ? prev.filter(c => c !== conf) : [...prev, conf]);
+  function togglePos(key: CommPos) {
+    setSlots(prev => ({ ...prev, [key]: { ...prev[key], enabled: !prev[key].enabled } }));
+  }
+  function setCount(key: CommPos, delta: number) {
+    setSlots(prev => {
+      const cur = prev[key];
+      const meta = COMM_POS_META.find(p => p.key === key)!;
+      return { ...prev, [key]: { ...cur, count: Math.max(0, Math.min(meta.max, cur.count + delta)) } };
+    });
   }
 
-  // ── Styles ──────────────────────────────────────────────────────────────────
+  // ── Eligible teams (school picker) ──────────────────────────────────────────
+  const allSchools = Object.values(CONFERENCES).flat() as string[];
+  const existingSchools: string[] = Array.isArray(league?.settings?.allowed_schools)
+    ? league.settings.allowed_schools
+    : [];
+  const [selected, setSelected] = useState<Set<string>>(
+    existingSchools.length > 0 ? new Set(existingSchools) : new Set(allSchools)
+  );
+
+  function toggleSchool(school: string) {
+    setSelected(prev => { const n = new Set(prev); n.has(school) ? n.delete(school) : n.add(school); return n; });
+  }
+  function toggleConf(confSchools: string[]) {
+    const allIn = confSchools.every(s => selected.has(s));
+    setSelected(prev => {
+      const n = new Set(prev);
+      allIn ? confSchools.forEach(s => n.delete(s)) : confSchools.forEach(s => n.add(s));
+      return n;
+    });
+  }
+
+  // ── Shared styles ────────────────────────────────────────────────────────────
   const inputFull: React.CSSProperties = {
-    padding: '9px 12px', background: C.bg, border: '1px solid ' + C.surf3,
-    borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13,
-    outline: 'none', boxSizing: 'border-box', transition: 'border-color .15s',
-  };
-  const inputSm: React.CSSProperties = {
-    width: 56, padding: '7px 8px', background: C.bg, border: '1px solid ' + C.surf3,
-    borderRadius: 7, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13,
-    outline: 'none', textAlign: 'center' as const, boxSizing: 'border-box',
+    padding: '10px 12px', background: C.surf2, border: '1px solid ' + C.surf3,
+    borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13,
+    outline: 'none', boxSizing: 'border-box',
   };
   const lbl: React.CSSProperties = {
-    fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted,
+    fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.sub,
     textTransform: 'uppercase', marginBottom: 6, display: 'block',
   };
   const sectionHead: React.CSSProperties = {
@@ -5179,10 +5229,10 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
     const on = val === cur;
     return (
       <button onClick={() => set(val)} style={{
-        flex: 1, padding: '8px 0', borderRadius: 7, cursor: 'pointer',
+        flex: 1, padding: '9px 0', borderRadius: 8, cursor: 'pointer',
         fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1,
-        background: on ? 'rgba(245,166,35,.12)' : C.surf3,
-        border: '1px solid ' + (on ? C.gold : C.surf3),
+        background: on ? 'rgba(245,166,35,.12)' : C.surf2,
+        border: `1px solid ${on ? C.gold : C.surf3}`,
         color: on ? C.gold : C.sub, transition: 'all .12s',
       }}>{children}</button>
     );
@@ -5197,12 +5247,21 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
         ? new Date(`${draftDate}T${draftTime}:00`).toISOString()
         : draftDate ? new Date(`${draftDate}T00:00:00`).toISOString() : null;
 
-      const confFilter = selectedConfs.length === COMM_ALL_CONFS.length ? 'ALL' : selectedConfs.join(',');
-      const rosterConfig = {
-        total: totalRoster,
-        ...Object.fromEntries(COMM_ROSTER_POSITIONS.map(pos => [pos, slots[pos] ?? 0])),
-        bench: benchSpots,
-      };
+      const isAllSchools = selected.size >= allSchools.length;
+      const allowedSchools = isAllSchools ? null : Array.from(selected);
+
+      // Derive conference_filter from selected schools
+      const allConfsSelected = Object.entries(CONFERENCES).filter(([, schools]) =>
+        (schools as string[]).every(s => selected.has(s))
+      ).map(([conf]) => conf);
+      const confFilter = allConfsSelected.length === Object.keys(CONFERENCES).length
+        ? 'ALL' : allConfsSelected.join(',');
+
+      // Save slots as flat numbers for simplicity
+      const starterSlots = Object.fromEntries(
+        COMM_POS_META.map(({ key }) => [key, slots[key].enabled ? slots[key].count : 0])
+      );
+      const rosterConfig = { total: totalRoster, ...starterSlots, bench: benchSpots };
 
       const res = await fetch(`/api/leagues/${league.id}`, {
         method: 'PATCH',
@@ -5214,11 +5273,12 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
           conference_filter: confFilter,
           settings: {
             playoff_format:      playoffFormat,
-            division_auto_bids:  divisionAutoBids,
+            auto_division_bids:  divisionAutoBids,
             roster_config:       rosterConfig,
-            starter_slots:       slots,
+            starter_slots:       starterSlots,
             bench_spots:         benchSpots,
             roster_size:         totalRoster,
+            allowed_schools:     allowedSchools,
             conference_filter:   confFilter,
             ...(draftTimestamp ? { draft_time: draftTimestamp, draft_scheduled_at: draftTimestamp } : {}),
           },
@@ -5238,7 +5298,7 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 14, padding: '28px 28px', width: 520, maxWidth: '96vw', maxHeight: '90vh', overflowY: 'auto' }}>
+        style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 14, padding: '28px 28px', width: 560, maxWidth: '96vw', maxHeight: '90vh', overflowY: 'auto' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
@@ -5257,25 +5317,23 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
         </div>
         <div style={{ marginBottom: 6 }}>
           <span style={lbl}>League Size (2–32)</span>
-          <input
-            type="number" min={2} max={32} value={leagueSize}
+          <input type="number" min={2} max={32} value={leagueSize}
             onChange={e => setLeagueSize(Math.max(2, Math.min(32, parseInt(e.target.value) || 2)))}
-            style={{ ...inputFull, width: 120 }}
-          />
+            style={{ ...inputFull, width: 120 }} />
         </div>
 
-        {/* ── Playoff Settings ── */}
+        {/* ── Playoff ── */}
         <div style={sectionHead}>Playoff Settings</div>
         <div style={{ marginBottom: 14 }}>
           <span style={lbl}>Playoff Format</span>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <Opt val="4-team" cur={playoffFormat} set={setPlayoffFormat}>4-Team</Opt>
             <Opt val="6-team" cur={playoffFormat} set={setPlayoffFormat}>6-Team</Opt>
           </div>
         </div>
         <div style={{ marginBottom: 6 }}>
           <span style={lbl}>Division Winners Get Auto Bids</span>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <Opt val="yes" cur={divisionAutoBids ? 'yes' : 'no'} set={v => setDivisionAutoBids(v === 'yes')}>Yes</Opt>
             <Opt val="no"  cur={divisionAutoBids ? 'yes' : 'no'} set={v => setDivisionAutoBids(v === 'yes')}>No</Opt>
           </div>
@@ -5285,7 +5343,7 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
         <div style={sectionHead}>Roster &amp; Draft</div>
         <div style={{ marginBottom: 14 }}>
           <span style={lbl}>Draft Type</span>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <Opt val="snake"  cur={draftType} set={setDraftType}>Snake Draft</Opt>
             <Opt val="salary" cur={draftType} set={setDraftType}>Salary Cap</Opt>
           </div>
@@ -5297,73 +5355,106 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
             <input type="time" value={draftTime} onChange={e => setDraftTime(e.target.value)} style={{ ...inputFull, flex: 1 }} />
           </div>
         </div>
-        <div style={{ marginBottom: 14 }}>
-          <span style={lbl}>Total Roster Size</span>
-          <input
-            type="number" min={1} max={50} value={totalRoster}
-            onChange={e => setTotalRoster(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-            style={{ ...inputFull, width: 120 }}
-          />
-        </div>
+
+        {/* Roster settings — same style as create-league */}
         <div style={{ marginBottom: 6 }}>
-          <span style={lbl}>Starter Slots</span>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-            {COMM_ROSTER_POSITIONS.map(pos => (
-              <div key={pos} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: pos === 'FLEX' ? 8 : 9, letterSpacing: 1, color: C.sub, textTransform: 'uppercase', textAlign: 'center' as const }}>
-                  {pos === 'FLEX' ? 'FLEX\nRB/WR/TE' : pos}
-                </span>
-                <input
-                  type="number" min={0} max={5} value={slots[pos] ?? 0}
-                  onChange={e => setSlots(prev => ({ ...prev, [pos]: Math.max(0, Math.min(5, parseInt(e.target.value) || 0)) }))}
-                  style={inputSm}
-                />
+          <span style={lbl}>Roster Settings</span>
+          <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '14px 16px' }}>
+            {COMM_POS_META.map(({ key, emoji, label }, idx) => {
+              const cfg    = slots[key];
+              const isLast = idx === COMM_POS_META.length - 1;
+              return (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: isLast ? 0 : 10, marginBottom: isLast ? 0 : 10, borderBottom: isLast ? 'none' : `1px solid ${C.surf3}` }}>
+                  <input type="checkbox" checked={cfg.enabled} onChange={() => togglePos(key)}
+                    style={{ accentColor: C.gold, width: 15, height: 15, cursor: 'pointer', flexShrink: 0 }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 110, flexShrink: 0 }}>
+                    <span style={{ fontSize: 15 }}>{emoji}</span>
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, color: cfg.enabled ? C.text : C.muted, textTransform: 'uppercase' }}>{label}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                    <button onClick={() => setCount(key, -1)} disabled={!cfg.enabled || cfg.count <= 0}
+                      style={{ width: 28, height: 28, borderRadius: 6, background: C.surf3, border: 'none', cursor: cfg.enabled && cfg.count > 0 ? 'pointer' : 'not-allowed', color: cfg.enabled ? C.text : C.muted, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      −
+                    </button>
+                    <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: cfg.enabled ? C.text : C.muted, minWidth: 20, textAlign: 'center' as const }}>
+                      {cfg.count}
+                    </span>
+                    <button onClick={() => setCount(key, +1)} disabled={!cfg.enabled || cfg.count >= COMM_POS_META.find(p => p.key === key)!.max}
+                      style={{ width: 28, height: 28, borderRadius: 6, background: C.surf3, border: 'none', cursor: cfg.enabled && cfg.count < COMM_POS_META.find(p => p.key === key)!.max ? 'pointer' : 'not-allowed', color: cfg.enabled ? C.text : C.muted, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      +
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Total roster size row */}
+            <div style={{ borderTop: `1px solid ${C.surf3}`, marginTop: 10, paddingTop: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 110, flexShrink: 0 }}>
+                <span style={{ fontSize: 15 }}>🪑</span>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, color: C.sub, textTransform: 'uppercase' }}>Total Roster</span>
               </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 10, padding: '8px 12px', background: C.surf2, borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
-              Starters: {totalStarters} &nbsp;·&nbsp; Bench: {rosterOverflow ? '—' : benchSpots}
-            </span>
-            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: rosterOverflow ? C.red : C.gold }}>
-              Total: {totalRoster}
-            </span>
-          </div>
-          {rosterOverflow && (
-            <div style={{ marginTop: 6, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red }}>
-              ⚠ Starters ({totalStarters}) exceed total roster size ({totalRoster})
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                <button onClick={() => setTotalRoster(r => Math.max(totalStarters, r - 1))}
+                  style={{ width: 28, height: 28, borderRadius: 6, background: C.surf3, border: 'none', cursor: 'pointer', color: C.text, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  −
+                </button>
+                <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, minWidth: 20, textAlign: 'center' as const }}>
+                  {totalRoster}
+                </span>
+                <button onClick={() => setTotalRoster(r => Math.min(50, r + 1))}
+                  style={{ width: 28, height: 28, borderRadius: 6, background: C.surf3, border: 'none', cursor: 'pointer', color: C.text, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  +
+                </button>
+              </div>
             </div>
-          )}
+
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: rosterOverflow ? C.red : C.sub, letterSpacing: 1, textAlign: 'right', marginTop: 10 }}>
+              {rosterOverflow
+                ? `⚠ Starters (${totalStarters}) exceed total (${totalRoster})`
+                : `Starters: ${totalStarters} · Bench: ${benchSpots} · Total: ${totalRoster}`}
+            </div>
+          </div>
         </div>
 
-        {/* ── Eligible Teams ── */}
+        {/* ── Eligible Teams — SchoolPicker style ── */}
         <div style={sectionHead}>Eligible Teams</div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 12, lineHeight: 1.6 }}>
-          Teams from selected conferences only will be available in the draft.
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 10 }}>
+          Leave all checked for all D1 schools, or select a subset.
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 8 }}>
-          {COMM_ALL_CONFS.map(conf => {
-            const checked = selectedConfs.includes(conf);
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, letterSpacing: 1, marginBottom: 10 }}>
+          {selected.size} school{selected.size !== 1 ? 's' : ''} selected
+        </div>
+        <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '14px 16px', maxHeight: 300, overflowY: 'auto' }}>
+          {(Object.entries(CONFERENCES) as [string, string[]][]).map(([conf, schools]) => {
+            const allIn  = schools.every(s => selected.has(s));
+            const someIn = schools.some(s => selected.has(s));
             return (
-              <label key={conf} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                <input type="checkbox" checked={checked} onChange={() => toggleConf(conf)}
-                  style={{ accentColor: C.gold, width: 15, height: 15, flexShrink: 0 }} />
-                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: checked ? C.text : C.muted }}>
-                  {conf}
-                </span>
-              </label>
+              <div key={conf} style={{ marginBottom: 14 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 6 }}>
+                  <input type="checkbox" checked={allIn}
+                    ref={el => { if (el) el.indeterminate = someIn && !allIn; }}
+                    onChange={() => toggleConf(schools)}
+                    style={{ accentColor: C.gold, width: 14, height: 14 }} />
+                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, color: C.gold, textTransform: 'uppercase' }}>{conf}</span>
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingLeft: 22 }}>
+                  {schools.map(school => (
+                    <label key={school} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', minWidth: 140 }}>
+                      <input type="checkbox" checked={selected.has(school)} onChange={() => toggleSchool(school)}
+                        style={{ accentColor: C.gold, width: 12, height: 12 }} />
+                      <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: selected.has(school) ? C.text : C.sub }}>{school}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             );
           })}
-        </div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>
-          {selectedConfs.length === COMM_ALL_CONFS.length
-            ? 'All conferences — no filter applied'
-            : `${selectedConfs.length} of ${COMM_ALL_CONFS.length} selected`}
         </div>
 
         {/* Error */}
         {error && (
-          <div style={{ padding: '8px 12px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, marginTop: 16 }}>
+          <div style={{ padding: '8px 12px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, marginTop: 14 }}>
             {error}
           </div>
         )}
