@@ -221,7 +221,8 @@ type GameStats = {
  */
 function effectivePts(
   school: string, unitType: string, seasonPts: number,
-  ctx: MatchupCtx, gs: GameStats
+  ctx: MatchupCtx, gs: GameStats,
+  playerData?: any
 ): { pts: number; isActual: boolean; base: number; storedMult: number | null } {
   const opponent = ctx?.opponentMap[school] ?? null;
   // BYE week — no game, no points
@@ -235,14 +236,9 @@ function effectivePts(
     return { pts: storedPts, isActual: true, base: rawBase, storedMult };
   }
 
-  // Game is completed but no cached_stats row yet — show 0, never projection
-  if (gs?.completedSchools?.includes(school)) {
-    return { pts: 0, isActual: true, base: 0, storedMult: null };
-  }
-
-  // Game not yet played — use stored game_mult (null = no data → neutral 1.0)
+  // No stored stats — show projection (whether game is future or stats not yet synced)
   const mult = ctx?.multMap?.[school] ?? 1.0;
-  const base         = weeklyProj(seasonPts);
+  const base = playerData ? liveProj(playerData) : weeklyProj(seasonPts);
   return { pts: base * mult, isActual: false, base, storedMult: null };
 }
 
@@ -3710,7 +3706,7 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView, 
   const school   = pick.player_data?.school ?? '';
   const unitType = pick.player_data?.unitType ?? '';
   const posColor = POS_COLORS[unitType] || C.muted;
-  const ep       = effectivePts(school, unitType, pick.player_data?.projectedPoints ?? 0, ctx, gameStats);
+  const ep       = effectivePts(school, unitType, pick.player_data?.projectedPoints ?? 0, ctx, gameStats, pick.player_data);
   const pts      = ep.pts.toFixed(1);
 
   // Score sits on the INNER side (near the center pos badge), info on the OUTER side.
@@ -3759,7 +3755,7 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView, 
 function MatchupTab({ league, userId }: { league: any; userId: string | null }) {
   const [picks,         setPicks]         = useState<any[]>([]);
   const [pool,          setPool]          = useState<any[]>([]);
-  const [week,          setWeek]          = useState(1);
+  const [week,          setWeek]          = useState(league?.week ?? 1);
   const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
   const [gameStats,     setGameStats]     = useState<GameStats>(null);
   const [loading,       setLoading]       = useState(true);
@@ -3796,9 +3792,14 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
 
   const myEntry    = draftOrder.find((t: any) => t.userId === userId);
   const mySlotIdx  = myEntry ? myEntry.slot - 1 : -1;
-  const oppSlotIdx = mySlotIdx < 0 ? -1
-    : mySlotIdx % 2 === 0 ? mySlotIdx + 1 : mySlotIdx - 1;
-  const oppEntry   = oppSlotIdx >= 0 && oppSlotIdx < numTeams ? draftOrder[oppSlotIdx] : null;
+
+  // Round-robin matchup for current week
+  const weekMatchups = getWeekMatchups(draftOrder, week);
+  const myMatchup    = weekMatchups.find(([a, b]) => a.userId === userId || b.userId === userId);
+  const oppEntry     = myMatchup
+    ? (myMatchup[0].userId === userId ? myMatchup[1] : myMatchup[0])
+    : null;
+  const oppSlotIdx   = oppEntry ? (oppEntry.slot - 1) : -1;
 
   const myPicksRaw  = picks.filter(p => numTeams > 0 && snakeIdx(p.pick_number, numTeams) === mySlotIdx);
   const oppPicksRaw = picks.filter(p => numTeams > 0 && snakeIdx(p.pick_number, numTeams) === oppSlotIdx);
@@ -3807,8 +3808,8 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   const oppRoster = assignRoster(oppPicksRaw);
 
   // Total = starters only; actual if game complete, projected otherwise
-  const myTotal  = myRoster.starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts, 0);
-  const oppTotal = oppRoster.starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts, 0);
+  const myTotal  = myRoster.starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
+  const oppTotal = oppRoster.starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
@@ -4048,7 +4049,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
     bench    = r.bench;
   }
 
-  const starterTotal = starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts, 0);
+  const starterTotal = starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
 
   async function doSwap(starterIdx: number) {
     if (!selectedBench) return;
@@ -4175,7 +4176,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         const pick    = starters[i];
         const color   = POS_COLORS[label] || C.muted;
         const isTarget = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
-        const ep      = effectivePts(pick?.player_data?.school, pick?.player_data?.unitType, pick?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats);
+        const ep      = effectivePts(pick?.player_data?.school, pick?.player_data?.unitType, pick?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick?.player_data);
         const mp      = matchupProj(liveProj(pick?.player_data), pick?.player_data?.school ?? '', pick?.player_data?.unitType ?? '', matchupCtx);
         const pts     = ep.pts.toFixed(1);
         const name    = pick?.player_data?.playerName || pick?.player_data?.school;
@@ -4256,7 +4257,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
 
           {bench.map((pick: any) => {
             const isSelected = selectedBench?.id === pick.id;
-            const bep  = effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats);
+            const bep  = effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick.player_data);
             const pts  = bep.pts.toFixed(1);
             const name = pick.player_data?.playerName || pick.player_data?.school;
             const sub  = pick.player_data?.playerName ? pick.player_data.school : pick.player_data?.conference;
@@ -4490,8 +4491,8 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
           Complete the draft first to see matchups.
         </div>
       ) : matchups.map(([teamA, teamB], i) => {
-        const totA = assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts, 0);
-        const totB = assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts, 0);
+        const totA = assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
+        const totB = assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
         const isMeA = teamA.userId === userId;
         const isMeB = teamB.userId === userId;
         return (
@@ -4580,7 +4581,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   if (view === 'roster' && selectedTeam) {
     const teamPicks  = getTeamPicks(selectedTeam);
     const roster     = assignRoster(teamPicks);
-    const starterPts = roster.starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts, 0);
+    const starterPts = roster.starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
     const isMyTeam   = selectedTeam.userId === userId;
     const canTrade   = !isMyTeam && selectedTeam.type === 'human';
 
@@ -4620,8 +4621,8 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
             </div>
             <div style={{ display: 'flex', gap: 20 }}>
               <div>
-                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>{effectivePts(selectedPlayer.player_data?.school, selectedPlayer.player_data?.unitType, selectedPlayer.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).isActual ? 'Actual' : 'Projected'}</div>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 24, color: C.gold }}>{effectivePts(selectedPlayer.player_data?.school, selectedPlayer.player_data?.unitType, selectedPlayer.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts.toFixed(1)}</div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>{effectivePts(selectedPlayer.player_data?.school, selectedPlayer.player_data?.unitType, selectedPlayer.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, selectedPlayer.player_data).isActual ? 'Actual' : 'Projected'}</div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 24, color: C.gold }}>{effectivePts(selectedPlayer.player_data?.school, selectedPlayer.player_data?.unitType, selectedPlayer.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, selectedPlayer.player_data).pts.toFixed(1)}</div>
               </div>
               {selectedPlayer.player_data?.adp != null && (
                 <div>
@@ -4654,13 +4655,13 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                     unitType={pick.player_data?.unitType ?? ''}
                     playerName={pick.player_data?.playerName}
                     ctx={matchupCtx}
-                    ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats)}
+                    ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick.player_data)}
                     seasonPts={pick.player_data?.projectedPoints ?? 0}
                     unitRankMaps={unitRankMaps}
                                 />
                 ) : <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>}
               </div>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: pick ? C.gold : C.surf3, flexShrink: 0 }}>{pick ? effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts.toFixed(1) : '—'}</div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: pick ? C.gold : C.surf3, flexShrink: 0 }}>{pick ? effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick.player_data).pts.toFixed(1) : '—'}</div>
             </div>
           );
         })}
@@ -4688,12 +4689,12 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                       unitType={pick.player_data?.unitType ?? ''}
                       playerName={pick.player_data?.playerName}
                       ctx={matchupCtx}
-                      ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats)}
+                      ep={effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick.player_data)}
                       seasonPts={pick.player_data?.projectedPoints ?? 0}
                       unitRankMaps={unitRankMaps}
                                     />
                   </div>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats).pts.toFixed(1)}</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.sub, flexShrink: 0 }}>{effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick.player_data).pts.toFixed(1)}</div>
                 </div>
               );
             })}
