@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import { ROSTER_SLOTS, sortByVORP, type DraftUnit, type UnitType } from '@/lib/playerPool';
@@ -62,9 +62,45 @@ function snakeIndex(pickNum: number, numTeams: number): number {
   return round % 2 === 0 ? pos : numTeams - 1 - pos;
 }
 
-function autoPick(available: DraftUnit[], _rosterCount: Record<UnitType, number>): DraftUnit | null {
-  const sorted = [...available].sort((a, b) => b.projectedPoints - a.projectedPoints);
-  return sorted[0] ?? null;
+const IDEAL_ROSTER: Record<UnitType, number> = { QB: 1, RB: 2, WR: 2, TE: 1, DEF: 1, K: 1 };
+const MAX_ROSTER:   Record<UnitType, number> = { QB: 3, RB: 4, WR: 4, TE: 2, DEF: 3, K: 3 };
+
+function autoPick(
+  available: DraftUnit[],
+  rosterCount: Record<UnitType, number>,
+  lastPickPos?: UnitType | null,
+): DraftUnit | null {
+  const byPos: Partial<Record<UnitType, DraftUnit[]>> = {};
+  for (const u of available) {
+    if (!byPos[u.unitType]) byPos[u.unitType] = [];
+    byPos[u.unitType]!.push(u);
+  }
+  const positions = Object.keys(IDEAL_ROSTER) as UnitType[];
+  for (const pos of positions) byPos[pos]?.sort((a, b) => b.projectedPoints - a.projectedPoints);
+
+  // Find positions below ideal minimum, sorted by most urgent need
+  const needy = positions
+    .filter(pos => (rosterCount[pos] ?? 0) < IDEAL_ROSTER[pos] && (byPos[pos]?.length ?? 0) > 0)
+    .sort((a, b) => ((rosterCount[a] ?? 0) / IDEAL_ROSTER[a]) - ((rosterCount[b] ?? 0) / IDEAL_ROSTER[b]));
+
+  if (needy.length > 0) {
+    // Avoid back-to-back same position unless it's the only needy option
+    if (lastPickPos && needy.length > 1) {
+      const nonRepeat = needy.filter(p => p !== lastPickPos);
+      if (nonRepeat.length > 0) return byPos[nonRepeat[0]]![0];
+    }
+    return byPos[needy[0]]![0] ?? null;
+  }
+
+  // All minimums met — pick best available under position max cap
+  const candidates = available
+    .filter(u => (rosterCount[u.unitType] ?? 0) < MAX_ROSTER[u.unitType])
+    .sort((a, b) => b.projectedPoints - a.projectedPoints);
+  if (lastPickPos) {
+    const nonRepeat = candidates.filter(u => u.unitType !== lastPickPos);
+    if (nonRepeat.length > 0) return nonRepeat[0];
+  }
+  return candidates[0] ?? available.sort((a, b) => b.projectedPoints - a.projectedPoints)[0] ?? null;
 }
 
 function buildAllTeams(lg: any, mbs: any[]): DraftTeam[] {
@@ -98,6 +134,13 @@ function CountdownTimer({ targetDate }: { targetDate: Date }) {
   );
 }
 
+function nilEstimate(tier: string, rank: number, total: number): string {
+  const pct = total > 1 ? 1 - (rank - 1) / (total - 1) : 1;
+  if (tier === 'Elite') return `$${(1 + pct * 2).toFixed(1)}M NIL`;
+  if (tier === 'Solid') return `$${Math.round((200 + pct * 600))}K NIL`;
+  return `$${Math.round((10 + pct * 90))}K NIL`;
+}
+
 export default function DraftPage() {
   const router   = useRouter();
   const params   = useParams();
@@ -119,6 +162,7 @@ export default function DraftPage() {
   const [fullPool,     setFullPool]     = useState<DraftUnit[]>([]); // original pool, never filtered
   const [cpuPicking,   setCpuPicking]   = useState(false);
   const [poolOpen,     setPoolOpen]     = useState(true);
+  const [logos,        setLogos]        = useState<Record<string, string>>({});
 
   const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoAttempted = useRef<Set<number>>(new Set());
@@ -211,6 +255,11 @@ export default function DraftPage() {
       if (!cancelled) setFullPool(livePool); // store original pool for stable salary pricing
       const takenIds = new Set(existingPicks.map((p: any) => p.player_id));
       setAvail(sortByVORP(livePool).filter(u => !takenIds.has(u.id)));
+
+      // Non-blocking logo fetch
+      fetch('/api/team-logos').then(r => r.json())
+        .then(d => { if (!cancelled) setLogos(d.logos ?? (typeof d === 'object' && !Array.isArray(d) ? d : {})); })
+        .catch(() => {});
 
       const season = 2025;
       fetch(`/api/efficiency?week=1&season=${season}`)
@@ -317,14 +366,19 @@ export default function DraftPage() {
 
     // Build this CPU team's roster from picks at its slot
     const cpuRoster: Record<UnitType, number> = { QB: 0, RB: 0, WR: 0, TE: 0, DEF: 0, K: 0 };
+    let lastPickPos: UnitType | null = null;
+    let lastPickNum = -1;
     for (const pick of picks) {
       if (numTeams > 0 && snakeIndex(pick.pick_number, numTeams) === teamIdx) {
         const t = pick.player_data?.unitType as UnitType;
-        if (t) cpuRoster[t] = (cpuRoster[t] ?? 0) + 1;
+        if (t) {
+          cpuRoster[t] = (cpuRoster[t] ?? 0) + 1;
+          if (pick.pick_number > lastPickNum) { lastPickNum = pick.pick_number; lastPickPos = t; }
+        }
       }
     }
 
-    const best = autoPick(avail, cpuRoster);
+    const best = autoPick(avail, cpuRoster, lastPickPos);
     if (best) setTimeout(() => insertPick(best), 1000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPickNum, draftLive, draftDone, userId, isCpuTurn, teamIdx]);
@@ -455,6 +509,23 @@ export default function DraftPage() {
   }
 
   const filtered = avail.filter(u => filter === 'ALL' || u.unitType === filter);
+
+  // Position rank map from the full (never-filtered) pool — stable throughout draft
+  const posRankMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    const groups: Record<string, string[]> = {};
+    for (const u of fullPool) {
+      if (!groups[u.unitType]) groups[u.unitType] = [];
+      groups[u.unitType].push(u.id);
+    }
+    for (const ids of Object.values(groups)) ids.forEach((id, i) => { m[id] = i + 1; });
+    return m;
+  }, [fullPool]);
+  const posTotalMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const u of fullPool) m[u.unitType] = (m[u.unitType] ?? 0) + 1;
+    return m;
+  }, [fullPool]);
 
   // ── Loading ───────────────────────────────────────────────────────────────
 
@@ -611,6 +682,7 @@ export default function DraftPage() {
         ::-webkit-scrollbar-thumb { background: ${C.surf3}; border-radius: 2px; }
         .pick-row:hover { background: ${C.surf2} !important; }
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+        @keyframes goldPulse { 0%,100% { outline-color: ${C.gold}88; } 50% { outline-color: ${C.gold}ff; } }
       `}</style>
 
       {/* ── Header ──────────────────────────────────────────────── */}
@@ -648,20 +720,25 @@ export default function DraftPage() {
           <thead>
             <tr style={{ background: C.surf2, position: 'sticky', top: 0, zIndex: 10 }}>
               <th style={{ width: 32, padding: '7px 8px', color: C.muted, fontWeight: 400, letterSpacing: 1, textAlign: 'center', borderRight: `1px solid ${C.surf3}` }}>R</th>
-              {allTeams.map((t, i) => (
-                <th key={i} style={{
-                  padding: '7px 4px', textAlign: 'center',
-                  borderRight: `1px solid ${C.surf3}`,
-                  color: t.type === 'cpu' ? C.blue : t.userId === userId ? C.gold : C.sub,
-                  fontWeight: t.userId === userId ? 700 : 400,
-                  fontSize: 10, letterSpacing: .3,
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                  {t.teamName.length > 12 ? t.teamName.slice(0, 11) + '…' : t.teamName}
-                  {t.userId === userId && <span style={{ color: C.gold }}> ★</span>}
-                  {t.type === 'cpu' && <span style={{ color: C.blue, fontSize: 8 }}> CPU</span>}
-                </th>
-              ))}
+              {allTeams.map((t, i) => {
+                const isMe = t.userId === userId;
+                return (
+                  <th key={i} style={{
+                    padding: '7px 4px', textAlign: 'center',
+                    borderRight: `1px solid ${C.surf3}`,
+                    borderBottom: isMe ? `2px solid ${C.gold}` : `1px solid ${C.surf3}`,
+                    background: isMe ? `${C.gold}0a` : 'transparent',
+                    color: t.type === 'cpu' ? C.blue : isMe ? C.gold : C.sub,
+                    fontWeight: isMe ? 700 : 400,
+                    fontSize: 10, letterSpacing: .3,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {t.teamName.length > 12 ? t.teamName.slice(0, 11) + '…' : t.teamName}
+                    {isMe && <span style={{ color: C.gold }}> ★</span>}
+                    {t.type === 'cpu' && <span style={{ color: C.blue, fontSize: 8 }}> CPU</span>}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -675,18 +752,27 @@ export default function DraftPage() {
                   const colTeam  = allTeams[col];
                   const isOwn    = colTeam?.userId === userId;
                   const isCpuCol = colTeam?.type === 'cpu';
-                  const posColor = POS_COLORS[pick?.player_data?.unitType as UnitType] ?? C.muted;
+                  const posColor  = POS_COLORS[pick?.player_data?.unitType as UnitType] ?? C.muted;
+                  const pickLogo  = pick ? logos[pick.player_data?.school] : null;
                   return (
                     <td key={col} style={{
                       padding: '3px 4px',
                       borderRight: `1px solid ${C.surf3}22`,
-                      background: isActive ? (isCpuCol ? 'rgba(58,130,246,.1)' : `${C.gold}12`) : 'transparent',
+                      background: isActive
+                        ? (isCpuCol ? 'rgba(58,130,246,.1)' : `${C.gold}12`)
+                        : isOwn ? `${C.gold}06` : 'transparent',
+                      outline: isActive && !isCpuCol ? `1px solid ${C.gold}88` : 'none',
+                      outlineOffset: '-1px',
+                      animation: isActive && !isCpuCol ? 'goldPulse 1.2s ease-in-out infinite' : undefined,
                     }}>
                       {pick ? (
                         <div style={{ padding: '3px 5px', borderRadius: 3, background: `${posColor}${isOwn ? '28' : '12'}`, borderLeft: `2px solid ${posColor}` }}>
                           <div style={{ fontSize: 8, letterSpacing: .5, color: posColor, lineHeight: 1.2 }}>{pick.player_data?.unitType}</div>
-                          <div style={{ fontSize: 10, fontWeight: isOwn ? 700 : 400, color: isOwn ? C.text : C.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {(pick.player_data?.school ?? '').length > 9 ? pick.player_data.school.slice(0, 9) + '…' : pick.player_data?.school}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                            {pickLogo && <img src={pickLogo} alt="" style={{ width: 10, height: 10, objectFit: 'contain', flexShrink: 0 }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
+                            <span style={{ fontSize: 10, fontWeight: isOwn ? 700 : 400, color: isOwn ? C.text : C.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {(pick.player_data?.school ?? '').length > 9 ? pick.player_data.school.slice(0, 9) + '…' : pick.player_data?.school}
+                            </span>
                           </div>
                         </div>
                       ) : isActive ? (
@@ -754,32 +840,91 @@ export default function DraftPage() {
         {poolOpen && (
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {filtered.slice(0, 100).map((unit) => {
-              const unitPrice = isSalaryDraft ? positionRankPrice(unit, fullPool, isConference) : null;
+              const unitPrice  = isSalaryDraft ? positionRankPrice(unit, fullPool, isConference) : null;
               const overBudget = isSalaryDraft && (unitPrice ?? 0) > myBudgetLeft;
-              const canPick   = isMyTurn && !draftDone && !overBudget;
+              const canPick    = isMyTurn && !draftDone && !overBudget;
+              const posRank    = posRankMap[unit.id] ?? 0;
+              const posTotal   = posTotalMap[unit.unitType] ?? 1;
+              const rankBarPct = posRank > 0 ? Math.max(0, 1 - (posRank - 1) / Math.max(posTotal - 1, 1)) : 0;
+              const posColor   = POS_COLORS[unit.unitType];
+              const tierBg     = unit.tier === 'Elite'
+                ? `rgba(212,168,40,.07)` : unit.tier === 'Solid'
+                ? `rgba(58,130,246,.04)` : 'transparent';
+              const logo       = logos[unit.school];
+              const isSelected = viewingUnit?.id === unit.id;
               return (
-                <div key={unit.id} className="pick-row" onClick={() => setViewingUnit(unit)}
-                  style={{ display: 'grid', gridTemplateColumns: '26px 1fr 52px 44px', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: `1px solid ${C.surf3}22`, opacity: overBudget ? 0.35 : 1, cursor: 'pointer', background: viewingUnit?.id === unit.id ? C.surf2 : 'transparent' }}
+                <div
+                  key={unit.id}
+                  className="pick-row"
+                  onClick={() => setViewingUnit(unit)}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '28px 22px 1fr 50px 36px',
+                    alignItems: 'center',
+                    gap: 7,
+                    padding: '6px 10px',
+                    borderBottom: `1px solid ${C.surf3}22`,
+                    opacity: overBudget ? 0.35 : 1,
+                    cursor: 'pointer',
+                    background: isSelected ? C.surf2 : tierBg,
+                    transition: 'transform .1s, background .1s',
+                  }}
                 >
                   {/* POS badge */}
-                  <div style={{ width: 26, height: 22, borderRadius: 4, background: `${POS_COLORS[unit.unitType]}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: POS_COLORS[unit.unitType], fontWeight: 700, letterSpacing: .5 }}>{unit.unitType}</div>
-                  {/* Player info */}
+                  <div style={{ width: 28, height: 20, borderRadius: 4, background: `${posColor}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: posColor, fontWeight: 700, letterSpacing: .5, flexShrink: 0 }}>{unit.unitType}</div>
+
+                  {/* Logo */}
+                  <div style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {logo
+                      ? <img src={logo} alt={unit.school} style={{ width: 20, height: 20, objectFit: 'contain' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                      : <div style={{ width: 18, height: 18, borderRadius: '50%', background: `${posColor}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: posColor, fontWeight: 700 }}>{unit.school.slice(0, 2).toUpperCase()}</div>
+                    }
+                  </div>
+
+                  {/* Info: name + rank bar + NIL */}
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {unit.school}{unit.playerName ? <span style={{ color: C.sub, fontWeight: 400 }}> · {unit.playerName}</span> : null}
+                    <div style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.2 }}>
+                      {unit.school}
+                      {unit.playerName ? <span style={{ color: C.sub, fontWeight: 400 }}> · {unit.playerName}</span> : null}
                     </div>
-                    <div style={{ fontSize: 9, color: C.muted }}>{unit.tier}{isSalaryDraft && unitPrice != null ? <span style={{ color: overBudget ? C.red : C.gold }}> · ${unitPrice}</span> : null}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                      {posRank > 0 && (
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: posColor, letterSpacing: .5, flexShrink: 0 }}>#{posRank} {unit.unitType}</span>
+                      )}
+                      <div style={{ flex: 1, height: 2, background: C.surf3, borderRadius: 1, overflow: 'hidden', minWidth: 20 }}>
+                        <div style={{ height: '100%', width: `${rankBarPct * 100}%`, background: unit.tier === 'Elite' ? C.gold : unit.tier === 'Solid' ? '#3b82f6' : C.muted, borderRadius: 1 }} />
+                      </div>
+                      <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: C.muted, letterSpacing: .3, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        {nilEstimate(unit.tier, posRank, posTotal)}
+                      </span>
+                    </div>
+                    {isSalaryDraft && unitPrice != null && (
+                      <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 8, color: overBudget ? C.red : C.gold, marginTop: 1 }}>${unitPrice}</div>
+                    )}
                   </div>
+
                   {/* Projected */}
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 13, color: C.gold }}>{(unit.avgFpts ?? unit.avgPerWeek ?? 0) > 0 ? (unit.avgFpts ?? unit.avgPerWeek ?? 0).toFixed(1) : '—'}</div>
-                    <div style={{ fontSize: 8, color: C.muted, letterSpacing: .5 }}>PROJ</div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 13, color: C.gold, lineHeight: 1 }}>
+                      {(unit.avgFpts ?? unit.avgPerWeek ?? 0) > 0 ? (unit.avgFpts ?? unit.avgPerWeek ?? 0).toFixed(1) : '—'}
+                    </div>
+                    <div style={{ fontSize: 7, color: C.muted, letterSpacing: .5 }}>PROJ</div>
                   </div>
+
                   {/* Draft button */}
-                  <button onClick={e => { e.stopPropagation(); if (canPick) insertPick(unit); }} disabled={!canPick}
-                    style={{ padding: '5px 6px', borderRadius: 4, border: canPick ? `1px solid ${C.gold}88` : `1px solid ${C.surf3}`, background: canPick ? `${C.gold}18` : 'transparent', color: canPick ? C.gold : C.surf3, fontFamily: "'Anton', sans-serif", fontSize: 9, letterSpacing: 1, cursor: canPick ? 'pointer' : 'default' }}>
-                    +
-                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); if (canPick) insertPick(unit); }}
+                    disabled={!canPick}
+                    style={{
+                      padding: '5px 6px', borderRadius: 4, flexShrink: 0,
+                      border: canPick ? `1px solid ${C.gold}88` : `1px solid ${C.surf3}`,
+                      background: canPick ? `${C.gold}18` : 'transparent',
+                      color: canPick ? C.gold : C.surf3,
+                      fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 1,
+                      cursor: canPick ? 'pointer' : 'default',
+                      transition: 'background .12s',
+                    }}
+                  >+</button>
                 </div>
               );
             })}
