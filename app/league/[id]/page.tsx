@@ -224,23 +224,25 @@ function effectivePts(
   school: string, unitType: string, seasonPts: number,
   ctx: MatchupCtx, gs: GameStats,
   playerData?: any
-): { pts: number; isActual: boolean; base: number; storedMult: number | null } {
+): { pts: number; isActual: boolean; base: number; storedMult: number | null; actual: number; projected: number; isPlayed: boolean } {
+  const mult0    = ctx?.multMap?.[school] ?? 1.0;
+  const projBase = playerData ? liveProj(playerData) : weeklyProj(seasonPts);
+  const projPts  = projBase * mult0;
+
   const opponent = ctx?.opponentMap[school] ?? null;
   // BYE week — no game, no points
-  if (ctx && !opponent) return { pts: 0, isActual: false, base: 0, storedMult: null };
+  if (ctx && !opponent) return { pts: 0, isActual: false, base: 0, storedMult: null, actual: 0, projected: 0, isPlayed: false };
 
   // Check cached_stats for a stored actual score (same source as game log)
   const storedPts  = gs?.schoolPoints?.[school]?.[unitType];
   const storedMult = gs?.schoolMults?.[school] ?? null;
   if (storedPts != null) {
     const rawBase = storedMult && storedMult > 0 ? storedPts / storedMult : storedPts;
-    return { pts: storedPts, isActual: true, base: rawBase, storedMult };
+    return { pts: storedPts, isActual: true, base: rawBase, storedMult, actual: storedPts, projected: projPts, isPlayed: true };
   }
 
   // No stored stats — show projection (whether game is future or stats not yet synced)
-  const mult = ctx?.multMap?.[school] ?? 1.0;
-  const base = playerData ? liveProj(playerData) : weeklyProj(seasonPts);
-  return { pts: base * mult, isActual: false, base, storedMult: null };
+  return { pts: projPts, isActual: false, base: projBase, storedMult: null, actual: 0, projected: projPts, isPlayed: false };
 }
 
 type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'trade' | 'ranks' | 'standings' | 'schedule' | 'playoffs' | 'lineup' | 'leaderboard' | 'chat';
@@ -3722,18 +3724,21 @@ function assignRoster(picks: any[]): { starters: (any | null)[]; bench: any[] } 
   return { starters, bench };
 }
 
-function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView, logos = {} }: { pick: any | null; align: 'left' | 'right'; ctx: MatchupCtx; gameStats: GameStats; unitRankMaps?: Record<string, Record<string, number>>; onView?: () => void; logos?: Record<string, string> }) {
+function MatchupPlayerCell({ pick, align, ctx, gameStats, statsLoading, unitRankMaps, onView, logos = {} }: {
+  pick: any | null; align: 'left' | 'right'; ctx: MatchupCtx; gameStats: GameStats;
+  statsLoading?: boolean; unitRankMaps?: Record<string, Record<string, number>>;
+  onView?: () => void; logos?: Record<string, string>;
+}) {
   const isRight = align === 'right';
+  const cellBase: React.CSSProperties = {
+    borderRadius: isRight ? '8px 0 0 8px' : '0 8px 8px 0',
+    border: '1px solid ' + C.surf3,
+    borderRight: isRight ? 'none' : undefined,
+    borderLeft:  isRight ? undefined : 'none',
+  };
+
   if (!pick) return (
-    <div style={{
-      display: 'flex', alignItems: 'center', minHeight: 52,
-      justifyContent: isRight ? 'flex-end' : 'flex-start',
-      padding: '9px 14px', background: C.surf,
-      borderRadius: isRight ? '8px 0 0 8px' : '0 8px 8px 0',
-      border: '1px solid ' + C.surf3,
-      borderRight: isRight ? 'none' : undefined,
-      borderLeft: isRight ? undefined : 'none',
-    }}>
+    <div style={{ display: 'flex', alignItems: 'center', minHeight: 52, justifyContent: isRight ? 'flex-end' : 'flex-start', padding: '9px 14px', background: C.surf, ...cellBase }}>
       <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, fontStyle: 'italic' }}>Empty</span>
     </div>
   );
@@ -3742,47 +3747,47 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView, 
   const unitType = pick.player_data?.unitType ?? '';
   const posColor = POS_COLORS[unitType] || C.muted;
   const ep       = effectivePts(school, unitType, pick.player_data?.projectedPoints ?? 0, ctx, gameStats, pick.player_data);
-  const pts      = ep.pts.toFixed(1);
 
-  // Score sits on the INNER side (near the center pos badge), info on the OUTER side.
-  // Left cell:  [info(flex:1, left-align)] [logo] [score]
-  // Right cell: [score] [logo] [info(flex:1, right-align)]
+  // Score block: actual (gold, large) + projected (gray, small) below
+  // While stats are loading, show "—" to prevent flashing
+  const scoreBlock = (
+    <div style={{ flexShrink: 0, minWidth: 48, textAlign: isRight ? 'left' : 'right' }}>
+      {statsLoading ? (
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.muted }}>—</div>
+      ) : (
+        <>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.gold, lineHeight: 1.1 }}>
+            {ep.isPlayed ? ep.actual.toFixed(1) : '0.0'}
+          </div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.muted, marginTop: 1 }}>
+            {ep.projected.toFixed(1)} proj
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   const logoEl = (
-    <div style={{ width: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <SchoolLogo school={school} posColor={posColor} logos={logos} size={30} />
+    <div style={{ width: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <SchoolLogo school={school} posColor={posColor} logos={logos} size={28} />
     </div>
   );
 
   const info = (
     <div style={{ flex: 1, minWidth: 0 }}>
       <PlayerInfoLines
-        school={school}
-        unitType={unitType}
+        school={school} unitType={unitType}
         playerName={pick.player_data?.playerName}
-        ctx={ctx}
-        ep={ep}
-        align={align}
+        ctx={ctx} ep={ep} align={align}
         seasonPts={pick.player_data?.projectedPoints ?? 0}
         unitRankMaps={unitRankMaps}
       />
     </div>
   );
-  const score = (
-    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: isRight ? C.gold : C.sub, flexShrink: 0, minWidth: 46, textAlign: isRight ? 'left' : 'right' }}>
-      {pts}
-    </div>
-  );
+
   return (
-    <div onClick={onView} style={{
-      display: 'flex', alignItems: 'center',
-      gap: 6, padding: '9px 8px', background: C.surf2,
-      borderRadius: isRight ? '8px 0 0 8px' : '0 8px 8px 0',
-      border: '1px solid ' + C.surf3,
-      borderRight: isRight ? 'none' : undefined,
-      borderLeft: isRight ? undefined : 'none',
-      cursor: onView ? 'pointer' : 'default',
-    }}>
-      {isRight ? <>{score}{logoEl}{info}</> : <>{info}{logoEl}{score}</>}
+    <div onClick={onView} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 8px', background: C.surf2, cursor: onView ? 'pointer' : 'default', ...cellBase }}>
+      {isRight ? <>{scoreBlock}{logoEl}{info}</> : <>{info}{logoEl}{scoreBlock}</>}
     </div>
   );
 }
@@ -4128,9 +4133,21 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   const myRoster  = assignRoster(myPicksRaw);
   const oppRoster = assignRoster(oppPicksRaw);
 
-  // Total = starters only; actual if game complete, projected otherwise
-  const myTotal  = myRoster.starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
-  const oppTotal = oppRoster.starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
+  // Stats are loading until gameStats resolves from null
+  const statsLoading = gameStats === null;
+
+  function epOf(p: any) {
+    return effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data);
+  }
+
+  // Separate actual vs projected totals for the header
+  const myActual   = myRoster.starters.reduce((s, p) => s + epOf(p).actual, 0);
+  const myProj     = myRoster.starters.reduce((s, p) => s + epOf(p).projected, 0);
+  const oppActual  = oppRoster.starters.reduce((s, p) => s + epOf(p).actual, 0);
+  const oppProj    = oppRoster.starters.reduce((s, p) => s + epOf(p).projected, 0);
+  // Legacy .pts total (actual when played, projected when not) — used for lead indicator only
+  const myTotal    = myRoster.starters.reduce((s, p) => s + epOf(p).pts, 0);
+  const oppTotal   = oppRoster.starters.reduce((s, p) => s + epOf(p).pts, 0);
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
@@ -4175,15 +4192,24 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
       }}>
         {/* My team */}
         <div style={{ textAlign: 'right' }}>
-          <div className="mob-score-big" style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>{myTotal.toFixed(1)}</div>
-          <div className="mob-score-name" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 8 }}>{myTeamName}</div>
+          {statsLoading ? (
+            <div className="mob-score-big" style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: C.muted, lineHeight: 1 }}>—</div>
+          ) : (
+            <>
+              <div className="mob-score-big" style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>
+                {myActual.toFixed(1)}
+              </div>
+              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.muted, marginTop: 3 }}>
+                {myProj.toFixed(1)} proj
+              </div>
+            </>
+          )}
+          <div className="mob-score-name" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 6 }}>{myTeamName}</div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, letterSpacing: 1.5, marginTop: 3, textTransform: 'uppercase' }}>Your Team</div>
         </div>
         {/* VS divider */}
         <div style={{ textAlign: 'center' }}>
-          <div style={{
-            display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-          }}>
+          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 1, height: 18, background: C.surf3 }} />
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: C.muted }}>VS</div>
             <div style={{ width: 1, height: 18, background: C.surf3 }} />
@@ -4191,8 +4217,19 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
         </div>
         {/* Opponent */}
         <div style={{ textAlign: 'left' }}>
-          <div className="mob-score-big" style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>{oppTotal.toFixed(1)}</div>
-          <div className="mob-score-name" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 8 }}>{oppTeamName}</div>
+          {statsLoading ? (
+            <div className="mob-score-big" style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: C.muted, lineHeight: 1 }}>—</div>
+          ) : (
+            <>
+              <div className="mob-score-big" style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>
+                {oppActual.toFixed(1)}
+              </div>
+              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.muted, marginTop: 3 }}>
+                {oppProj.toFixed(1)} proj
+              </div>
+            </>
+          )}
+          <div className="mob-score-name" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 6 }}>{oppTeamName}</div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, letterSpacing: 1.5, marginTop: 3, textTransform: 'uppercase' }}>Opponent</div>
         </div>
       </div>
@@ -4208,11 +4245,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
         const color = POS_COLORS[label] || C.muted;
         return (
           <div key={i} className="matchup-row" style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
-            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} logos={logos} onView={myRoster.starters[i] ? () => setViewingPlayer(myRoster.starters[i]!.player_data) : undefined} />
+            <MatchupPlayerCell pick={myRoster.starters[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} statsLoading={statsLoading} unitRankMaps={unitRankMaps} logos={logos} onView={myRoster.starters[i] ? () => setViewingPlayer(myRoster.starters[i]!.player_data) : undefined} />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: color + '22', border: '1px solid ' + color + '44', borderLeft: 'none', borderRight: 'none' }}>
               <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color, fontWeight: 700 }}>{label}</span>
             </div>
-            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} logos={logos} onView={oppRoster.starters[i] ? () => setViewingPlayer(oppRoster.starters[i]!.player_data) : undefined} />
+            <MatchupPlayerCell pick={oppRoster.starters[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} statsLoading={statsLoading} unitRankMaps={unitRankMaps} logos={logos} onView={oppRoster.starters[i] ? () => setViewingPlayer(oppRoster.starters[i]!.player_data) : undefined} />
           </div>
         );
       })}
@@ -4227,11 +4264,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
           </div>
           {Array.from({ length: benchLen }).map((_, i) => (
             <div key={i} className="matchup-row" style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', marginBottom: 4 }}>
-              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} logos={logos} onView={myRoster.bench[i] ? () => setViewingPlayer(myRoster.bench[i]!.player_data) : undefined} />
+              <MatchupPlayerCell pick={myRoster.bench[i] ?? null} align="right" ctx={matchupCtx} gameStats={gameStats} statsLoading={statsLoading} unitRankMaps={unitRankMaps} logos={logos} onView={myRoster.bench[i] ? () => setViewingPlayer(myRoster.bench[i]!.player_data) : undefined} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.muted + '22', border: '1px solid ' + C.muted + '44', borderLeft: 'none', borderRight: 'none' }}>
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted, fontWeight: 700 }}>BN</span>
               </div>
-              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} unitRankMaps={unitRankMaps} logos={logos} onView={oppRoster.bench[i] ? () => setViewingPlayer(oppRoster.bench[i]!.player_data) : undefined} />
+              <MatchupPlayerCell pick={oppRoster.bench[i] ?? null} align="left" ctx={matchupCtx} gameStats={gameStats} statsLoading={statsLoading} unitRankMaps={unitRankMaps} logos={logos} onView={oppRoster.bench[i] ? () => setViewingPlayer(oppRoster.bench[i]!.player_data) : undefined} />
             </div>
           ))}
         </>
