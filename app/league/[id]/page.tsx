@@ -5104,12 +5104,16 @@ const SETTINGS_NAV: { key: SettingsSection; label: string; commOnly: boolean }[]
 ];
 
 // ── CommissionerSettingsModal ─────────────────────────────────────────────────
+const COMM_ROSTER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K', 'FLEX'];
+const COMM_ROSTER_DEFAULTS: Record<string, number> = { QB: 1, RB: 2, WR: 2, TE: 1, DEF: 1, K: 1, FLEX: 1 };
+const COMM_ALL_CONFS = ['SEC', 'ACC', 'Big Ten', 'Big 12', 'FBS Independents'];
+
 function CommissionerSettingsModal({ league, onClose, onUpdate }: {
   league: any; onClose: () => void; onUpdate: () => void;
 }) {
-  const [saving,    setSaving]    = useState(false);
-  const [saved,     setSaved]     = useState(false);
-  const [error,     setError]     = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(false);
+  const [error,  setError]  = useState('');
 
   // League Info
   const [name,       setName]       = useState<string>(league?.name ?? '');
@@ -5121,24 +5125,55 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
 
   // Draft
   const [draftType, setDraftType] = useState<string>(league?.draft_type ?? 'snake');
-  const existingDraftTime = league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at ?? '';
-  const [draftDate, setDraftDate] = useState<string>(existingDraftTime ? existingDraftTime.slice(0, 10)  : '');
-  const [draftTime, setDraftTime] = useState<string>(existingDraftTime ? existingDraftTime.slice(11, 16) : '');
+  const existingDraftAt = league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at ?? '';
+  const [draftDate, setDraftDate] = useState<string>(existingDraftAt ? existingDraftAt.slice(0, 10)  : '');
+  const [draftTime, setDraftTime] = useState<string>(existingDraftAt ? existingDraftAt.slice(11, 16) : '');
 
-  // Scoring
-  const [seasonLength, setSeasonLength] = useState<number>(league?.settings?.season_length ?? 14);
+  // Roster
+  const existingRoster = league?.settings?.roster_config ?? {};
+  const [totalRoster, setTotalRoster] = useState<number>(
+    existingRoster.total ?? league?.settings?.roster_size ?? 15
+  );
+  const initSlots = Object.fromEntries(
+    COMM_ROSTER_POSITIONS.map(pos => [
+      pos,
+      existingRoster[pos] ?? league?.settings?.starter_slots?.[pos] ?? COMM_ROSTER_DEFAULTS[pos] ?? 0,
+    ])
+  );
+  const [slots, setSlots] = useState<Record<string, number>>(initSlots);
+  const totalStarters = COMM_ROSTER_POSITIONS.reduce((s, pos) => s + (slots[pos] ?? 0), 0);
+  const benchSpots    = Math.max(0, totalRoster - totalStarters);
+  const rosterOverflow = totalStarters > totalRoster;
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px',
-    background: C.bg, border: '1px solid ' + C.surf3,
-    borderRadius: 8, color: C.text,
-    fontFamily: 'Oswald,sans-serif', fontSize: 13, outline: 'none',
-    boxSizing: 'border-box', transition: 'border-color .15s',
+  // Conference filter
+  const existingConf = league?.settings?.conference_filter ?? league?.conference_filter ?? '';
+  const initConfs = existingConf && existingConf !== 'ALL'
+    ? existingConf.split(',').map((s: string) => s.trim()).filter(Boolean)
+    : [...COMM_ALL_CONFS];
+  const [selectedConfs, setSelectedConfs] = useState<string[]>(initConfs);
+  function toggleConf(conf: string) {
+    setSelectedConfs(prev => prev.includes(conf) ? prev.filter(c => c !== conf) : [...prev, conf]);
+  }
+
+  // ── Styles ──────────────────────────────────────────────────────────────────
+  const inputFull: React.CSSProperties = {
+    padding: '9px 12px', background: C.bg, border: '1px solid ' + C.surf3,
+    borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13,
+    outline: 'none', boxSizing: 'border-box', transition: 'border-color .15s',
   };
-  const label: React.CSSProperties = {
-    fontFamily: 'Oswald,sans-serif', fontSize: 9,
-    letterSpacing: 2, color: C.muted,
+  const inputSm: React.CSSProperties = {
+    width: 56, padding: '7px 8px', background: C.bg, border: '1px solid ' + C.surf3,
+    borderRadius: 7, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13,
+    outline: 'none', textAlign: 'center' as const, boxSizing: 'border-box',
+  };
+  const lbl: React.CSSProperties = {
+    fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted,
     textTransform: 'uppercase', marginBottom: 6, display: 'block',
+  };
+  const sectionHead: React.CSSProperties = {
+    fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2, color: C.gold,
+    textTransform: 'uppercase', marginBottom: 12, marginTop: 20,
+    paddingTop: 16, borderTop: '1px solid ' + C.surf3,
   };
   function Opt({ val, cur, set, children }: { val: string; cur: string; set: (v: string) => void; children: React.ReactNode }) {
     const on = val === cur;
@@ -5153,24 +5188,38 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
     );
   }
 
+  // ── Save ────────────────────────────────────────────────────────────────────
   async function save() {
+    if (rosterOverflow) return;
     setSaving(true); setError('');
     try {
       const draftTimestamp = (draftDate && draftTime)
         ? new Date(`${draftDate}T${draftTime}:00`).toISOString()
         : draftDate ? new Date(`${draftDate}T00:00:00`).toISOString() : null;
 
+      const confFilter = selectedConfs.length === COMM_ALL_CONFS.length ? 'ALL' : selectedConfs.join(',');
+      const rosterConfig = {
+        total: totalRoster,
+        ...Object.fromEntries(COMM_ROSTER_POSITIONS.map(pos => [pos, slots[pos] ?? 0])),
+        bench: benchSpots,
+      };
+
       const res = await fetch(`/api/leagues/${league.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
-          league_size: leagueSize,
-          draft_type: draftType,
+          league_size:       leagueSize,
+          draft_type:        draftType,
+          conference_filter: confFilter,
           settings: {
             playoff_format:      playoffFormat,
             division_auto_bids:  divisionAutoBids,
-            season_length:       seasonLength,
+            roster_config:       rosterConfig,
+            starter_slots:       slots,
+            bench_spots:         benchSpots,
+            roster_size:         totalRoster,
+            conference_filter:   confFilter,
             ...(draftTimestamp ? { draft_time: draftTimestamp, draft_scheduled_at: draftTimestamp } : {}),
           },
         }),
@@ -5185,17 +5234,13 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
     }
   }
 
-  const sectionHead: React.CSSProperties = {
-    fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2,
-    color: C.gold, textTransform: 'uppercase', marginBottom: 12, marginTop: 20,
-  };
-
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 14, padding: '28px 28px', width: 480, maxWidth: '96vw', maxHeight: '90vh', overflowY: 'auto' }}>
+        style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 14, padding: '28px 28px', width: 520, maxWidth: '96vw', maxHeight: '90vh', overflowY: 'auto' }}>
 
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
           <div>
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>Commissioner Settings</div>
@@ -5205,88 +5250,131 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
         </div>
 
         {/* ── League Info ── */}
-        <div style={sectionHead}>League Info</div>
+        <div style={{ ...sectionHead, borderTop: 'none', marginTop: 0, paddingTop: 0 }}>League Info</div>
         <div style={{ marginBottom: 14 }}>
-          <span style={label}>League Name</span>
-          <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} maxLength={40} />
+          <span style={lbl}>League Name</span>
+          <input style={{ ...inputFull, width: '100%' }} value={name} onChange={e => setName(e.target.value)} maxLength={40} />
         </div>
         <div style={{ marginBottom: 6 }}>
-          <span style={label}>League Size</span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
-            {[8, 10, 12, 14, 16].map(n => (
-              <button key={n} onClick={() => setLeagueSize(n)} style={{
-                padding: '7px 14px', borderRadius: 7, cursor: 'pointer',
-                fontFamily: 'Oswald,sans-serif', fontSize: 12,
-                background: leagueSize === n ? 'rgba(245,166,35,.12)' : C.surf3,
-                border: '1px solid ' + (leagueSize === n ? C.gold : C.surf3),
-                color: leagueSize === n ? C.gold : C.sub,
-              }}>{n}</button>
-            ))}
-          </div>
+          <span style={lbl}>League Size (2–32)</span>
+          <input
+            type="number" min={2} max={32} value={leagueSize}
+            onChange={e => setLeagueSize(Math.max(2, Math.min(32, parseInt(e.target.value) || 2)))}
+            style={{ ...inputFull, width: 120 }}
+          />
         </div>
 
         {/* ── Playoff Settings ── */}
         <div style={sectionHead}>Playoff Settings</div>
         <div style={{ marginBottom: 14 }}>
-          <span style={label}>Playoff Format</span>
+          <span style={lbl}>Playoff Format</span>
           <div style={{ display: 'flex', gap: 6 }}>
             <Opt val="4-team" cur={playoffFormat} set={setPlayoffFormat}>4-Team</Opt>
             <Opt val="6-team" cur={playoffFormat} set={setPlayoffFormat}>6-Team</Opt>
           </div>
         </div>
         <div style={{ marginBottom: 6 }}>
-          <span style={label}>Division Winners Get Auto Bids</span>
+          <span style={lbl}>Division Winners Get Auto Bids</span>
           <div style={{ display: 'flex', gap: 6 }}>
             <Opt val="yes" cur={divisionAutoBids ? 'yes' : 'no'} set={v => setDivisionAutoBids(v === 'yes')}>Yes</Opt>
             <Opt val="no"  cur={divisionAutoBids ? 'yes' : 'no'} set={v => setDivisionAutoBids(v === 'yes')}>No</Opt>
           </div>
         </div>
 
-        {/* ── Draft Settings ── */}
-        <div style={sectionHead}>Draft Settings</div>
+        {/* ── Roster & Draft ── */}
+        <div style={sectionHead}>Roster &amp; Draft</div>
         <div style={{ marginBottom: 14 }}>
-          <span style={label}>Draft Type</span>
+          <span style={lbl}>Draft Type</span>
           <div style={{ display: 'flex', gap: 6 }}>
             <Opt val="snake"  cur={draftType} set={setDraftType}>Snake Draft</Opt>
             <Opt val="salary" cur={draftType} set={setDraftType}>Salary Cap</Opt>
           </div>
         </div>
-        <div style={{ marginBottom: 6 }}>
-          <span style={label}>Draft Date & Time</span>
+        <div style={{ marginBottom: 16 }}>
+          <span style={lbl}>Draft Date &amp; Time</span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input type="date" value={draftDate} onChange={e => setDraftDate(e.target.value)}
-              style={{ ...inputStyle, flex: 1 }} />
-            <input type="time" value={draftTime} onChange={e => setDraftTime(e.target.value)}
-              style={{ ...inputStyle, flex: 1 }} />
+            <input type="date" value={draftDate} onChange={e => setDraftDate(e.target.value)} style={{ ...inputFull, flex: 1 }} />
+            <input type="time" value={draftTime} onChange={e => setDraftTime(e.target.value)} style={{ ...inputFull, flex: 1 }} />
           </div>
         </div>
-
-        {/* ── Scoring ── */}
-        <div style={sectionHead}>Scoring</div>
-        <div style={{ marginBottom: 20 }}>
-          <span style={label}>Season Length (weeks)</span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
-            {[13, 14, 15, 17].map(n => (
-              <button key={n} onClick={() => setSeasonLength(n)} style={{
-                padding: '7px 14px', borderRadius: 7, cursor: 'pointer',
-                fontFamily: 'Oswald,sans-serif', fontSize: 12,
-                background: seasonLength === n ? 'rgba(245,166,35,.12)' : C.surf3,
-                border: '1px solid ' + (seasonLength === n ? C.gold : C.surf3),
-                color: seasonLength === n ? C.gold : C.sub,
-              }}>{n}</button>
+        <div style={{ marginBottom: 14 }}>
+          <span style={lbl}>Total Roster Size</span>
+          <input
+            type="number" min={1} max={50} value={totalRoster}
+            onChange={e => setTotalRoster(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+            style={{ ...inputFull, width: 120 }}
+          />
+        </div>
+        <div style={{ marginBottom: 6 }}>
+          <span style={lbl}>Starter Slots</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+            {COMM_ROSTER_POSITIONS.map(pos => (
+              <div key={pos} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: pos === 'FLEX' ? 8 : 9, letterSpacing: 1, color: C.sub, textTransform: 'uppercase', textAlign: 'center' as const }}>
+                  {pos === 'FLEX' ? 'FLEX\nRB/WR/TE' : pos}
+                </span>
+                <input
+                  type="number" min={0} max={5} value={slots[pos] ?? 0}
+                  onChange={e => setSlots(prev => ({ ...prev, [pos]: Math.max(0, Math.min(5, parseInt(e.target.value) || 0)) }))}
+                  style={inputSm}
+                />
+              </div>
             ))}
           </div>
+          <div style={{ marginTop: 10, padding: '8px 12px', background: C.surf2, borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
+              Starters: {totalStarters} &nbsp;·&nbsp; Bench: {rosterOverflow ? '—' : benchSpots}
+            </span>
+            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: rosterOverflow ? C.red : C.gold }}>
+              Total: {totalRoster}
+            </span>
+          </div>
+          {rosterOverflow && (
+            <div style={{ marginTop: 6, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red }}>
+              ⚠ Starters ({totalStarters}) exceed total roster size ({totalRoster})
+            </div>
+          )}
         </div>
 
+        {/* ── Eligible Teams ── */}
+        <div style={sectionHead}>Eligible Teams</div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 12, lineHeight: 1.6 }}>
+          Teams from selected conferences only will be available in the draft.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 8 }}>
+          {COMM_ALL_CONFS.map(conf => {
+            const checked = selectedConfs.includes(conf);
+            return (
+              <label key={conf} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={checked} onChange={() => toggleConf(conf)}
+                  style={{ accentColor: C.gold, width: 15, height: 15, flexShrink: 0 }} />
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: checked ? C.text : C.muted }}>
+                  {conf}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>
+          {selectedConfs.length === COMM_ALL_CONFS.length
+            ? 'All conferences — no filter applied'
+            : `${selectedConfs.length} of ${COMM_ALL_CONFS.length} selected`}
+        </div>
+
+        {/* Error */}
         {error && (
-          <div style={{ padding: '8px 12px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, marginBottom: 12 }}>{error}</div>
+          <div style={{ padding: '8px 12px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, marginTop: 16 }}>
+            {error}
+          </div>
         )}
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        {/* Footer */}
+        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '12px', background: 'none', border: '1px solid ' + C.surf3, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
             Cancel
           </button>
-          <button onClick={save} disabled={saving} style={{ flex: 2, padding: '12px', background: saved ? C.green : C.gold, border: 'none', borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.bg, textTransform: 'uppercase', transition: 'background .2s' }}>
+          <button onClick={save} disabled={saving || rosterOverflow}
+            style={{ flex: 2, padding: '12px', background: saved ? C.green : rosterOverflow ? C.surf3 : C.gold, border: 'none', borderRadius: 8, cursor: saving || rosterOverflow ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: rosterOverflow ? C.muted : C.bg, textTransform: 'uppercase', transition: 'background .2s' }}>
             {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Settings'}
           </button>
         </div>

@@ -25,13 +25,14 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { name, league_size, draft_type, settings: settingsPatch } = body;
+  const { name, league_size, draft_type, conference_filter, settings: settingsPatch } = body;
 
   const update: Record<string, any> = {};
-  if (name        !== undefined) update.name        = name.trim();
-  if (league_size !== undefined) update.league_size = Number(league_size);
-  if (draft_type  !== undefined) update.draft_type  = draft_type;
-  if (settingsPatch !== undefined) {
+  if (name              !== undefined) update.name              = name.trim();
+  if (league_size       !== undefined) update.league_size       = Number(league_size);
+  if (draft_type        !== undefined) update.draft_type        = draft_type;
+  if (conference_filter !== undefined) update.conference_filter = conference_filter;
+  if (settingsPatch     !== undefined) {
     update.settings = { ...(league.settings ?? {}), ...settingsPatch };
   }
 
