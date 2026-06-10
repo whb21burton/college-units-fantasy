@@ -242,15 +242,18 @@ function effectivePts(
   return { pts: base * mult, isActual: false, base, storedMult: null };
 }
 
-type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'trade' | 'ranks' | 'lineup' | 'leaderboard' | 'chat';
+type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'trade' | 'ranks' | 'standings' | 'schedule' | 'playoffs' | 'lineup' | 'leaderboard' | 'chat';
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'draft',   label: 'Draft'    },
-  { key: 'team',    label: 'Team'     },
-  { key: 'league',  label: 'League'   },
-  { key: 'players', label: 'Players'  },
-  { key: 'trade',   label: 'Trade'    },
-  { key: 'ranks',   label: 'Ranks'    },
+  { key: 'draft',     label: 'Draft'     },
+  { key: 'team',      label: 'Team'      },
+  { key: 'league',    label: 'League'    },
+  { key: 'players',   label: 'Players'   },
+  { key: 'trade',     label: 'Trade'     },
+  { key: 'ranks',     label: 'Ranks'     },
+  { key: 'standings', label: 'Standings' },
+  { key: 'schedule',  label: 'Schedule'  },
+  { key: 'playoffs',  label: 'Playoffs'  },
 ];
 
 const WEEKLY_TABS: { key: Tab; label: string }[] = [
@@ -634,6 +637,15 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           )}
           {activeTab === 'ranks' && (
             <LeagueRanksTab league={league} members={members} userId={userId} />
+          )}
+          {activeTab === 'standings' && (
+            <StandingsTab league={league} userId={userId} />
+          )}
+          {activeTab === 'schedule' && (
+            <ScheduleTab league={league} />
+          )}
+          {activeTab === 'playoffs' && (
+            <PlayoffTab league={league} userId={userId} />
           )}
           {activeTab === 'players' && (
             <WaiverTab league={league} userId={userId} />
@@ -3748,6 +3760,292 @@ function MatchupPlayerCell({ pick, align, ctx, gameStats, unitRankMaps, onView, 
       cursor: onView ? 'pointer' : 'default',
     }}>
       {isRight ? <>{score}{logoEl}{info}</> : <>{info}{logoEl}{score}</>}
+    </div>
+  );
+}
+
+// ── Standings Tab ─────────────────────────────────────────────────────────────
+
+function StandingsTab({ league, userId }: { league: any; userId: string | null }) {
+  const [allPicks,  setAllPicks]  = useState<any[]>([]);
+  const [weekData,  setWeekData]  = useState<Map<number, { gameStats: GameStats; matchupCtx: MatchupCtx }>>(new Map());
+  const [loading,   setLoading]   = useState(true);
+
+  const draftOrder: any[] = league?.settings?.draft_order ?? [];
+  const schedule:   any[] = league?.settings?.schedule    ?? [];
+  const currentWeek        = league?.week ?? 1;
+  const numTeams           = draftOrder.length;
+
+  useEffect(() => {
+    if (!league?.id || numTeams === 0) { setLoading(false); return; }
+    const completedWeeks = Array.from({ length: currentWeek }, (_, i) => i + 1);
+    Promise.all([
+      supabase.from('draft_picks').select('*').eq('league_id', league.id).order('pick_number'),
+      ...completedWeeks.flatMap(w => [
+        fetch(`/api/game-stats?week=${w}&season=2025`).then(r => r.json()).catch(() => null),
+        fetch(`/api/matchup-context?week=${w}&season=2025`).then(r => r.json()).catch(() => null),
+      ]),
+    ]).then(([picksResult, ...rest]) => {
+      setAllPicks((picksResult as any).data ?? []);
+      const map = new Map<number, { gameStats: GameStats; matchupCtx: MatchupCtx }>();
+      completedWeeks.forEach((w, i) => {
+        map.set(w, { gameStats: rest[i * 2] as GameStats, matchupCtx: rest[i * 2 + 1] as MatchupCtx });
+      });
+      setWeekData(map);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [league?.id, numTeams, currentWeek]);
+
+  function teamScore(slotIdx: number, week: number): number {
+    const d = weekData.get(week);
+    if (!d) return 0;
+    const picks = allPicks.filter(p => numTeams > 0 && snakeIdx(p.pick_number, numTeams) === slotIdx);
+    const roster = assignRoster(picks);
+    return roster.starters.reduce((s, p) =>
+      s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0,
+        d.matchupCtx, d.gameStats, p?.player_data).pts, 0);
+  }
+
+  type Row = { team: any; slotIdx: number; wins: number; losses: number; pf: number; pa: number; last3: number[] };
+
+  const rows: Row[] = draftOrder.map((team: any, idx: number) => {
+    const teamId = team.userId ?? team.teamName;
+    const slotIdx = team.slot - 1;
+    let wins = 0, losses = 0, pf = 0, pa = 0;
+    const last3: number[] = [];
+    for (let w = 1; w <= currentWeek; w++) {
+      const game = schedule.find((g: any) => g.week === w && (g.home === teamId || g.away === teamId));
+      if (!game) continue;
+      const oppId = game.home === teamId ? game.away : game.home;
+      if (oppId === 'BYE') continue;
+      const oppEntry = draftOrder.find((t: any) => (t.userId ?? t.teamName) === oppId);
+      if (!oppEntry) continue;
+      const myPts  = teamScore(slotIdx, w);
+      const oppPts = teamScore(oppEntry.slot - 1, w);
+      pf += myPts; pa += oppPts;
+      if (myPts > oppPts) { wins++;   last3.push(1); }
+      else                { losses++; last3.push(0); }
+    }
+    return { team, slotIdx, wins, losses, pf, pa, last3: last3.slice(-3) };
+  });
+  rows.sort((a, b) => b.wins - a.wins || b.pf - a.pf);
+
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
+      Loading standings…
+    </div>
+  );
+
+  if (schedule.length === 0) return (
+    <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13 }}>
+      Schedule not generated yet — complete the draft first.
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 640 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 16 }}>Standings · Through Wk {currentWeek}</div>
+      <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 48px 48px 64px 64px 72px', padding: '8px 14px', background: C.surf2, borderBottom: `1px solid ${C.surf3}` }}>
+          {['#', 'TEAM', 'W', 'L', 'PF', 'PA', 'LAST 3'].map((h, i) => (
+            <div key={i} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.muted, textAlign: i >= 2 ? 'center' : 'left' }}>{h}</div>
+          ))}
+        </div>
+        {rows.map((r, i) => {
+          const isMe = r.team.userId === userId;
+          return (
+            <div key={r.team.slot} style={{ display: 'grid', gridTemplateColumns: '32px 1fr 48px 48px 64px 64px 72px', padding: '10px 14px', borderBottom: `1px solid ${C.surf3}33`, background: isMe ? 'rgba(245,166,35,.05)' : 'transparent', alignItems: 'center' }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: i === 0 ? C.gold : C.muted }}>{i + 1}</div>
+              <div>
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: isMe ? C.gold : C.text }}>{r.team.teamName}</div>
+                {r.team.type === 'cpu' && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#3b82f6', letterSpacing: 1 }}>CPU</div>}
+              </div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.green, textAlign: 'center' }}>{r.wins}</div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.red, textAlign: 'center' }}>{r.losses}</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.gold, textAlign: 'center' }}>{r.pf.toFixed(1)}</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.muted, textAlign: 'center' }}>{r.pa.toFixed(1)}</div>
+              <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+                {r.last3.map((w, j) => (
+                  <div key={j} style={{ width: 16, height: 16, borderRadius: '50%', background: w ? C.green : C.red, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: '#fff', fontWeight: 700 }}>
+                    {w ? 'W' : 'L'}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Schedule Tab ──────────────────────────────────────────────────────────────
+
+function ScheduleTab({ league }: { league: any }) {
+  const schedule:  any[]  = league?.settings?.schedule   ?? [];
+  const draftOrder: any[] = league?.settings?.draft_order ?? [];
+  const currentWeek        = league?.week ?? 1;
+  const totalWeeks          = 11;
+
+  function teamName(teamId: string): string {
+    const t = draftOrder.find((t: any) => (t.userId ?? t.teamName) === teamId);
+    return t?.teamName ?? teamId;
+  }
+
+  if (schedule.length === 0) return (
+    <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13 }}>
+      Schedule not generated yet — complete the draft first.
+    </div>
+  );
+
+  const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
+
+  return (
+    <div style={{ maxWidth: 600 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 16 }}>Full Schedule</div>
+      {weeks.map(w => {
+        const games = schedule.filter((g: any) => g.week === w);
+        const isCurrent = w === currentWeek;
+        const isPast    = w < currentWeek;
+        return (
+          <div key={w} style={{ marginBottom: 12, background: isCurrent ? 'rgba(245,166,35,.06)' : C.surf, border: `1px solid ${isCurrent ? C.gold + '55' : C.surf3}`, borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ padding: '7px 14px', background: C.surf2, borderBottom: `1px solid ${C.surf3}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 2, color: isCurrent ? C.gold : C.sub }}>WEEK {w}</span>
+              {isCurrent && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold, letterSpacing: 1, background: 'rgba(245,166,35,.15)', padding: '2px 8px', borderRadius: 4 }}>CURRENT</span>}
+              {isPast && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>FINAL</span>}
+              {w > currentWeek && w <= 11 && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>UPCOMING</span>}
+              {w > 11 && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#a855f7', letterSpacing: 1 }}>PLAYOFFS</span>}
+            </div>
+            {games.map((g: any, i: number) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 28px 1fr', padding: '9px 14px', borderBottom: i < games.length - 1 ? `1px solid ${C.surf3}22` : 'none', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.text, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teamName(g.home)}</div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, textAlign: 'center', letterSpacing: 1 }}>VS</div>
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.text, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teamName(g.away)}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Playoffs Tab ──────────────────────────────────────────────────────────────
+
+function PlayoffTab({ league, userId }: { league: any; userId: string | null }) {
+  const [allPicks,  setAllPicks]  = useState<any[]>([]);
+  const [weekData,  setWeekData]  = useState<Map<number, { gameStats: GameStats; matchupCtx: MatchupCtx }>>(new Map());
+  const [loading,   setLoading]   = useState(true);
+
+  const draftOrder: any[] = league?.settings?.draft_order ?? [];
+  const schedule:   any[] = league?.settings?.schedule    ?? [];
+  const currentWeek        = league?.week ?? 1;
+  const numTeams           = draftOrder.length;
+  const playoffFormat      = league?.settings?.playoff_format ?? '4team';
+
+  useEffect(() => {
+    if (!league?.id || numTeams === 0) { setLoading(false); return; }
+    const completedWeeks = Array.from({ length: Math.min(currentWeek, 11) }, (_, i) => i + 1);
+    Promise.all([
+      supabase.from('draft_picks').select('*').eq('league_id', league.id).order('pick_number'),
+      ...completedWeeks.flatMap(w => [
+        fetch(`/api/game-stats?week=${w}&season=2025`).then(r => r.json()).catch(() => null),
+        fetch(`/api/matchup-context?week=${w}&season=2025`).then(r => r.json()).catch(() => null),
+      ]),
+    ]).then(([picksResult, ...rest]) => {
+      setAllPicks((picksResult as any).data ?? []);
+      const map = new Map<number, { gameStats: GameStats; matchupCtx: MatchupCtx }>();
+      completedWeeks.forEach((w, i) => {
+        map.set(w, { gameStats: rest[i * 2] as GameStats, matchupCtx: rest[i * 2 + 1] as MatchupCtx });
+      });
+      setWeekData(map);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [league?.id, numTeams, currentWeek]);
+
+  function teamScore(slotIdx: number, week: number): number {
+    const d = weekData.get(week);
+    if (!d) return 0;
+    const picks = allPicks.filter(p => numTeams > 0 && snakeIdx(p.pick_number, numTeams) === slotIdx);
+    return assignRoster(picks).starters.reduce((s, p) =>
+      s + effectivePts(p?.player_data?.school, p?.player_data?.unitType,
+        p?.player_data?.projectedPoints ?? 0, d.matchupCtx, d.gameStats, p?.player_data).pts, 0);
+  }
+
+  // Compute regular-season standings (same logic as StandingsTab)
+  const seeds = draftOrder.map((team: any) => {
+    const teamId = team.userId ?? team.teamName;
+    const slotIdx = team.slot - 1;
+    let wins = 0, pf = 0;
+    for (let w = 1; w <= Math.min(currentWeek, 11); w++) {
+      const game = schedule.find((g: any) => g.week === w && (g.home === teamId || g.away === teamId));
+      if (!game) continue;
+      const oppId = game.home === teamId ? game.away : game.home;
+      if (oppId === 'BYE') continue;
+      const oppEntry = draftOrder.find((t: any) => (t.userId ?? t.teamName) === oppId);
+      if (!oppEntry) continue;
+      const myPts = teamScore(slotIdx, w);
+      const oppPts = teamScore(oppEntry.slot - 1, w);
+      pf += myPts;
+      if (myPts > oppPts) wins++;
+    }
+    return { team, slotIdx, wins, pf };
+  }).sort((a: any, b: any) => b.wins - a.wins || b.pf - a.pf);
+
+  const numSeeds = playoffFormat === '6team' ? 6 : 4;
+  const playoffTeams = seeds.slice(0, numSeeds);
+
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: 60, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
+      Loading…
+    </div>
+  );
+
+  const inPlayoffs = currentWeek >= 12;
+
+  return (
+    <div style={{ maxWidth: 600 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 4 }}>Playoffs</div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginBottom: 20 }}>
+        {playoffFormat === '6team' ? '6-team playoffs' : '4-team playoffs'} · Weeks 12–14
+        {!inPlayoffs && ` · Regular season through week 11`}
+      </div>
+
+      {/* Seeding table */}
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
+        Projected Seeds
+      </div>
+      <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, overflow: 'hidden', marginBottom: 24 }}>
+        {playoffTeams.map((s: any, i: number) => {
+          const isMe = s.team.userId === userId;
+          return (
+            <div key={s.team.slot} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < playoffTeams.length - 1 ? `1px solid ${C.surf3}33` : 'none', background: isMe ? 'rgba(245,166,35,.05)' : 'transparent' }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: i === 0 ? C.gold : i === 1 ? '#aaa' : i === 2 ? '#cd7f32' : C.muted, minWidth: 24, textAlign: 'center' }}>#{i + 1}</div>
+              <div style={{ flex: 1, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: isMe ? C.gold : C.text }}>{s.team.teamName}</div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>{s.wins}W · {s.pf.toFixed(1)} PF</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Bracket diagram */}
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>Bracket (Weeks 12–14)</div>
+      <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '16px 20px' }}>
+        {playoffFormat === '4team' ? (
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, lineHeight: 2 }}>
+            <div>Wk 12 · Semifinal A: <span style={{ color: C.text }}>#1</span> vs <span style={{ color: C.text }}>#4</span></div>
+            <div>Wk 12 · Semifinal B: <span style={{ color: C.text }}>#2</span> vs <span style={{ color: C.text }}>#3</span></div>
+            <div style={{ marginTop: 8 }}>Wk 13–14 · Championship: Semifinal A winner vs Semifinal B winner</div>
+          </div>
+        ) : (
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, lineHeight: 2 }}>
+            <div>Wk 12 · First Round: <span style={{ color: C.text }}>#3 vs #6</span> · <span style={{ color: C.text }}>#4 vs #5</span></div>
+            <div>Wk 13 · Semifinal: <span style={{ color: C.text }}>#1</span> vs 3/6 winner · <span style={{ color: C.text }}>#2</span> vs 4/5 winner</div>
+            <div style={{ marginTop: 8 }}>Wk 14 · Championship</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

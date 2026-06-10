@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import { ROSTER_SLOTS, sortByVORP, type DraftUnit, type UnitType } from '@/lib/playerPool';
+import { generateSchedule } from '@/lib/scheduleEngine';
 import type { TeamEfficiency } from '@/types';
 
 function goBack(leagueId: string, router: any) {
@@ -333,8 +334,10 @@ export default function DraftPage() {
   useEffect(() => {
     const canFinalize = isCommissioner || league?.is_public;
     if (draftDone && canFinalize && league?.status === 'drafting') {
+      const teamIds = allTeams.map(t => t.userId ?? t.teamName);
+      const schedule = generateSchedule(teamIds, 11);
       supabase.from('leagues')
-        .update({ status: 'active' })
+        .update({ status: 'active', settings: { ...league.settings, schedule } })
         .eq('id', leagueId)
         .then(() => goBack(leagueId, router));
     }
