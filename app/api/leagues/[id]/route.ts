@@ -5,6 +5,42 @@ import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const supabase = createRouteHandlerClient({ cookies });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { data: league } = await supabase
+    .from('leagues')
+    .select('commissioner_id, settings')
+    .eq('id', params.id)
+    .single();
+
+  if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 });
+  if (league.commissioner_id !== user.id) {
+    return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+  }
+
+  const body = await req.json();
+  const { name, league_size, draft_type, settings: settingsPatch } = body;
+
+  const update: Record<string, any> = {};
+  if (name        !== undefined) update.name        = name.trim();
+  if (league_size !== undefined) update.league_size = Number(league_size);
+  if (draft_type  !== undefined) update.draft_type  = draft_type;
+  if (settingsPatch !== undefined) {
+    update.settings = { ...(league.settings ?? {}), ...settingsPatch };
+  }
+
+  const { error } = await supabase.from('leagues').update(update).eq('id', params.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
+}
+
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } },

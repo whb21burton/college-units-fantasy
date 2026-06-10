@@ -274,7 +274,8 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const [loading,      setLoading]      = useState(true);
   const [copied,       setCopied]       = useState(false);
   const [activeTab,    setActiveTab]    = useState<Tab>('draft');
-  const [showSettings,  setShowSettings]  = useState(false);
+  const [showSettings,     setShowSettings]     = useState(false);
+  const [showCommSettings, setShowCommSettings] = useState(false);
   const [chatMessages,  setChatMessages]  = useState<any[]>([]);
   const [chatInput,     setChatInput]     = useState('');
   const [kickTarget,    setKickTarget]    = useState<{ userId: string; teamName: string } | null>(null);
@@ -508,6 +509,14 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
         />
       )}
 
+      {showCommSettings && (
+        <CommissionerSettingsModal
+          league={league}
+          onClose={() => setShowCommSettings(false)}
+          onUpdate={() => loadData()}
+        />
+      )}
+
       {/* ── Kick Member Modal ──────────────────────────────────────── */}
       {kickTarget && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -566,13 +575,26 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           <div className="mob-header-pad" style={{ padding: '16px 24px 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
               <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 0.3, color: C.text, textTransform: 'uppercase', margin: 0 }}>{league?.name}</h1>
-              <span style={{
-                fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 600, letterSpacing: 1.5,
-                color: C.gold, background: 'rgba(245,166,35,.12)', border: '1px solid rgba(245,166,35,.28)',
-                padding: '3px 8px', borderRadius: 20, textTransform: 'uppercase',
-              }}>
-                {(league?.status || 'FORMING')}
-              </span>
+              {/* Status badge — hidden for seasonal-league commissioners (replaced by gear) */}
+              {(!isCommissioner || isWeekly) && (
+                <span style={{
+                  fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 600, letterSpacing: 1.5,
+                  color: C.gold, background: 'rgba(245,166,35,.12)', border: '1px solid rgba(245,166,35,.28)',
+                  padding: '3px 8px', borderRadius: 20, textTransform: 'uppercase',
+                }}>
+                  {(league?.status || 'FORMING')}
+                </span>
+              )}
+              {/* Commissioner settings gear — seasonal leagues only */}
+              {isCommissioner && !isWeekly && (
+                <button
+                  onClick={() => setShowCommSettings(true)}
+                  title="Commissioner Settings"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.sub, fontSize: 18, padding: '2px 5px', lineHeight: 1, transition: 'color .12s' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = C.gold)}
+                  onMouseLeave={e => (e.currentTarget.style.color = C.sub)}
+                >⚙</button>
+              )}
               {league?.league_type !== 'weekly' && league?.league_type !== 'dfs' && (
                 <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: isFull ? C.gold : C.sub }}>
                   {totalOccupied}/{league?.league_size} · {isFull ? 'Full' : spotsLeft + ' open'}
@@ -4770,9 +4792,17 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
 
   /* ── Matchups view ── */
   if (view === 'matchups') return (
-    <div style={{ maxWidth: 680 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, letterSpacing: 2, color: C.text, textTransform: 'uppercase' }}>Matchups</div>
+    <div style={{ maxWidth: 900 }}>
+      {/* Header + week selector */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 3 }}>
+            This Week&apos;s Matchups
+          </div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, letterSpacing: 2, color: C.text, textTransform: 'uppercase' }}>
+            Week {week}
+          </div>
+        </div>
         <select
           value={week}
           onChange={e => setWeek(Number(e.target.value))}
@@ -4788,41 +4818,53 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
         <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
           Complete the draft first to see matchups.
         </div>
-      ) : matchups.map(([teamA, teamB], i) => {
-        const totA = assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
-        const totB = assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
-        const isMeA = teamA.userId === userId;
-        const isMeB = teamB.userId === userId;
-        return (
-          <div key={i} style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 12, padding: '16px 20px', marginBottom: 10, display: 'grid', gridTemplateColumns: '1fr 36px 1fr', alignItems: 'center', gap: 8 }}>
-            {/* Team A */}
-            <button onClick={() => { setSelectedTeam(teamA); setSelectedPlayer(null); setView('roster'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 38, height: 38, borderRadius: '50%', background: isMeA ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 15, color: isMeA ? C.bg : C.sub, flexShrink: 0 }}>
-                  {(teamA.teamName || '?').charAt(0).toUpperCase()}
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          {matchups.map(([teamA, teamB], i) => {
+            const totA = assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
+            const totB = assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
+            const isMeA = teamA.userId === userId;
+            const isMeB = teamB.userId === userId;
+            const statusText = gameStats ? 'FINAL' : `WK ${week}`;
+            return (
+              <div key={i} style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 12, padding: '14px 16px' }}>
+                {/* Status */}
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
+                  {statusText}
                 </div>
-                <div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: isMeA ? C.gold : C.text, fontWeight: 600 }}>{teamA.teamName}</div>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, lineHeight: 1.2 }}>{totA > 0 ? totA.toFixed(1) : '—'}</div>
+                {/* Teams grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 28px 1fr', alignItems: 'center', gap: 6 }}>
+                  {/* Team A */}
+                  <button onClick={() => { setSelectedTeam(teamA); setSelectedPlayer(null); setView('roster'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' as const }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: isMeA ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, color: isMeA ? C.bg : C.sub, flexShrink: 0 }}>
+                        {(teamA.teamName || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isMeA ? C.gold : C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 90 }}>{teamA.teamName}</div>
+                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: totA > 0 ? C.text : C.muted, lineHeight: 1.2 }}>{totA > 0 ? totA.toFixed(1) : '—'}</div>
+                      </div>
+                    </div>
+                  </button>
+                  <div style={{ textAlign: 'center', fontFamily: 'Anton,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted }}>VS</div>
+                  {/* Team B */}
+                  <button onClick={() => { setSelectedTeam(teamB); setSelectedPlayer(null); setView('roster'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'right' as const, width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                      <div style={{ textAlign: 'right' as const }}>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isMeB ? C.gold : C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 90 }}>{teamB.teamName}</div>
+                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: totB > 0 ? C.text : C.muted, lineHeight: 1.2 }}>{totB > 0 ? totB.toFixed(1) : '—'}</div>
+                      </div>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: isMeB ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, color: isMeB ? C.bg : C.sub, flexShrink: 0 }}>
+                        {(teamB.teamName || '?').charAt(0).toUpperCase()}
+                      </div>
+                    </div>
+                  </button>
                 </div>
               </div>
-            </button>
-            <div style={{ textAlign: 'center', fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted }}>VS</div>
-            {/* Team B */}
-            <button onClick={() => { setSelectedTeam(teamB); setSelectedPlayer(null); setView('roster'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'right', width: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end' }}>
-                <div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: isMeB ? C.gold : C.text, fontWeight: 600 }}>{teamB.teamName}</div>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, lineHeight: 1.2, textAlign: 'right' }}>{totB > 0 ? totB.toFixed(1) : '—'}</div>
-                </div>
-                <div style={{ width: 38, height: 38, borderRadius: '50%', background: isMeB ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 15, color: isMeB ? C.bg : C.sub, flexShrink: 0 }}>
-                  {(teamB.teamName || '?').charAt(0).toUpperCase()}
-                </div>
-              </div>
-            </button>
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
 
       {/* Pending incoming trades */}
       {pendingIncoming.length > 0 && (
@@ -5060,6 +5102,198 @@ const SETTINGS_NAV: { key: SettingsSection; label: string; commOnly: boolean }[]
   { key: 'draft',  label: 'Draft Settings',  commOnly: true  },
   { key: 'danger', label: 'Delete League',   commOnly: true  },
 ];
+
+// ── CommissionerSettingsModal ─────────────────────────────────────────────────
+function CommissionerSettingsModal({ league, onClose, onUpdate }: {
+  league: any; onClose: () => void; onUpdate: () => void;
+}) {
+  const [saving,    setSaving]    = useState(false);
+  const [saved,     setSaved]     = useState(false);
+  const [error,     setError]     = useState('');
+
+  // League Info
+  const [name,       setName]       = useState<string>(league?.name ?? '');
+  const [leagueSize, setLeagueSize] = useState<number>(league?.league_size ?? 8);
+
+  // Playoff
+  const [playoffFormat,    setPlayoffFormat]    = useState<string>(league?.settings?.playoff_format    ?? '4-team');
+  const [divisionAutoBids, setDivisionAutoBids] = useState<boolean>(league?.settings?.division_auto_bids ?? false);
+
+  // Draft
+  const [draftType, setDraftType] = useState<string>(league?.draft_type ?? 'snake');
+  const existingDraftTime = league?.settings?.draft_time ?? league?.settings?.draft_scheduled_at ?? '';
+  const [draftDate, setDraftDate] = useState<string>(existingDraftTime ? existingDraftTime.slice(0, 10)  : '');
+  const [draftTime, setDraftTime] = useState<string>(existingDraftTime ? existingDraftTime.slice(11, 16) : '');
+
+  // Scoring
+  const [seasonLength, setSeasonLength] = useState<number>(league?.settings?.season_length ?? 14);
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px',
+    background: C.bg, border: '1px solid ' + C.surf3,
+    borderRadius: 8, color: C.text,
+    fontFamily: 'Oswald,sans-serif', fontSize: 13, outline: 'none',
+    boxSizing: 'border-box', transition: 'border-color .15s',
+  };
+  const label: React.CSSProperties = {
+    fontFamily: 'Oswald,sans-serif', fontSize: 9,
+    letterSpacing: 2, color: C.muted,
+    textTransform: 'uppercase', marginBottom: 6, display: 'block',
+  };
+  function Opt({ val, cur, set, children }: { val: string; cur: string; set: (v: string) => void; children: React.ReactNode }) {
+    const on = val === cur;
+    return (
+      <button onClick={() => set(val)} style={{
+        flex: 1, padding: '8px 0', borderRadius: 7, cursor: 'pointer',
+        fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1,
+        background: on ? 'rgba(245,166,35,.12)' : C.surf3,
+        border: '1px solid ' + (on ? C.gold : C.surf3),
+        color: on ? C.gold : C.sub, transition: 'all .12s',
+      }}>{children}</button>
+    );
+  }
+
+  async function save() {
+    setSaving(true); setError('');
+    try {
+      const draftTimestamp = (draftDate && draftTime)
+        ? new Date(`${draftDate}T${draftTime}:00`).toISOString()
+        : draftDate ? new Date(`${draftDate}T00:00:00`).toISOString() : null;
+
+      const res = await fetch(`/api/leagues/${league.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          league_size: leagueSize,
+          draft_type: draftType,
+          settings: {
+            playoff_format:      playoffFormat,
+            division_auto_bids:  divisionAutoBids,
+            season_length:       seasonLength,
+            ...(draftTimestamp ? { draft_time: draftTimestamp, draft_scheduled_at: draftTimestamp } : {}),
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? 'Failed to save'); return; }
+      onUpdate();
+      setSaved(true);
+      setTimeout(() => { setSaved(false); onClose(); }, 1200);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const sectionHead: React.CSSProperties = {
+    fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 2,
+    color: C.gold, textTransform: 'uppercase', marginBottom: 12, marginTop: 20,
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={onClose}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 14, padding: '28px 28px', width: 480, maxWidth: '96vw', maxHeight: '90vh', overflowY: 'auto' }}>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>Commissioner Settings</div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>⚙ {league?.name}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 18, lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* ── League Info ── */}
+        <div style={sectionHead}>League Info</div>
+        <div style={{ marginBottom: 14 }}>
+          <span style={label}>League Name</span>
+          <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} maxLength={40} />
+        </div>
+        <div style={{ marginBottom: 6 }}>
+          <span style={label}>League Size</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+            {[8, 10, 12, 14, 16].map(n => (
+              <button key={n} onClick={() => setLeagueSize(n)} style={{
+                padding: '7px 14px', borderRadius: 7, cursor: 'pointer',
+                fontFamily: 'Oswald,sans-serif', fontSize: 12,
+                background: leagueSize === n ? 'rgba(245,166,35,.12)' : C.surf3,
+                border: '1px solid ' + (leagueSize === n ? C.gold : C.surf3),
+                color: leagueSize === n ? C.gold : C.sub,
+              }}>{n}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Playoff Settings ── */}
+        <div style={sectionHead}>Playoff Settings</div>
+        <div style={{ marginBottom: 14 }}>
+          <span style={label}>Playoff Format</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Opt val="4-team" cur={playoffFormat} set={setPlayoffFormat}>4-Team</Opt>
+            <Opt val="6-team" cur={playoffFormat} set={setPlayoffFormat}>6-Team</Opt>
+          </div>
+        </div>
+        <div style={{ marginBottom: 6 }}>
+          <span style={label}>Division Winners Get Auto Bids</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Opt val="yes" cur={divisionAutoBids ? 'yes' : 'no'} set={v => setDivisionAutoBids(v === 'yes')}>Yes</Opt>
+            <Opt val="no"  cur={divisionAutoBids ? 'yes' : 'no'} set={v => setDivisionAutoBids(v === 'yes')}>No</Opt>
+          </div>
+        </div>
+
+        {/* ── Draft Settings ── */}
+        <div style={sectionHead}>Draft Settings</div>
+        <div style={{ marginBottom: 14 }}>
+          <span style={label}>Draft Type</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Opt val="snake"  cur={draftType} set={setDraftType}>Snake Draft</Opt>
+            <Opt val="salary" cur={draftType} set={setDraftType}>Salary Cap</Opt>
+          </div>
+        </div>
+        <div style={{ marginBottom: 6 }}>
+          <span style={label}>Draft Date & Time</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="date" value={draftDate} onChange={e => setDraftDate(e.target.value)}
+              style={{ ...inputStyle, flex: 1 }} />
+            <input type="time" value={draftTime} onChange={e => setDraftTime(e.target.value)}
+              style={{ ...inputStyle, flex: 1 }} />
+          </div>
+        </div>
+
+        {/* ── Scoring ── */}
+        <div style={sectionHead}>Scoring</div>
+        <div style={{ marginBottom: 20 }}>
+          <span style={label}>Season Length (weeks)</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+            {[13, 14, 15, 17].map(n => (
+              <button key={n} onClick={() => setSeasonLength(n)} style={{
+                padding: '7px 14px', borderRadius: 7, cursor: 'pointer',
+                fontFamily: 'Oswald,sans-serif', fontSize: 12,
+                background: seasonLength === n ? 'rgba(245,166,35,.12)' : C.surf3,
+                border: '1px solid ' + (seasonLength === n ? C.gold : C.surf3),
+                color: seasonLength === n ? C.gold : C.sub,
+              }}>{n}</button>
+            ))}
+          </div>
+        </div>
+
+        {error && (
+          <div style={{ padding: '8px 12px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.3)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, marginBottom: 12 }}>{error}</div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '12px', background: 'none', border: '1px solid ' + C.surf3, borderRadius: 8, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
+            Cancel
+          </button>
+          <button onClick={save} disabled={saving} style={{ flex: 2, padding: '12px', background: saved ? C.green : C.gold, border: 'none', borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, color: C.bg, textTransform: 'uppercase', transition: 'background .2s' }}>
+            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Settings'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function LeagueSettingsModal({ league, myMember, members, isCommissioner, userId, onClose, onUpdate }: {
   league: any; myMember: any; members: any[]; isCommissioner: boolean;
