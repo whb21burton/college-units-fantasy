@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import { CONFERENCES } from '@/lib/playerPool';
+import { PAID_CONTESTS_ENABLED } from '@/lib/config';
 
 const C = {
   bg:    '#070a12',
@@ -640,27 +641,29 @@ export default function CreateLeaguePage() {
               )}
             </div>
 
-            {/* Entry Fee */}
-            <div style={{ marginBottom: effectiveBuyIn > 0 ? 0 : 20 }}>
-              <Label>Entry Fee</Label>
-              <PresetRow
-                values={BUYIN_PRESETS}
-                selected={customBuyIn ? -1 : buyIn}
-                onSelect={v => { setBuyIn(v); setCustomBuyIn(''); }}
-                format={v => v === 0 ? 'Free' : `$${v}`}
-              />
-              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>Custom:</span>
-                <div style={{ display: 'flex', alignItems: 'center', background: C.surf2, border: `1px solid ${customBuyIn ? C.gold : C.surf3}`, borderRadius: 8, overflow: 'hidden', width: 120 }}>
-                  <span style={{ padding: '0 10px', fontFamily: 'Anton, sans-serif', color: C.muted }}>$</span>
-                  <input
-                    type="number" min={0} placeholder="0.00"
-                    value={customBuyIn} onChange={e => setCustomBuyIn(e.target.value)}
-                    style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: C.text, fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, padding: '10px 10px 10px 0' }}
-                  />
+            {/* Entry Fee — hidden when paid contests are disabled */}
+            {PAID_CONTESTS_ENABLED && (
+              <div style={{ marginBottom: effectiveBuyIn > 0 ? 0 : 20 }}>
+                <Label>Entry Fee</Label>
+                <PresetRow
+                  values={BUYIN_PRESETS}
+                  selected={customBuyIn ? -1 : buyIn}
+                  onSelect={v => { setBuyIn(v); setCustomBuyIn(''); }}
+                  format={v => v === 0 ? 'Free' : `$${v}`}
+                />
+                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, color: C.sub }}>Custom:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', background: C.surf2, border: `1px solid ${customBuyIn ? C.gold : C.surf3}`, borderRadius: 8, overflow: 'hidden', width: 120 }}>
+                    <span style={{ padding: '0 10px', fontFamily: 'Anton, sans-serif', color: C.muted }}>$</span>
+                    <input
+                      type="number" min={0} placeholder="0.00"
+                      value={customBuyIn} onChange={e => setCustomBuyIn(e.target.value)}
+                      style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: C.text, fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, padding: '10px 10px 10px 0' }}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Prize Pool Breakdown */}
             {effectiveBuyIn > 0 && (
@@ -956,7 +959,7 @@ export default function CreateLeaguePage() {
             </div>
 
             {/* Payout breakdown */}
-            {effectiveBuyIn > 0 && (
+            {PAID_CONTESTS_ENABLED && effectiveBuyIn > 0 && (
               <div style={{ background: C.surf2, borderRadius: 8, padding: '14px 16px', marginBottom: 16 }}>
                 <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
                   Payout Structure — {activePreset.label}

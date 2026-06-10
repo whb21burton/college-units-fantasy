@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { CONFERENCES } from '@/lib/playerPool'
 import { REGIONS_2026 } from '@/data/cws2026'
+import { PAID_CONTESTS_ENABLED } from '@/lib/config'
 
 const C = {
   bg: '#070a12', surf: '#0c1422', surf2: '#131d30', surf3: '#1e2d47',
@@ -422,15 +423,19 @@ function WeeklyPickemCreator() {
         ))}
       </div>
 
-      <label style={labelStyle}>Entry Fee</label>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {[0, 1, 5, 10, 25].map(amt => (
-          <button key={amt} onClick={() => setBuyIn(amt)}
-            style={{ flex: 1, padding: '8px 4px', border: `2px solid ${buyIn === amt ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: buyIn === amt ? 'rgba(245,166,35,.1)' : C.surf2, color: buyIn === amt ? C.gold : C.sub, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
-            {amt === 0 ? 'Free' : `$${amt}`}
-          </button>
-        ))}
-      </div>
+      {PAID_CONTESTS_ENABLED && (
+        <>
+          <label style={labelStyle}>Entry Fee</label>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+            {[0, 1, 5, 10, 25].map(amt => (
+              <button key={amt} onClick={() => setBuyIn(amt)}
+                style={{ flex: 1, padding: '8px 4px', border: `2px solid ${buyIn === amt ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: buyIn === amt ? 'rgba(245,166,35,.1)' : C.surf2, color: buyIn === amt ? C.gold : C.sub, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+                {amt === 0 ? 'Free' : `$${amt}`}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
         Max Accounts
@@ -534,7 +539,7 @@ function WeeklyPickemCreator() {
         </div>
       )}
 
-      {buyIn > 0 && (
+      {PAID_CONTESTS_ENABLED && buyIn > 0 && (
         <PayoutPreview
           feeAmount={buyIn}
           maxAccounts={maxAccounts}
@@ -701,15 +706,19 @@ function PublicBracketCreator() {
         maxLength={100}
         style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, marginBottom: 16, boxSizing: 'border-box' as const }} />
 
-      <label style={labelStyle}>Entry Fee</label>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {([[0, 'Free'], [100, '$1'], [500, '$5'], [1000, '$10'], [2500, '$25']] as [number, string][]).map(([cents, label]) => (
-          <button key={cents} onClick={() => setEntryFeeCents(cents)}
-            style={{ flex: 1, padding: '8px 4px', border: `2px solid ${entryFeeCents === cents ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: entryFeeCents === cents ? 'rgba(245,166,35,.1)' : C.surf2, color: entryFeeCents === cents ? C.gold : C.sub, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {PAID_CONTESTS_ENABLED && (
+        <>
+          <label style={labelStyle}>Entry Fee</label>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+            {([[0, 'Free'], [100, '$1'], [500, '$5'], [1000, '$10'], [2500, '$25']] as [number, string][]).map(([cents, label]) => (
+              <button key={cents} onClick={() => setEntryFeeCents(cents)}
+                style={{ flex: 1, padding: '8px 4px', border: `2px solid ${entryFeeCents === cents ? C.gold : C.surf3}`, borderRadius: 6, cursor: 'pointer', background: entryFeeCents === cents ? 'rgba(245,166,35,.1)' : C.surf2, color: entryFeeCents === cents ? C.gold : C.sub, fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <label style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
         Max Accounts
@@ -767,7 +776,7 @@ function PublicBracketCreator() {
           style={{ width: 60, padding: '7px 8px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12 }} />
       </div>
 
-      {entryFeeCents > 0 && (
+      {PAID_CONTESTS_ENABLED && entryFeeCents > 0 && (
         <PayoutPreview
           feeAmount={entryFeeCents / 100}
           maxAccounts={maxAccounts}
