@@ -1,5 +1,6 @@
 'use client'
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { PAID_CONTESTS_ENABLED } from '@/lib/config'
 
 interface ComplianceState {
   stateCode:  string | null
@@ -19,6 +20,7 @@ export function ComplianceProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ComplianceState>(defaults)
 
   useEffect(() => {
+    if (!PAID_CONTESTS_ENABLED) { setState(s => ({ ...s, loading: false })); return; }
     fetch('/api/compliance/my-state')
       .then(r => r.json())
       .then(d => setState({ stateCode: d.stateCode, stateName: d.stateName, restricted: d.restricted ?? false, reason: d.reason, loading: false }))

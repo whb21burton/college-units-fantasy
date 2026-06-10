@@ -4,6 +4,7 @@ import WalletDrawer from '@/components/wallet/WalletDrawer';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
 import { useWallet } from '@/context/WalletContext';
+import { PAID_CONTESTS_ENABLED } from '@/lib/config';
 
 const C = {
   bg:    '#070a12',
@@ -612,13 +613,15 @@ function MyLeaguesContent() {
                 >
                   {displayName}
                 </div>
-                <div
-                  onClick={() => setShowWallet(true)}
-                  title="Open wallet"
-                  style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, cursor: 'pointer' }}
-                >
-                  ${(walletBalance / 100).toFixed(2)}
-                </div>
+                {PAID_CONTESTS_ENABLED && (
+                  <div
+                    onClick={() => setShowWallet(true)}
+                    title="Open wallet"
+                    style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green, cursor: 'pointer' }}
+                  >
+                    ${(walletBalance / 100).toFixed(2)}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -886,7 +889,7 @@ function MyLeaguesContent() {
         )}
       </div>
     </div>
-    <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} />
+    {PAID_CONTESTS_ENABLED && <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} />}
     </>
   );
 }

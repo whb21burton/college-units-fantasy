@@ -8,6 +8,7 @@ import AgeVerificationModal from '@/components/compliance/AgeVerificationModal';
 import TermsAcceptanceModal from '@/components/compliance/TermsAcceptanceModal';
 import WalletDrawer from '@/components/wallet/WalletDrawer';
 import { useWallet } from '@/context/WalletContext';
+import { PAID_CONTESTS_ENABLED } from '@/lib/config';
 
 const IntroAnimation = dynamic(() => import('@/components/IntroAnimation'), { ssr: false });
 
@@ -304,9 +305,11 @@ export default function HomePage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setShowWallet(true)} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>
-                {walletBalance > 0 ? `$${(walletBalance / 100).toFixed(2)}` : '💰 Wallet'}
-              </button>
+              {PAID_CONTESTS_ENABLED && (
+                <button onClick={() => setShowWallet(true)} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>
+                  {walletBalance > 0 ? `$${(walletBalance / 100).toFixed(2)}` : '💰 Wallet'}
+                </button>
+              )}
               <button onClick={signOut} style={{ ...ghostStyle, width: 'auto', padding: '10px 20px', fontSize: 11 }}>Sign Out</button>
             </div>
           </div>
@@ -383,7 +386,7 @@ export default function HomePage() {
 
     </div>
 
-    <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} />
+    {PAID_CONTESTS_ENABLED && <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} />}
 
     {/* COMPLIANCE MODALS */}
     {showTermsModal && (

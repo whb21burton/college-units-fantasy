@@ -4,6 +4,7 @@ import MobileInstallBanner from '@/components/MobileInstallBanner';
 import { WalletProvider } from '@/context/WalletContext';
 import { ComplianceProvider } from '@/context/ComplianceContext';
 import ComplianceBanner from '@/components/ComplianceBanner';
+import { PAID_CONTESTS_ENABLED } from '@/lib/config';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -47,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body style={{ margin: 0, background: '#070a12', color: '#e4edf7', fontFamily: "'Space Grotesk', Inter, sans-serif", display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <WalletProvider>
           <ComplianceProvider>
-            <ComplianceBanner />
+            {PAID_CONTESTS_ENABLED && <ComplianceBanner />}
             <div style={{ flex: 1 }}>{children}</div>
             <FooterWrapper />
             <MobileInstallBanner />

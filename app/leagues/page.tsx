@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
+import { PAID_CONTESTS_ENABLED } from '@/lib/config';
 
 const C = {
   bg:      '#05080f',
@@ -178,7 +179,7 @@ function autoSummary(l: League, members: Member[]): string {
     prize = (l.buy_in ?? 0) * (l.league_size || 10) * 0.95;
   }
   const po = payouts(l);
-  const feeStr = l.buy_in === 0 ? 'free to enter' : `$${l.buy_in.toFixed(2)} entry fee`;
+  const feeStr = (!PAID_CONTESTS_ENABLED || l.buy_in === 0) ? 'free to enter' : `$${l.buy_in.toFixed(2)} entry fee`;
   let summary = `This ${size}-team ${confStr} ${type} league`;
   if (prize > 0) {
     summary += ` features up to $${prize.toFixed(2)} in total prizes.`;
@@ -189,7 +190,7 @@ function autoSummary(l: League, members: Member[]): string {
     summary += ' is free to play with no prize pool.';
   }
   summary += ` It is ${feeStr}`;
-  if (l.buy_in > 0) summary += ` with a 5% hosting fee`;
+  if (PAID_CONTESTS_ENABLED && l.buy_in > 0) summary += ` with a 5% hosting fee`;
   summary += '.';
   return summary;
 }
@@ -306,7 +307,7 @@ function ContestDetailModal({
   const allSlots: (Member | null)[] = [...members, ...Array(emptyCount).fill(null)];
   const displaySlots = memberSearch ? filteredMembers : allSlots;
 
-  const enterLabel = league.buy_in === 0
+  const enterLabel = (!PAID_CONTESTS_ENABLED || league.buy_in === 0)
     ? 'ENTER FREE'
     : `ENTER $${league.buy_in.toFixed(2)}`;
 
@@ -382,7 +383,7 @@ function ContestDetailModal({
           {/* Stats bar */}
           <div style={{ display: 'flex', gap: 0, borderTop: '1px solid ' + C.surf3, borderBottom: '1px solid ' + C.surf3, margin: '0 -24px', padding: '10px 24px' }}>
             {[
-              { label: 'Entry',     val: league.buy_in === 0 ? 'Free' : `$${league.buy_in.toFixed(2)}`, color: league.buy_in > 0 ? C.gold : C.green },
+              { label: 'Entry',     val: (!PAID_CONTESTS_ENABLED || league.buy_in === 0) ? 'Free' : `$${league.buy_in.toFixed(2)}`, color: (PAID_CONTESTS_ENABLED && league.buy_in > 0) ? C.gold : C.green },
               { label: 'Entries',   val: `${league.member_count} / ${league.league_size}`, color: C.text },
               { label: 'Prizes',    val: prize > 0 ? `$${prize.toFixed(2)}` : '—', color: C.green },
               { label: 'My Entries', val: '—', color: C.sub },
@@ -637,7 +638,7 @@ function EnterModal({
   async function submit() {
     if (!teamName.trim()) { setErr('Please enter a team name.'); return; }
     const buyCents = Math.round((league.buy_in ?? 0) * 100);
-    if (buyCents > 0 && walletBal < buyCents) {
+    if (PAID_CONTESTS_ENABLED && buyCents > 0 && walletBal < buyCents) {
       setAddFunds(true);
       setErr(`Not enough funds. Need $${league.buy_in.toFixed(2)}, wallet has $${(walletBal / 100).toFixed(2)}.`);
       return;
@@ -650,7 +651,7 @@ function EnterModal({
     });
     const d = await res.json();
     if (!res.ok) {
-      if (d.code === 'INSUFFICIENT_BALANCE') {
+      if (PAID_CONTESTS_ENABLED && d.code === 'INSUFFICIENT_BALANCE') {
         setAddFunds(true);
         setErr(`Not enough funds. Need $${league.buy_in.toFixed(2)}, wallet has $${(walletBal / 100).toFixed(2)}.`);
       } else {
@@ -671,7 +672,7 @@ function EnterModal({
 
         <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
           {[
-            { label: 'Entry Fee',    val: league.buy_in === 0 ? 'Free' : `$${league.buy_in.toFixed(2)}` },
+            { label: 'Entry Fee',    val: (!PAID_CONTESTS_ENABLED || league.buy_in === 0) ? 'Free' : `$${league.buy_in.toFixed(2)}` },
             { label: 'Total Prizes', val: totalPrize(league) > 0 ? `$${totalPrize(league).toFixed(2)}` : '—' },
             { label: 'Spots Left',   val: `${league.league_size - league.member_count}` },
           ].map(item => (
@@ -694,7 +695,7 @@ function EnterModal({
           />
         </div>
 
-        {league.buy_in > 0 && (
+        {PAID_CONTESTS_ENABLED && league.buy_in > 0 && (
           <div style={{ marginBottom: 14, padding: '8px 12px', background: C.surf, borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub }}>Wallet Balance</span>
             <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: walletBal / 100 >= league.buy_in ? C.green : C.red }}>
@@ -721,7 +722,7 @@ function EnterModal({
               disabled={joining || isFull}
               style={{ flex: 2, padding: '11px 0', background: isFull ? C.surf3 : 'linear-gradient(135deg,#27ae60,#2ecc71)', border: 'none', borderRadius: 8, cursor: isFull ? 'not-allowed' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 1.5, color: isFull ? C.muted : '#fff', textTransform: 'uppercase', opacity: joining ? 0.7 : 1 }}
             >
-              {joining ? 'Joining…' : isFull ? 'Full' : league.buy_in === 0 ? 'Join Free' : `Pay $${league.buy_in.toFixed(2)} & Enter`}
+              {joining ? 'Joining…' : isFull ? 'Full' : (!PAID_CONTESTS_ENABLED || league.buy_in === 0) ? 'Join Free' : `Pay $${league.buy_in.toFixed(2)} & Enter`}
             </button>
           )}
         </div>
@@ -1124,13 +1125,14 @@ function PublicLeaguesContent() {
                       {league.conference_filter || 'All D1'}
                     </div>
 
-                    <div style={{ padding: '12px 8px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: league.buy_in > 0 ? C.gold : C.green, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {league.buy_in === 0 ? 'Free' : `🪙 $${league.buy_in.toFixed(2)}`}
+                    <div style={{ padding: '12px 8px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: (PAID_CONTESTS_ENABLED && league.buy_in > 0) ? C.gold : C.green, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {(!PAID_CONTESTS_ENABLED || league.buy_in === 0) ? 'Free' : `🪙 $${league.buy_in.toFixed(2)}`}
                     </div>
 
                     <div style={{ padding: '12px 8px', textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
                       {(() => {
-                        const displayPrize = league.league_type === 'weekly'
+                        const displayPrize = !PAID_CONTESTS_ENABLED ? 0
+                          : league.league_type === 'weekly'
                           ? (league.buy_in ?? 0) * (league.member_count ?? 0) * 0.95
                           : prize;
                         return (
