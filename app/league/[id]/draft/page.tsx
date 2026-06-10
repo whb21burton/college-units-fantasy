@@ -209,13 +209,10 @@ export default function DraftPage() {
   // ── Initial load ──────────────────────────────────────────────────────────
 
   useEffect(() => {
-    console.log('[draft-pool] useEffect fired', { leagueId });
     let cancelled = false;
 
     async function init() {
-      console.log('[draft-pool] init() started');
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('[draft-pool] auth user:', user?.id ?? 'null');
       if (!user) { router.push('/'); return; }
       if (!cancelled) setUserId(user.id);
 
@@ -240,18 +237,20 @@ export default function DraftPage() {
       setPicks(existingPicks);
 
       const rawPool: DraftUnit[] = Array.isArray(poolRes) ? poolRes : [];
-      console.log('[draft-pool] fetched:', rawPool.length, 'units');
       const allowedSchools: string[] | null = Array.isArray(lg?.settings?.allowed_schools)
         ? lg.settings.allowed_schools as string[]
         : null;
+      const conferenceFilter: string = lg?.conference_filter ?? '';
       const NO_CONF_FILTER = new Set(['', 'all', 'ALL', 'All D1', 'all d1']);
-      const livePool = (() => {
-        let p = rawPool;
-        if (allowedSchools?.length) p = p.filter(u => allowedSchools.includes(u.school));
-        if (lg?.conference_filter && !NO_CONF_FILTER.has(lg.conference_filter)) p = p.filter(u => u.conference === lg.conference_filter);
-        return p;
-      })();
-      console.log('[draft-pool] after filter:', livePool.length, 'available', '| conference_filter:', lg?.conference_filter, '| allowed_schools:', allowedSchools?.length ?? 'none');
+      let livePool = rawPool;
+      if (allowedSchools && allowedSchools.length > 0) {
+        // Use school whitelist — ignore conference filter
+        livePool = rawPool.filter(u => allowedSchools.includes(u.school));
+      } else if (conferenceFilter && !NO_CONF_FILTER.has(conferenceFilter)) {
+        // No school whitelist — filter by conference (supports comma-separated list)
+        const confs = conferenceFilter.split(',').map((c: string) => c.trim());
+        livePool = rawPool.filter(u => confs.includes(u.conference));
+      }
       if (!cancelled) setFullPool(livePool); // store original pool for stable salary pricing
       const takenIds = new Set(existingPicks.map((p: any) => p.player_id));
       setAvail(sortByVORP(livePool).filter(u => !takenIds.has(u.id)));
