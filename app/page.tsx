@@ -74,6 +74,20 @@ const SPORT_TABS: { key: Sport; label: string; icon: string }[] = [
   { key: 'football',   label: 'Football',   icon: '🏈' },
 ];
 
+function buildDateRange(): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const fmt = (d: Date) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const today = new Date();
+  const end   = new Date(today);
+  end.setDate(today.getDate() + 3);
+  return `${fmt(today)}-${fmt(end)}`;
+}
+
+function gameDay(isoDate: string): string {
+  const d = new Date(isoDate);
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 function LiveScoreboard() {
   const [sport, setSport]             = useState<Sport>('baseball');
   const [games, setGames]             = useState<any[]>([]);
@@ -88,10 +102,17 @@ function LiveScoreboard() {
       const endpoint = sport === 'baseball'
         ? '/api/scores/college-baseball'
         : '/api/scores/college-basketball';
-      const res = await fetch(endpoint);
+      const range = buildDateRange();
+      const res = await fetch(`${endpoint}?date=${range}`);
       if (res.ok) {
         const data = await res.json();
-        setGames(data.games ?? []);
+        // Sort: in-progress first, then by start time
+        const sorted = (data.games ?? []).slice().sort((a: any, b: any) => {
+          if (a.status === 'in' && b.status !== 'in') return -1;
+          if (a.status !== 'in' && b.status === 'in') return  1;
+          return new Date(a.date).getTime() - new Date(b.date).getTime();
+        });
+        setGames(sorted);
         setLastUpdated(new Date());
       }
     } catch {}
@@ -103,7 +124,7 @@ function LiveScoreboard() {
     fetchScores();
     if (timerRef.current) clearInterval(timerRef.current);
     if (sport !== 'football') {
-      timerRef.current = setInterval(fetchScores, 30000);
+      timerRef.current = setInterval(fetchScores, 60000);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [sport, fetchScores]);
@@ -148,14 +169,33 @@ function LiveScoreboard() {
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>No games today</div>
           </div>
         ) : (
-          games.map((g: any) => <GameCard key={g.id} game={g} />)
+          games.map((g: any, idx: number) => {
+            const day     = gameDay(g.date);
+            const prevDay = idx > 0 ? gameDay(games[idx - 1].date) : null;
+            const showSep = day !== prevDay;
+            return (
+              <div key={g.id}>
+                {showSep && (
+                  <div style={{
+                    padding: '6px 4px 4px',
+                    fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2,
+                    color: C.muted, textTransform: 'uppercase' as const,
+                    ...(idx > 0 ? { borderTop: `1px solid ${C.border}`, marginTop: 6, paddingTop: 10 } : {}),
+                  }}>
+                    {day}
+                  </div>
+                )}
+                <GameCard game={g} />
+              </div>
+            );
+          })
         )}
       </div>
 
       {/* Last updated footer */}
       {lastUpdated && sport !== 'football' && (
         <div style={{ padding: '5px 8px', borderTop: `1px solid ${C.border}`, flexShrink: 0, fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>
-          Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · auto-refresh 30s
+          Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · auto-refresh 60s
         </div>
       )}
     </div>

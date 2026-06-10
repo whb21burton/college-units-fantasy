@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const date = searchParams.get('date'); // format: YYYYMMDD
+  const date = searchParams.get('date'); // format: YYYYMMDD or YYYYMMDD-YYYYMMDD (range)
 
   const baseUrl = 'https://site.api.espn.com/apis/site/v2/sports';
   const sport = 'baseball/college-baseball';
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     ? `${baseUrl}/${sport}/scoreboard?dates=${date}`
     : `${baseUrl}/${sport}/scoreboard`;
 
-  const res = await fetch(url, { next: { revalidate: 30 } });
+  const res = await fetch(url, { next: { revalidate: 60 } });
   const data = await res.json();
 
   const games = (data.events ?? []).map((event: any) => {
