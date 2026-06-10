@@ -184,13 +184,13 @@ function PlayerInfoLines({
       : school;
 
   // Line 4: score breakdown
-  // For completed games: use the stored multiplier from cached_stats so the
-  // formula shown matches exactly how the score was computed by syncStats.
-  // For projected games: use the live Elo mult.
-  const displayMult  = ep.isActual && ep.storedMult != null ? ep.storedMult : mult;
+  // Played: "base × mult = actual"  (base is unit_QB raw, mult is game_mult, result is unit_QB_fpts)
+  // Projected: "base × mult = proj" using ODR-derived multiplier
   const breakdownLine = (!opponent)
     ? 'No game this week'
-    : `${ep.base.toFixed(1)} × ${displayMult.toFixed(2)} = ${ep.pts.toFixed(1)}`;
+    : ep.isActual && ep.storedMult != null
+      ? `${ep.base.toFixed(1)} × ${ep.storedMult.toFixed(2)} = ${ep.pts.toFixed(1)}`
+      : `${ep.base.toFixed(1)} × ${mult.toFixed(2)} = ${ep.pts.toFixed(1)} proj`;
 
   return (
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
@@ -233,12 +233,13 @@ function effectivePts(
   // BYE week — no game, no points
   if (ctx && !opponent) return { pts: 0, isActual: false, base: 0, storedMult: null, actual: 0, projected: 0, isPlayed: false };
 
-  // Check cached_stats for a stored actual score (same source as game log)
-  const storedPts  = gs?.schoolPoints?.[school]?.[unitType];
+  // schoolPoints stores unit_QB (raw base before ODR multiplier).
+  // Actual FPTS = base × game_mult, matching what the sync job writes to unit_QB_fpts.
+  const storedBase = gs?.schoolPoints?.[school]?.[unitType];
   const storedMult = gs?.schoolMults?.[school] ?? null;
-  if (storedPts != null) {
-    const rawBase = storedMult && storedMult > 0 ? storedPts / storedMult : storedPts;
-    return { pts: storedPts, isActual: true, base: rawBase, storedMult, actual: storedPts, projected: projPts, isPlayed: true };
+  if (storedBase != null) {
+    const actual = storedMult != null ? storedBase * storedMult : storedBase;
+    return { pts: actual, isActual: true, base: storedBase, storedMult, actual, projected: projPts, isPlayed: true };
   }
 
   // No stored stats — show projection (whether game is future or stats not yet synced)
