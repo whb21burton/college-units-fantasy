@@ -50,6 +50,15 @@ function poolUrl(unitType: string, allowedSchools?: string[] | null): string {
 // Populated only once both pool and matchupCtx are ready; prevents re-render flashing.
 const projCache = new Map<string, number>();
 
+/** Case-insensitive lookup in defRankMap; handles name variations between schedule + SP+ data. */
+function findDefRank(opp: string, defRankMap: Record<string, number> | undefined): number | null {
+  if (!opp || !defRankMap) return null;
+  if (defRankMap[opp] !== undefined) return defRankMap[opp];
+  const lower = opp.toLowerCase();
+  const key = Object.keys(defRankMap).find(k => k.toLowerCase() === lower);
+  return key !== undefined ? defRankMap[key] : null;
+}
+
 /** Canonical per-week projection: avgFpts × rankMult(defRankMap[opp]).
  *  Returns 0 if unit or ctx not ready — callers treat 0 as "not loaded yet". */
 function fppg(unit: any, ctx: MatchupCtx): number {
@@ -184,9 +193,10 @@ function PlayerInfoLines({
   unitRankMaps?: Record<string, Record<string, number>>;
 }) {
   const opponent   = ctx?.opponentMap[school] ?? null;
-  // School's rank within its own unit type; opponent's rank within DEF
+  // School's rank within its own unit type; opponent's SP+ defensive rank
   const schoolRank = unitRankMaps?.[unitType]?.[school] ?? null;
-  const oppRank    = opponent ? (unitRankMaps?.['DEF']?.[opponent] ?? null) : null;
+  const defRank    = opponent ? findDefRank(opponent, ctx?.defRankMap) : null;
+  const defLabel   = defRank != null ? `#${defRank}` : 'FCS';
 
   const storedMult = ctx?.multMap?.[school] ?? null;
   const mult = storedMult ?? 1.0;
@@ -196,9 +206,9 @@ function PlayerInfoLines({
   const name = playerName ? playerName : `${school} ${unitType} Unit`;
 
   // Line 2: show matchup if opponent found, BYE if no game this week, or just school
-  // Format: "Georgia Tech (RB #4) vs Colorado (DEF #18)" — NR if no data
+  // Format: "Georgia Tech (RB #4) vs Colorado (DEF #18)"
   const matchupLine = opponent
-    ? `${school} (${unitType} ${schoolRank != null ? `#${schoolRank}` : 'NR'}) vs ${opponent} (DEF ${oppRank != null ? `#${oppRank}` : 'NR'})`
+    ? `${school} (${unitType} ${schoolRank != null ? `#${schoolRank}` : 'NR'}) vs ${opponent} (DEF ${defLabel})`
     : ctx && !opponent
       ? `${school} · BYE`
       : school;
@@ -4083,12 +4093,16 @@ function PlayoffTab({ league, userId }: { league: any; userId: string | null }) 
 }
 
 function MatchupTab({ league, userId }: { league: any; userId: string | null }) {
+  const currentWeek  = league?.week ?? 1;
+  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(currentWeek + 1, 15) : currentWeek;
+
   const [picks,         setPicks]         = useState<any[]>([]);
   const [pool,          setPool]          = useState<any[]>([]);
-  const [week,          setWeek]          = useState(league?.week ?? 1);
+  const [week,          setWeek]          = useState(defaultWeek);
   const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
   const [gameStats,     setGameStats]     = useState<GameStats>(null);
   const [loading,       setLoading]       = useState(true);
+  const [isReady,       setIsReady]       = useState(false);
   const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
   const [logos,         setLogos]         = useState<Record<string, string>>({});
 
@@ -4109,12 +4123,17 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
 
   useEffect(() => {
     projCache.clear();
+    setIsReady(false);
     setGameStats(null);
     fetch(`/api/matchup-context?week=${week}&season=2025`)
       .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
     fetch(`/api/game-stats?week=${week}&season=2025`)
       .then(r => r.json()).then(setGameStats).catch(() => {});
   }, [week]);
+
+  useEffect(() => {
+    if (pool.length > 0 && matchupCtx) setIsReady(true);
+  }, [pool, matchupCtx]);
 
   const draftOrder: any[] = league?.settings?.draft_order || [];
   const numTeams = draftOrder.length;
@@ -4204,9 +4223,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
               <div className="mob-score-big" style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>
                 {myActual.toFixed(1)}
               </div>
-              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.muted, marginTop: 3 }}>
-                {myProj.toFixed(1)} proj
-              </div>
+              {isReady && (
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.muted, marginTop: 3 }}>
+                  {myProj.toFixed(1)} proj
+                </div>
+              )}
             </>
           )}
           <div className="mob-score-name" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 6 }}>{myTeamName}</div>
@@ -4229,9 +4250,11 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
               <div className="mob-score-big" style={{ fontFamily: 'Anton,sans-serif', fontSize: 38, letterSpacing: 1, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>
                 {oppActual.toFixed(1)}
               </div>
-              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.muted, marginTop: 3 }}>
-                {oppProj.toFixed(1)} proj
-              </div>
+              {isReady && (
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.muted, marginTop: 3 }}>
+                  {oppProj.toFixed(1)} proj
+                </div>
+              )}
             </>
           )}
           <div className="mob-score-name" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, marginTop: 6 }}>{oppTeamName}</div>
@@ -4293,11 +4316,14 @@ function canFillSlot(unitType: string, slotLabel: string): boolean {
 }
 
 function TeamTab({ league, userId }: { league: any; userId: string | null }) {
+  const currentWeek  = league?.week ?? 1;
+  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(currentWeek + 1, 15) : currentWeek;
+
   const [myPicks,       setMyPicks]       = useState<any[]>([]);
   const [allPicks,      setAllPicks]      = useState<any[]>([]);
   const [pool,          setPool]          = useState<any[]>([]);
   const [lineups,       setLineups]       = useState<Record<string, (string | null)[]>>({});
-  const [week,          setWeek]          = useState(1);
+  const [week,          setWeek]          = useState(defaultWeek);
   const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
   const [gameStats,     setGameStats]     = useState<GameStats>(null);
   const [loading,       setLoading]       = useState(true);
@@ -4308,6 +4334,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const [selectedBench, setSelectedBench] = useState<any | null>(null);
   const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
   const [logos,         setLogos]         = useState<Record<string, string>>({});
+  const [isReady,       setIsReady]       = useState(false);
 
   const TOTAL_WEEKS    = 14;
   const PLAYOFF_START  = 12;
@@ -4322,12 +4349,17 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   }, []);
 
   useEffect(() => {
+    setIsReady(false);
     setGameStats(null);
     fetch(`/api/matchup-context?week=${week}&season=2025`)
       .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
     fetch(`/api/game-stats?week=${week}&season=2025`)
       .then(r => r.json()).then(setGameStats).catch(() => {});
   }, [week]);
+
+  useEffect(() => {
+    if (pool.length > 0 && matchupCtx) setIsReady(true);
+  }, [pool, matchupCtx]);
 
   useEffect(() => {
     if (!league?.id || !userId) return;
@@ -4499,7 +4531,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
       }}>
         <div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{gameStats?.completedSchools.length ? 'Actual' : 'Projected'} · Starters Only</div>
-          <div className="mob-score-med" style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, color: C.gold, lineHeight: 1, marginTop: 4 }}>{starterTotal.toFixed(1)}</div>
+          <div className="mob-score-med" style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, color: C.gold, lineHeight: 1, marginTop: 4 }}>{(isReady || (gameStats?.completedSchools.length ?? 0) > 0) ? starterTotal.toFixed(1) : '—'}</div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.sub, marginTop: 4 }}>{myTeamName}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -4541,7 +4573,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         const isTarget = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
         const ep      = effectivePts(pick?.player_data?.school, pick?.player_data?.unitType, pick?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick?.player_data);
         const mp      = matchupProj(liveProj(pick?.player_data), pick?.player_data?.school ?? '', pick?.player_data?.unitType ?? '', matchupCtx);
-        const pts     = ep.pts.toFixed(1);
+        const pts     = (isReady || ep.isActual) ? ep.pts.toFixed(1) : '—';
         const name    = pick?.player_data?.playerName || pick?.player_data?.school;
         const sub     = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;
         const tier    = pick?.player_data?.tier;
@@ -4621,7 +4653,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
           {bench.map((pick: any) => {
             const isSelected = selectedBench?.id === pick.id;
             const bep  = effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick.player_data);
-            const pts  = bep.pts.toFixed(1);
+            const pts  = (isReady || bep.isActual) ? bep.pts.toFixed(1) : '—';
             const name = pick.player_data?.playerName || pick.player_data?.school;
             const sub  = pick.player_data?.playerName ? pick.player_data.school : pick.player_data?.conference;
             const tier = pick.player_data?.tier;
@@ -4711,15 +4743,19 @@ function getWeekMatchups(teams: any[], week: number): [any, any][] {
 
 function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   type LView = 'matchups' | 'roster' | 'trade';
+  const currentWeek  = league?.week ?? 1;
+  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(currentWeek + 1, 15) : currentWeek;
+
   const [view,          setView]          = useState<LView>('matchups');
   const [selectedTeam,  setSelectedTeam]  = useState<any>(null);
   const [selectedPlayer,setSelectedPlayer]= useState<any>(null);
-  const [week,          setWeek]          = useState(1);
+  const [week,          setWeek]          = useState(defaultWeek);
   const [matchupCtx,    setMatchupCtx]    = useState<MatchupCtx>(null);
   const [gameStats,     setGameStats]     = useState<GameStats>(null);
   const [allPicks,      setAllPicks]      = useState<any[]>([]);
   const [pool,          setPool]          = useState<any[]>([]);
   const [loading,       setLoading]       = useState(true);
+  const [isReady,       setIsReady]       = useState(false);
   const [tradeOffer,    setTradeOffer]    = useState<Set<string>>(new Set());
   const [tradeRequest,  setTradeRequest]  = useState<Set<string>>(new Set());
   const [submitting,    setSubmitting]    = useState(false);
@@ -4738,12 +4774,17 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
 
   useEffect(() => {
     projCache.clear();
+    setIsReady(false);
     setGameStats(null);
     fetch(`/api/matchup-context?week=${week}&season=2025`)
       .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
     fetch(`/api/game-stats?week=${week}&season=2025`)
       .then(r => r.json()).then(setGameStats).catch(() => {});
   }, [week]);
+
+  useEffect(() => {
+    if (pool.length > 0 && matchupCtx) setIsReady(true);
+  }, [pool, matchupCtx]);
 
   useEffect(() => {
     if (!league?.id || !userId) return;
@@ -4865,9 +4906,9 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {matchups.map(([teamA, teamB], i) => {
-            // Only compute totals when matchupCtx is ready to avoid showing stale numbers
-            const totA = matchupCtx ? assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0) : 0;
-            const totB = matchupCtx ? assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0) : 0;
+            // Only compute totals once isReady (pool + matchupCtx loaded) to avoid flash
+            const totA = isReady ? assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0) : 0;
+            const totB = isReady ? assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0) : 0;
             const isMeA = teamA.userId === userId;
             const isMeB = teamB.userId === userId;
             const isMyMatchup = isMeA || isMeB;
@@ -4876,9 +4917,9 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
             const winPctA = sum > 0 ? totA / sum : 0.5;
             const winPctB = sum > 0 ? totB / sum : 0.5;
             const aWins = totA >= totB;
-            const hasScores = matchupCtx && (totA > 0 || totB > 0);
-            const displayA = matchupCtx ? totA.toFixed(1) : '—';
-            const displayB = matchupCtx ? totB.toFixed(1) : '—';
+            const hasScores = isReady && (totA > 0 || totB > 0);
+            const displayA = isReady ? totA.toFixed(1) : '—';
+            const displayB = isReady ? totB.toFixed(1) : '—';
             return (
               <div key={i} style={{ background: '#0c1422', border: `1px solid ${isMyMatchup ? 'rgba(212,168,40,.35)' : '#1a2b40'}`, borderRadius: 12, padding: '14px 16px' }}>
                 {/* Status */}
