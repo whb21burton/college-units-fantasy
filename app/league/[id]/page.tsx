@@ -1071,7 +1071,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
                     <div style={{ fontFamily:'Oswald,sans-serif', fontSize:9, color:'#4a5d7a' }}>{game ? `${game.opp} · ${game.date}` : school}</div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontFamily:'Anton,sans-serif', fontSize:14, color:'#f5a623' }}>
+                    <div style={{ fontFamily:'Anton,sans-serif', fontSize:14, color:'#7a90b0' }}>
                       {proj > 0 ? proj.toFixed(1) : '—'}
                     </div>
                     <div style={{ fontFamily:'Oswald,sans-serif', fontSize:8, color:'#4a5d7a', letterSpacing:1 }}>PROJ</div>
@@ -1090,7 +1090,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
           })()}
           <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 14px', borderTop:'1px solid rgba(245,166,35,.2)', background:'rgba(245,166,35,.05)' }}>
             <span style={{ fontFamily:'Oswald,sans-serif', fontSize:10, color:'#f5a623', letterSpacing:1 }}>TOTAL PROJECTED</span>
-            <span style={{ fontFamily:'Anton,sans-serif', fontSize:16, color:'#f5a623' }}>{totalProj.toFixed(1)}</span>
+            <span style={{ fontFamily:'Anton,sans-serif', fontSize:16, color:'#7a90b0' }}>{totalProj.toFixed(1)}</span>
           </div>
         </div>
 
@@ -1481,7 +1481,7 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
                         {/* Entry total */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(245,166,35,.2)' }}>
                           <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.gold, letterSpacing: 1 }}>TOTAL PROJECTED</span>
-                          <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>{projTotal.toFixed(1)}</span>
+                          <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.sub }}>{projTotal.toFixed(1)}</span>
                         </div>
                       </div>
                     )}
@@ -2071,7 +2071,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.gold, lineHeight: 1 }}>{proj.toFixed(1)}</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.sub, lineHeight: 1 }}>{proj.toFixed(1)}</div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, marginBottom: 8, marginTop: 2, letterSpacing: 1, textTransform: 'uppercase' }}>proj</div>
           {canAdd && (
             <button onClick={onAdd} style={{
@@ -2798,7 +2798,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
               const wkProj  = avgF > 0 ? avgF * (opp ? rankMult(oppRank) : 1.0) : liveProj(p);
               return (
                 <div style={{ textAlign: 'center', padding: '0 12px', flexShrink: 0 }}>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.sub }}>
                     {wkProj.toFixed(1)}
                   </div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>
@@ -4538,7 +4538,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
       }}>
         <div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{gameStats?.completedSchools.length ? 'Actual' : 'Projected'} · Starters Only</div>
-          <div className="mob-score-med" style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, color: C.gold, lineHeight: 1, marginTop: 4 }}>{(isReady || (gameStats?.completedSchools.length ?? 0) > 0) ? starterTotal.toFixed(1) : '—'}</div>
+          <div className="mob-score-med" style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, color: (gameStats?.completedSchools.length ?? 0) > 0 ? C.gold : C.sub, lineHeight: 1, marginTop: 4 }}>{(isReady || (gameStats?.completedSchools.length ?? 0) > 0) ? starterTotal.toFixed(1) : '—'}</div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.sub, marginTop: 4 }}>{myTeamName}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -4631,8 +4631,8 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
               )}
             </div>
 
-            {/* Projected pts */}
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: pick ? C.gold : C.surf3, flexShrink: 0, minWidth: 42, textAlign: 'right' }}>
+            {/* Pts — gold if actual score, gray if projected */}
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: pick ? (ep.isActual ? C.gold : C.sub) : C.surf3, flexShrink: 0, minWidth: 42, textAlign: 'right' }}>
               {pick ? pts : '—'}
             </div>
 
@@ -4707,8 +4707,8 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
                   />
                 </div>
 
-                {/* Pts */}
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: isSelected ? C.gold : C.sub, flexShrink: 0, minWidth: 42, textAlign: 'right' }}>
+                {/* Pts — gold if actual score, gray if projected */}
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: bep.isActual ? C.gold : C.sub, flexShrink: 0, minWidth: 42, textAlign: 'right' }}>
                   {pts}
                 </div>
               </div>

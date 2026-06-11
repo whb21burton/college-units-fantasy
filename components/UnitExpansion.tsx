@@ -111,19 +111,22 @@ export default function UnitExpansion({
           </tr>
         </thead>
         <tbody>
-          {weeks.map((wk: any) => {
-            const isUpcoming = wk.isUpcoming && !wk.completed && !wk.isBye;
-            const isFuture   = !wk.completed && !wk.isBye && !isUpcoming && wk.week > currentWeek;
+          {(() => {
+            // Only the first unplayed, non-BYE game gets the green highlight
+            const nextGameWeek = weeks.find((w: any) => !w.completed && !w.isBye && w.opponent)?.week ?? null;
+            return weeks.map((wk: any) => {
+            const isCurrentWeek = nextGameWeek !== null && wk.week === nextGameWeek;
+            const isFutureGame  = !wk.completed && !wk.isBye && wk.opponent && !isCurrentWeek;
 
-            // Upcoming week — green projected row
-            if (isUpcoming) {
+            // Current week only — subtle green left-border highlight, proj numbers in gray
+            if (isCurrentWeek) {
               const opp = wk.opponent;
               const oppRank = opp ? (unitType === 'DEF' ? (offRankMap[opp] ?? 50) : (defRankMap[opp] ?? 50)) : 50;
               const mult = odrMult(oppRank);
               const proj = avgFpts > 0 ? (avgFpts * mult).toFixed(2) : '—';
               const oppShort = opp ? (opp.length > 12 ? opp.slice(0, 12) + '…' : opp) : 'TBD';
               return (
-                <tr key={wk.week} style={{ outline: '2px solid rgba(21,198,120,.6)', outlineOffset: '-1px', background: 'rgba(21,198,120,.05)' }}>
+                <tr key={wk.week} style={{ background: 'rgba(21,198,120,.08)', borderLeft: '2px solid #15c678' }}>
                   <td style={{ ...tdBase, textAlign: 'left', color: '#15c678', fontWeight: 700 }}>{wk.week}</td>
                   <td style={{ ...tdBase, textAlign: 'left' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -131,16 +134,16 @@ export default function UnitExpansion({
                       <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: '#7eb8f7' }}>{opp ? (homeMap[school] ? 'vs ' : '@ ') + oppShort : 'TBD'}</span>
                     </div>
                   </td>
-                  <td style={{ ...tdBase, textAlign: 'right', color: '#15c678', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>{proj}</td>
-                  <td style={{ ...tdBase, textAlign: 'right', color: '#15c678', fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>×{mult.toFixed(1)}</td>
+                  <td style={{ ...tdBase, textAlign: 'right', color: '#7a90b0', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>{proj}</td>
+                  <td style={{ ...tdBase, textAlign: 'right', color: '#7a90b0', fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>×{mult.toFixed(1)}</td>
                   {summaryCols.map(c => <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#3e5470' }}>—</td>)}
                   <td style={{ ...tdBase, color: '#15c678', fontSize: 9, textAlign: 'right' }}>▶</td>
                 </tr>
               );
             }
 
-            // Future week — grey projected
-            if (isFuture) {
+            // Future weeks (not current) — dimmed, no green
+            if (isFutureGame) {
               const opp = wk.opponent;
               const oppRank = opp ? (unitType === 'DEF' ? (offRankMap[opp] ?? 50) : (defRankMap[opp] ?? 50)) : 50;
               const mult = odrMult(oppRank);
@@ -209,7 +212,7 @@ export default function UnitExpansion({
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10 }}>vs {oppShort}</span>
                     </div>
                   </td>
-                  <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
+                  <td style={{ ...tdBase, textAlign: 'right', color: '#f5a623', fontFamily: 'Anton,sans-serif', fontSize: 12 }}>
                     {(bd?.fpts ?? wk.fantasyPoints)?.toFixed(2) ?? '—'}
                   </td>
                   <td style={{ ...tdBase, textAlign: 'right', color: multColor, fontFamily: 'Oswald,sans-serif', fontWeight: 700 }}>
@@ -234,7 +237,7 @@ export default function UnitExpansion({
                               {cols.map(c => <th key={c.key} style={{ ...thStyle, textAlign: 'right' }}>{c.label}</th>)}
                               <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>PTS</th>
                               <th style={{ ...thStyle, textAlign: 'right', width: '10%' }}>MULT</th>
-                              <th style={{ ...thStyle, textAlign: 'right', width: '10%', color: '#15c678' }}>WPTS</th>
+                              <th style={{ ...thStyle, textAlign: 'right', width: '10%', color: '#f5a623' }}>WPTS</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -243,18 +246,18 @@ export default function UnitExpansion({
                                 <td style={{ ...tdBase, textAlign: 'left', color: '#7eb8f7', fontSize: 10 }}>{row.playerName ?? 'Team'}</td>
                                 <td style={{ ...tdBase, textAlign: 'left', color: '#4a5d7a', fontSize: 9 }}>{row.role}</td>
                                 {cols.map(c => <td key={c.key} style={{ ...tdBase, textAlign: 'right', color: '#7a90b0', fontSize: 10 }}>{row.stats?.[c.key] ?? '—'}</td>)}
-                                <td style={{ ...tdBase, textAlign: 'right', color: '#f0c94a', fontFamily: 'Anton,sans-serif', fontSize: 11 }}>{row.rawPts?.toFixed(2) ?? '—'}</td>
+                                <td style={{ ...tdBase, textAlign: 'right', color: '#7a90b0', fontFamily: 'Anton,sans-serif', fontSize: 11 }}>{row.rawPts?.toFixed(2) ?? '—'}</td>
                                 <td style={{ ...tdBase, textAlign: 'right', color: '#7a90b0', fontSize: 10 }}>×{(row.multiplier ?? 1).toFixed(2)}</td>
-                                <td style={{ ...tdBase, textAlign: 'right', color: '#15c678', fontFamily: 'Anton,sans-serif', fontSize: 11 }}>{row.weightedPts?.toFixed(2) ?? '—'}</td>
+                                <td style={{ ...tdBase, textAlign: 'right', color: '#f5a623', fontFamily: 'Anton,sans-serif', fontSize: 11 }}>{row.weightedPts?.toFixed(2) ?? '—'}</td>
                               </tr>
                             ))}
                             <tr style={{ borderTop: '1px solid rgba(245,166,35,.3)', background: 'rgba(0,0,0,.2)' }}>
                               <td colSpan={2 + cols.length} style={{ ...tdBase, textAlign: 'left', fontFamily: 'Oswald,sans-serif', fontSize: 9, color: '#f5a623', letterSpacing: 1, paddingTop: 8 }}>UNIT TOTAL</td>
                               <td style={{ ...tdBase, textAlign: 'right', paddingTop: 8 }} colSpan={3}>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                                  <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: '#15c678' }}>{bd?.unitTotal?.toFixed(2) ?? '—'} WPTS</span>
-                                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: '#f03a5a', letterSpacing: 0.5 }}>× ODR {(bd?.odrMult ?? wk.multiplier ?? 1).toFixed(2)}</span>
-                                  <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: '#f0c94a', borderTop: '1px solid rgba(245,166,35,.4)', paddingTop: 2 }}>{bd?.fpts?.toFixed(2) ?? '—'} FPTS</span>
+                                  <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: '#7a90b0' }}>{bd?.unitTotal?.toFixed(2) ?? '—'} WPTS</span>
+                                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: '#7a90b0', letterSpacing: 0.5 }}>× ODR {(bd?.odrMult ?? wk.multiplier ?? 1).toFixed(2)}</span>
+                                  <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: '#f5a623', borderTop: '1px solid rgba(245,166,35,.4)', paddingTop: 2 }}>{bd?.fpts?.toFixed(2) ?? '—'} FPTS</span>
                                 </div>
                               </td>
                             </tr>
@@ -266,7 +269,8 @@ export default function UnitExpansion({
                 )}
               </React.Fragment>
             );
-          })}
+          });
+          })()}
           {weeks.length === 0 && (
             <tr><td colSpan={4 + cols.length + 1} style={{ ...tdBase, textAlign: 'center', color: '#4a5d7a' }}>No games played yet</td></tr>
           )}
