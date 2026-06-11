@@ -458,14 +458,18 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
 
   async function sendChat() {
     if (!chatInput.trim() || !userId) return;
-    const msg = chatInput.trim();
+    const msg         = chatInput.trim();
+    const displayName = myMember?.team_name || userEmail.split('@')[0];
     setChatInput('');
-    await supabase.from('league_messages').insert({
+    console.log('[chat] sending — leagueId:', params.id, 'userId:', userId, 'displayName:', displayName);
+    const { error } = await supabase.from('league_messages').insert({
       league_id:    params.id,
       user_id:      userId,
-      display_name: myMember?.team_name || userEmail.split('@')[0],
+      display_name: displayName,
+      team_name:    displayName,   // kept for backward compat with old rows
       message:      msg,
     });
+    if (error) console.error('[chat] insert error:', error);
   }
 
   async function addCpu() {
