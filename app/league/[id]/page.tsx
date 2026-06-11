@@ -8,8 +8,17 @@ import { CONFERENCES } from '@/lib/playerPool';
 import DraftOrderEditor from '@/components/league/DraftOrderEditor';
 import { useWallet } from '@/context/WalletContext';
 import UnitExpansion from '@/components/UnitExpansion';
-function odrLabelFromMult(m: number) { return m >= 1.15 ? 'Elite' : m >= 1.05 ? 'Good' : m >= 0.95 ? 'Avg' : m >= 0.85 ? 'Weak' : 'Poor' }
-function getODRColor(m: number) { return m >= 1.15 ? '#15c678' : m >= 1.05 ? '#7fc97f' : m >= 0.95 ? '#f5a623' : m >= 0.85 ? '#f08030' : '#f03a5a' }
+function odrInfo(mult: number): { label: string; color: string } {
+  if (mult >= 1.25) return { label: 'Elite',   color: '#15c678' };
+  if (mult >= 1.15) return { label: 'Elite',   color: '#15c678' };
+  if (mult >= 1.05) return { label: 'Elite',   color: '#15c678' };
+  if (mult >= 0.95) return { label: 'Good',    color: '#7fc97f' };
+  if (mult >= 0.85) return { label: 'Good',    color: '#7fc97f' };
+  if (mult >= 0.75) return { label: 'Average', color: '#f5a623' };
+  if (mult >= 0.65) return { label: 'Average', color: '#f5a623' };
+  if (mult >= 0.55) return { label: 'Poor',    color: '#f03a5a' };
+  return                    { label: 'Poor',   color: '#f03a5a' };
+}
 
 type SettingsSection = 'league' | 'team' | 'roster' | 'draft' | 'danger';
 
@@ -128,7 +137,7 @@ function matchupProj(
 
 /** Higher multiplier = harder opponent (rank 1 defense/offense is toughest). */
 function multLabel(mult: number): { label: string; color: string } {
-  return { label: odrLabelFromMult(mult), color: getODRColor(mult) };
+  return odrInfo(mult);
 }
 
 /** Ranks all schools per unit type by projectedPoints desc (rank 1 = best). */
@@ -192,23 +201,27 @@ function PlayerInfoLines({
   seasonPts?: number;
   unitRankMaps?: Record<string, Record<string, number>>;
 }) {
-  const opponent   = ctx?.opponentMap[school] ?? null;
-  // School's rank within its own unit type; opponent's SP+ defensive rank
-  const schoolRank = unitRankMaps?.[unitType]?.[school] ?? null;
-  const defRank    = opponent ? findDefRank(opponent, ctx?.defRankMap) : null;
-  const defLabel   = defRank != null ? `#${defRank}` : 'FCS';
+  const opponent    = ctx?.opponentMap[school] ?? null;
+  const isDefUnit   = unitType === 'DEF';
+  // Own unit rank within pool; opponent's SP+ rank (DEF units face opponent offense)
+  const schoolRank  = unitRankMaps?.[unitType]?.[school] ?? null;
+  const oppRankNum  = opponent
+    ? findDefRank(opponent, isDefUnit ? ctx?.offRankMap : ctx?.defRankMap)
+    : null;
+  const oppRankStr  = oppRankNum != null ? `#${oppRankNum}` : 'FCS';
+  const oppRankType = isDefUnit ? 'OFF' : 'DEF';
 
   const storedMult = ctx?.multMap?.[school] ?? null;
   const mult = storedMult ?? 1.0;
-  const { label: diffLabel, color: diffColor } = multLabel(mult);
+  const { label: diffLabel, color: diffColor } = odrInfo(mult);
 
   // Team units show "School UnitType Unit"; QB/K show player name
   const name = playerName ? playerName : `${school} ${unitType} Unit`;
 
   // Line 2: show matchup if opponent found, BYE if no game this week, or just school
-  // Format: "Georgia Tech (RB #4) vs Colorado (DEF #18)"
+  // DEF: "Oklahoma (DEF #15) vs Michigan (OFF #8)"; others: "Alabama (QB #3) vs Georgia (DEF #1)"
   const matchupLine = opponent
-    ? `${school} (${unitType} ${schoolRank != null ? `#${schoolRank}` : 'NR'}) vs ${opponent} (DEF ${defLabel})`
+    ? `${school} (${unitType} ${schoolRank != null ? `#${schoolRank}` : 'NR'}) vs ${opponent} (${oppRankType} ${oppRankStr})`
     : ctx && !opponent
       ? `${school} · BYE`
       : school;

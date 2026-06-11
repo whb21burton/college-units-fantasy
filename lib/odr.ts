@@ -26,18 +26,6 @@ export const FBS_TEAMS = new Set([
   'UConn', 'UMass',
 ])
 
-export function odrLabel(rank: number): string {
-  if (rank <=   5) return 'Elite'
-  if (rank <=  10) return 'Hard'
-  if (rank <=  15) return 'Good'
-  if (rank <=  25) return 'Average'
-  if (rank <=  35) return 'Not Bad'
-  if (rank <=  50) return 'Bad'
-  if (rank <=  80) return 'Really Bad'
-  if (rank <= 100) return 'Weenie Hut Jr.'
-  return 'Super Weenie Hut Jr.'
-}
-
 export function odrMult(rank: number): number {
   if (rank <=   5) return 1.3
   if (rank <=  10) return 1.2
@@ -51,18 +39,27 @@ export function odrMult(rank: number): number {
   return 0.40                   // FCS/non-FBS
 }
 
-/** Derive a label directly from the stored multiplier value. */
+/** Single source of truth for ODR tier label + color from a multiplier value. */
+export function odrInfo(mult: number): { label: string; color: string } {
+  if (mult >= 1.25) return { label: 'Elite',   color: '#15c678' }
+  if (mult >= 1.15) return { label: 'Elite',   color: '#15c678' }
+  if (mult >= 1.05) return { label: 'Elite',   color: '#15c678' }
+  if (mult >= 0.95) return { label: 'Good',    color: '#7fc97f' }
+  if (mult >= 0.85) return { label: 'Good',    color: '#7fc97f' }
+  if (mult >= 0.75) return { label: 'Average', color: '#f5a623' }
+  if (mult >= 0.65) return { label: 'Average', color: '#f5a623' }
+  if (mult >= 0.55) return { label: 'Poor',    color: '#f03a5a' }
+  return                    { label: 'Poor',   color: '#f03a5a' }
+}
+
+export function odrLabel(rank: number): string {
+  return odrInfo(odrMult(rank)).label
+}
+
+/** Derive a label from a stored multiplier value. */
 export function odrLabelFromMult(mult: number | null | undefined): string {
   if (mult == null) return '—'
-  if (mult >= 1.3) return 'Elite'
-  if (mult >= 1.2) return 'Hard'
-  if (mult >= 1.1) return 'Good'
-  if (mult >= 1.0) return 'Average'
-  if (mult >= 0.9) return 'Not Bad'
-  if (mult >= 0.8) return 'Bad'
-  if (mult >= 0.7) return 'Really Bad'
-  if (mult >= 0.6) return 'Weenie Hut Jr.'
-  return 'Super Weenie Hut Jr.'
+  return odrInfo(mult).label
 }
 
 export function odrMultSafe(rank: number, school: string): number {
@@ -82,13 +79,5 @@ export function odrMultForUnit(
 
 export function getODRColor(mult: number | null | undefined): string {
   if (mult == null) return '#4a5d7a'
-  if (mult >= 1.3) return '#39ff14'   // Elite — bright highlighter green
-  if (mult >= 1.2) return '#90ee90'   // Hard — light green
-  if (mult >= 1.1) return '#228b22'   // Good — green
-  if (mult >= 1.0) return '#ffff00'   // Average — yellow
-  if (mult >= 0.9) return '#ff8c00'   // Not Bad — orange
-  if (mult >= 0.8) return '#ff4500'   // Bad — red/orange
-  if (mult >= 0.7) return '#cc0000'   // Really Bad — red
-  if (mult >= 0.6) return '#9400d3'   // Weenie Hut Jr. — purple
-  return '#ff69b4'                     // Super Weenie Hut Jr. — pink
+  return odrInfo(mult).color
 }
