@@ -4435,7 +4435,7 @@ function TeamSettingsModal({ leagueId, userId, currentName, currentLogoUrl, onCl
 
 function MatchupTab({ league, userId, members = [], currentWeek = 5 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
   const CURRENT_WEEK = currentWeek;
-  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(CURRENT_WEEK + 1, 15) : CURRENT_WEEK;
+  const defaultWeek  = CURRENT_WEEK;
 
   const [picks,         setPicks]         = useState<any[]>([]);
   const [pool,          setPool]          = useState<any[]>([]);
@@ -4658,7 +4658,7 @@ function canFillSlot(unitType: string, slotLabel: string): boolean {
 
 function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
   const CURRENT_WEEK = currentWeek;
-  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(CURRENT_WEEK + 1, 15) : CURRENT_WEEK;
+  const defaultWeek  = CURRENT_WEEK;
 
   const [myPicks,       setMyPicks]       = useState<any[]>([]);
   const [allPicks,      setAllPicks]      = useState<any[]>([]);
@@ -5103,7 +5103,7 @@ function getWeekMatchups(teams: any[], week: number): [any, any][] {
 function LeagueTab({ league, userId, members = [], currentWeek = 5 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
   type LView = 'matchups' | 'roster' | 'trade';
   const CURRENT_WEEK = currentWeek;
-  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(CURRENT_WEEK + 1, 15) : CURRENT_WEEK;
+  const defaultWeek  = CURRENT_WEEK;
 
   const [view,          setView]          = useState<LView>('matchups');
   const [selectedTeam,  setSelectedTeam]  = useState<any>(null);
