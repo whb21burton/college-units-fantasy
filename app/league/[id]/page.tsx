@@ -709,13 +709,13 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
             />
           )}
           {activeTab === 'matchup' && (
-            <MatchupTab league={league} userId={userId} />
+            <MatchupTab league={league} userId={userId} members={members} />
           )}
           {activeTab === 'team' && (
-            <TeamTab league={league} userId={userId} />
+            <TeamTab league={league} userId={userId} members={members} />
           )}
           {activeTab === 'league' && (
-            <LeagueTab league={league} userId={userId} />
+            <LeagueTab league={league} userId={userId} members={members} />
           )}
           {activeTab === 'trade' && (
             <TradeTab league={league} userId={userId} members={members} />
@@ -3330,9 +3330,7 @@ function TradeTab({ league, userId, members }: { league: any; userId: string | n
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = C.surf3}>
                   {/* Avatar + name + record */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: C.surf2, border: `2px solid ${C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.sub, flexShrink: 0 }}>
-                      {initial}
-                    </div>
+                    <TeamAvatar teamLogoUrl={members.find((m: any) => m.user_id === team.userId)?.team_logo_url} teamName={team.teamName} size={48} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {team.teamName}
@@ -4327,9 +4325,115 @@ function PlayoffTab({ league, userId }: { league: any; userId: string | null }) 
   );
 }
 
-function MatchupTab({ league, userId }: { league: any; userId: string | null }) {
-  const currentWeek  = league?.week ?? 1;
-  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(currentWeek + 1, 15) : currentWeek;
+/* ── Shared team avatar: shows logo image or initials fallback ── */
+function TeamAvatar({ teamLogoUrl, teamName, size = 48, isMine = false }: {
+  teamLogoUrl?: string | null; teamName: string; size?: number; isMine?: boolean;
+}) {
+  const initial = (teamName || '?').charAt(0).toUpperCase();
+  const border  = `2px solid ${isMine ? '#f0c94a' : C.surf3}`;
+  if (teamLogoUrl) {
+    return (
+      <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', border }}>
+        <img src={teamLogoUrl} alt={teamName} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+      </div>
+    );
+  }
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, background: isMine ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf2, border, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: Math.round(size * 0.35), color: isMine ? C.bg : C.sub }}>
+      {initial}
+    </div>
+  );
+}
+
+/* ── Team settings modal (name + logo upload) ── */
+function TeamSettingsModal({ leagueId, userId, currentName, currentLogoUrl, onClose, onSaved }: {
+  leagueId: string; userId: string; currentName: string; currentLogoUrl?: string | null;
+  onClose: () => void; onSaved: (name: string, logoUrl: string | null) => void;
+}) {
+  const [name,      setName]      = useState(currentName);
+  const [logoUrl,   setLogoUrl]   = useState<string | null>(currentLogoUrl ?? null);
+  const [preview,   setPreview]   = useState<string | null>(currentLogoUrl ?? null);
+  const [uploading, setUploading] = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const [err,       setErr]       = useState('');
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true); setErr('');
+    try {
+      const ext  = file.name.split('.').pop() ?? 'jpg';
+      const path = `${userId}/${leagueId}-${Date.now()}.${ext}`;
+      const { data, error } = await supabase.storage.from('team-logos').upload(path, file, { contentType: file.type, upsert: true });
+      if (error) { setErr(error.message); return; }
+      const { data: { publicUrl } } = supabase.storage.from('team-logos').getPublicUrl(data.path);
+      setLogoUrl(publicUrl); setPreview(publicUrl);
+    } finally { setUploading(false); }
+  }
+
+  async function save() {
+    if (!name.trim()) { setErr('Team name required'); return; }
+    setSaving(true); setErr('');
+    try {
+      const res = await fetch(`/api/leagues/${leagueId}/members/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ team_name: name.trim(), team_logo_url: logoUrl }),
+      });
+      if (!res.ok) { const d = await res.json(); setErr(d.error ?? 'Save failed'); return; }
+      onSaved(name.trim(), logoUrl);
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 16, padding: '28px 24px', maxWidth: 380, width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 1, color: C.text, textTransform: 'uppercase' }}>Team Settings</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 18, padding: '0 4px', lineHeight: 1 }}>✕</button>
+        </div>
+        {/* Avatar preview + upload */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', overflow: 'hidden', border: `2px solid ${C.surf3}`, flexShrink: 0, background: C.surf2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {preview
+              ? <img src={preview} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.sub }}>{(name || '?').charAt(0).toUpperCase()}</span>
+            }
+          </div>
+          <div>
+            <label style={{ display: 'inline-block', padding: '7px 14px', background: 'rgba(212,168,40,.1)', border: `1px solid ${C.gold}55`, borderRadius: 8, cursor: uploading ? 'default' : 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: uploading ? C.muted : C.gold }}>
+              {uploading ? 'Uploading…' : 'Upload Logo'}
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} disabled={uploading} />
+            </label>
+            {preview && (
+              <button onClick={() => { setLogoUrl(null); setPreview(null); }}
+                style={{ display: 'block', marginTop: 6, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 0.5, padding: 0 }}>
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+        {/* Team name input */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.muted, marginBottom: 6, textTransform: 'uppercase' }}>Team Name</div>
+          <input value={name} onChange={e => setName(e.target.value)} maxLength={32}
+            style={{ width: '100%', padding: '9px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+        {err && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red, marginBottom: 12 }}>{err}</div>}
+        <button onClick={save} disabled={saving || uploading}
+          style={{ width: '100%', padding: '12px', background: saving ? C.surf3 : C.gold, border: 'none', borderRadius: 8, cursor: saving ? 'default' : 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: saving ? C.muted : C.bg, textTransform: 'uppercase', transition: 'all .15s' }}>
+          {saving ? 'Saving…' : 'Save Changes'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MatchupTab({ league, userId, members = [] }: { league: any; userId: string | null; members?: any[] }) {
+  const CURRENT_WEEK = league?.week ?? 1;
+  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(CURRENT_WEEK + 1, 15) : CURRENT_WEEK;
 
   const [picks,         setPicks]         = useState<any[]>([]);
   const [pool,          setPool]          = useState<any[]>([]);
@@ -4550,9 +4654,9 @@ function canFillSlot(unitType: string, slotLabel: string): boolean {
   return (SLOT_ELIGIBLE[slotLabel] ?? []).includes(unitType);
 }
 
-function TeamTab({ league, userId }: { league: any; userId: string | null }) {
-  const currentWeek  = league?.week ?? 1;
-  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(currentWeek + 1, 15) : currentWeek;
+function TeamTab({ league, userId, members = [] }: { league: any; userId: string | null; members?: any[] }) {
+  const CURRENT_WEEK = league?.week ?? 1;
+  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(CURRENT_WEEK + 1, 15) : CURRENT_WEEK;
 
   const [myPicks,       setMyPicks]       = useState<any[]>([]);
   const [allPicks,      setAllPicks]      = useState<any[]>([]);
@@ -4570,6 +4674,8 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
   const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
   const [logos,         setLogos]         = useState<Record<string, string>>({});
   const [isReady,       setIsReady]       = useState(false);
+  const [showSettings,  setShowSettings]  = useState(false);
+  const [teamLogoUrl,   setTeamLogoUrl]   = useState<string | null>(null);
 
   const TOTAL_WEEKS    = 14;
   const PLAYOFF_START  = 12;
@@ -4602,7 +4708,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
       try {
         const [{ data: memberData }, { data: allPicksData }] = await Promise.all([
           supabase.from('league_members')
-            .select('id, roster, draft_slot, team_name')
+            .select('id, roster, draft_slot, team_name, team_logo_url')
             .eq('league_id', league.id)
             .eq('user_id', userId)
             .single(),
@@ -4618,6 +4724,7 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
           setMemberId(memberData.id);
           if (memberData.draft_slot) { slot = memberData.draft_slot; setMemberSlot(slot); }
           if (memberData.team_name) setMemberName(memberData.team_name);
+          if (memberData.team_logo_url) setTeamLogoUrl(memberData.team_logo_url);
           const r = memberData.roster;
           if (r && typeof r === 'object' && !Array.isArray(r) && r.lineups) {
             setLineups(r.lineups);
@@ -4756,28 +4863,44 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         })}
       </div>
 
-      {/* Team score header */}
+      {/* Team header: logo + name + gear */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        display: 'flex', alignItems: 'center', gap: 14,
         background: 'linear-gradient(135deg, #0e1f35 0%, #0b1624 100%)',
         border: '1px solid ' + C.surf3, borderRadius: 14,
         padding: '16px 20px', marginBottom: 20,
         boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
       }}>
-        <div>
-          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>{gameStats?.completedSchools.length ? 'Actual' : 'Projected'} · Starters Only</div>
-          <div className="mob-score-med" style={{ fontFamily: 'Anton,sans-serif', fontSize: 32, color: (gameStats?.completedSchools.length ?? 0) > 0 ? C.gold : C.sub, lineHeight: 1, marginTop: 4 }}>{(isReady || (gameStats?.completedSchools.length ?? 0) > 0) ? starterTotal.toFixed(1) : '—'}</div>
-          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.sub, marginTop: 4 }}>{myTeamName}</div>
+        <TeamAvatar teamLogoUrl={teamLogoUrl} teamName={myTeamName} size={60} isMine />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{myTeamName}</div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginTop: 3 }}>{gameStats?.completedSchools.length ? 'Actual' : 'Projected'} · Starters Only</div>
+          <div className="mob-score-med" style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: (gameStats?.completedSchools.length ?? 0) > 0 ? C.gold : C.sub, lineHeight: 1, marginTop: 3 }}>{(isReady || (gameStats?.completedSchools.length ?? 0) > 0) ? starterTotal.toFixed(1) : '—'}</div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{
-            fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 600,
-            letterSpacing: 1.5, color: C.sub, textTransform: 'uppercase',
-            background: C.surf3, padding: '4px 10px', borderRadius: 20,
-          }}>Week {week}</div>
-          {saving && <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, marginTop: 8 }}>Saving…</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+          <button onClick={() => setShowSettings(true)}
+            title="Team Settings"
+            style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, cursor: 'pointer', padding: '6px 10px', fontSize: 16, color: C.sub, lineHeight: 1 }}>
+            ⚙
+          </button>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 600, letterSpacing: 1.5, color: C.sub, textTransform: 'uppercase', background: C.surf3, padding: '4px 10px', borderRadius: 20 }}>Week {week}</div>
+          {saving && <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub }}>Saving…</div>}
         </div>
       </div>
+      {showSettings && league?.id && userId && (
+        <TeamSettingsModal
+          leagueId={league.id}
+          userId={userId}
+          currentName={myTeamName}
+          currentLogoUrl={teamLogoUrl}
+          onClose={() => setShowSettings(false)}
+          onSaved={(newName, newLogoUrl) => {
+            setMemberName(newName);
+            setTeamLogoUrl(newLogoUrl);
+            setShowSettings(false);
+          }}
+        />
+      )}
 
       {/* Swap hint */}
       {selectedBench && (
@@ -4975,10 +5098,10 @@ function getWeekMatchups(teams: any[], week: number): [any, any][] {
   return result;
 }
 
-function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
+function LeagueTab({ league, userId, members = [] }: { league: any; userId: string | null; members?: any[] }) {
   type LView = 'matchups' | 'roster' | 'trade';
-  const currentWeek  = league?.week ?? 1;
-  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(currentWeek + 1, 15) : currentWeek;
+  const CURRENT_WEEK = league?.week ?? 1;
+  const defaultWeek  = new Date().getDay() >= 2 ? Math.min(CURRENT_WEEK + 1, 15) : CURRENT_WEEK;
 
   const [view,          setView]          = useState<LView>('matchups');
   const [selectedTeam,  setSelectedTeam]  = useState<any>(null);
@@ -5039,6 +5162,10 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   }, [league?.id, userId]);
 
   const unitRankMaps = useMemo(() => buildPoolRankMaps(pool), [pool]);
+
+  function getMemberLogo(teamUserId: string): string | null {
+    return members.find((m: any) => m.user_id === teamUserId)?.team_logo_url ?? null;
+  }
 
   function getTeamPicks(team: any): any[] {
     if (numTeams === 0) return [];
@@ -5165,9 +5292,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                   {/* Team A */}
                   <button onClick={() => { setSelectedTeam(teamA); setSelectedPlayer(null); setView('roster'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' as const }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 48, height: 48, borderRadius: '50%', flexShrink: 0, background: isMeA ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf2, border: `2px solid ${isMeA ? '#f0c94a' : C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 17, color: isMeA ? C.bg : C.sub }}>
-                        {(teamA.teamName || '?').charAt(0).toUpperCase()}
-                      </div>
+                      <TeamAvatar teamLogoUrl={getMemberLogo(teamA.userId)} teamName={teamA.teamName} size={48} isMine={isMeA} />
                       <div>
                         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 2 }}>@{teamA.teamName}</div>
                         <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: isMeA ? C.gold : C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80 }}>{teamA.teamName}</div>
@@ -5183,9 +5308,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
                         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 2 }}>@{teamB.teamName}</div>
                         <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: isMeB ? C.gold : C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80 }}>{teamB.teamName}</div>
                       </div>
-                      <div style={{ width: 48, height: 48, borderRadius: '50%', flexShrink: 0, background: isMeB ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf2, border: `2px solid ${isMeB ? '#f0c94a' : C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 17, color: isMeB ? C.bg : C.sub }}>
-                        {(teamB.teamName || '?').charAt(0).toUpperCase()}
-                      </div>
+                      <TeamAvatar teamLogoUrl={getMemberLogo(teamB.userId)} teamName={teamB.teamName} size={48} isMine={isMeB} />
                     </div>
                   </button>
                 </div>
