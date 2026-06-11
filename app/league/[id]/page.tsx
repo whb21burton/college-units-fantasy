@@ -2020,22 +2020,8 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
   const rankLabels = (ut: string, idx: number) =>
     ut === 'QB' ? 'STARTER' : `${ut}${idx + 1}`;
 
-  // Canonical projection: avgFpts × odrMult(defRankMap[opponent])
-  const proj = (() => {
-    const avgF = (player.avgFpts ?? player.avgPerWeek ?? 0) > 0
-      ? (player.avgFpts ?? player.avgPerWeek ?? 0)
-      : liveProj(player);
-    if (!matchupCtx?.opponentMap) return avgF;
-    const opp = matchupCtx.opponentMap[player.school];
-    if (!opp) return avgF;
-    const oppRank = player.unitType === 'DEF'
-      ? (matchupCtx.offRankMap?.[opp] ?? 50)
-      : (matchupCtx.defRankMap?.[opp] ?? 50);
-    const mult = oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2 : oppRank <= 15 ? 1.1
-      : oppRank <= 25 ? 1.0 : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
-      : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.50;
-    return avgF * mult;
-  })();
+  // Canonical projection: avgFpts × rankMult(defRankMap[opponent]) via fppg
+  const proj = fppg(player, matchupCtx) || liveProj(player);
 
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
@@ -2073,7 +2059,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.gold, lineHeight: 1 }}>{proj.toFixed(1)}</div>
-          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, marginBottom: 8, marginTop: 2, letterSpacing: 1, textTransform: 'uppercase' }}>pts/wk proj</div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 500, color: C.muted, marginBottom: 8, marginTop: 2, letterSpacing: 1, textTransform: 'uppercase' }}>proj</div>
           {canAdd && (
             <button onClick={onAdd} style={{
               padding: '6px 16px', background: 'rgba(21,198,120,.12)',
@@ -2348,7 +2334,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
   const [toast,       setToast]       = useState('');
   const [loading,     setLoading]     = useState(true);
   const [logos,       setLogos]       = useState<Record<string, string>>({});
-  const [gameCtx,     setGameCtx]     = useState<{ opponentMap: Record<string,string>; gameTimeMap: Record<string,string>; homeMap: Record<string,boolean>; rankMap: Record<string,number> } | null>(null);
+  const [gameCtx,     setGameCtx]     = useState<{ opponentMap: Record<string,string>; gameTimeMap: Record<string,string>; homeMap: Record<string,boolean>; rankMap: Record<string,number>; defRankMap: Record<string,number>; offRankMap: Record<string,number> } | null>(null);
   // Derive which schools have already kicked off from gameCtx data
   // gameCtx.gameTimeMap has display strings — we need raw kickoff times.
   // We'll fetch them fresh in confirmAdd via the API instead.
@@ -2789,17 +2775,25 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
               )}
             </div>
 
-            {/* Avg/wk */}
-            <div style={{ textAlign: 'center', padding: '0 12px', flexShrink: 0 }}>
-              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold }}>
-                {(p.avgPerWeek ?? 0) > 0
-                  ? p.avgPerWeek!.toFixed(1)
-                  : liveProj(p).toFixed(1)}
-              </div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>
-                avg/wk
-              </div>
-            </div>
+            {/* Projected pts — avgFpts × odrMult(defRankMap[opp]) */}
+            {(() => {
+              const avgF    = p.avgFpts ?? p.avgPerWeek ?? 0;
+              const opp     = gameCtx?.opponentMap?.[p.school] ?? null;
+              const oppRank = (opp && gameCtx)
+                ? (p.unitType === 'DEF' ? (gameCtx.offRankMap[opp] ?? 50) : (gameCtx.defRankMap[opp] ?? 50))
+                : 50;
+              const wkProj  = avgF > 0 ? avgF * (opp ? rankMult(oppRank) : 1.0) : liveProj(p);
+              return (
+                <div style={{ textAlign: 'center', padding: '0 12px', flexShrink: 0 }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.gold }}>
+                    {wkProj.toFixed(1)}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>
+                    proj
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Action */}
             <div style={{ padding: '0 10px 0 4px', flexShrink: 0 }}>
