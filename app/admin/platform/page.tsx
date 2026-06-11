@@ -1576,6 +1576,59 @@ function SimulationRunner() {
   )
 }
 
+function CurrentWeekControl() {
+  const supabase = createClientComponentClient()
+  const [week, setWeek] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    supabase.from('platform_settings').select('value').eq('key', 'current_week').single()
+      .then(({ data }) => { if (data?.value) setWeek(parseInt(data.value)) })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function save(newWeek: number) {
+    setSaving(true)
+    await supabase.from('platform_settings')
+      .upsert({ key: 'current_week', value: String(newWeek), updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    setWeek(newWeek)
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  return (
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+        📅 Current Week
+      </div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 16, letterSpacing: 0.5 }}>
+        Sets the default week shown in seasonal league tabs (Team, Matchup, League). Advance each Tuesday after games complete.
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4 }}>
+          {Array.from({ length: 15 }, (_, i) => i + 1).map(w => (
+            <button key={w} onClick={() => save(w)} disabled={saving}
+              style={{
+                width: 38, height: 38, borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer',
+                border: `2px solid ${week === w ? C.gold : C.surf3}`,
+                background: week === w ? 'rgba(245,166,35,.15)' : C.surf2,
+                color: week === w ? C.gold : C.sub,
+                fontFamily: 'Anton,sans-serif', fontSize: 13,
+              }}>
+              {w}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: saved ? C.green : C.muted }}>
+          {saving ? 'Saving…' : saved ? `✓ Set to Week ${week}` : week ? `Current: Week ${week}` : 'Loading…'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PlatformManagerPage() {
   const router = useRouter()
   const supabase = createClientComponentClient()
@@ -1603,6 +1656,7 @@ export default function PlatformManagerPage() {
           </div>
         </div>
 
+        <CurrentWeekControl />
         <PageControls />
         <LiveContestsPanel />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 20 }}>

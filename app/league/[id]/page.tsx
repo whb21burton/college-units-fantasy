@@ -333,6 +333,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const [loading,      setLoading]      = useState(true);
   const [copied,       setCopied]       = useState(false);
   const [activeTab,    setActiveTab]    = useState<Tab>('draft');
+  const [currentWeek,  setCurrentWeek]  = useState(5);
   const [showSettings,     setShowSettings]     = useState(false);
   const [showCommSettings, setShowCommSettings] = useState(false);
   const [chatMessages,  setChatMessages]  = useState<any[]>([]);
@@ -346,19 +347,20 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   async function loadData(uid?: string) {
     const resolvedUid = uid ?? userId;
 
-    const { data: leagueData } = await supabase
-      .from('leagues').select('*').eq('id', params.id).single();
+    const [{ data: leagueData }, { data: weekSetting }, { data: membersData }, { data: msgs }] = await Promise.all([
+      supabase.from('leagues').select('*').eq('id', params.id).single(),
+      supabase.from('platform_settings').select('value').eq('key', 'current_week').single(),
+      supabase.from('league_members').select('*').eq('league_id', params.id).order('draft_slot', { ascending: true }),
+      supabase.from('league_messages').select('*').eq('league_id', params.id).order('created_at', { ascending: true }).limit(100),
+    ]);
+
     if (!leagueData) { if (!isEmbed) router.push('/'); return; }
     setLeague(leagueData);
 
-    const { data: membersData } = await supabase
-      .from('league_members').select('*').eq('league_id', params.id)
-      .order('draft_slot', { ascending: true });
-    setMembers(membersData || []);
+    const platformWeek = parseInt((weekSetting as any)?.value ?? '5');
+    if (!isNaN(platformWeek) && platformWeek > 0) setCurrentWeek(platformWeek);
 
-    const { data: msgs } = await supabase
-      .from('league_messages').select('*').eq('league_id', params.id)
-      .order('created_at', { ascending: true }).limit(100);
+    setMembers(membersData || []);
     setChatMessages(msgs || []);
   }
 
@@ -709,13 +711,13 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
             />
           )}
           {activeTab === 'matchup' && (
-            <MatchupTab league={league} userId={userId} members={members} />
+            <MatchupTab league={league} userId={userId} members={members} currentWeek={currentWeek} />
           )}
           {activeTab === 'team' && (
-            <TeamTab league={league} userId={userId} members={members} />
+            <TeamTab league={league} userId={userId} members={members} currentWeek={currentWeek} />
           )}
           {activeTab === 'league' && (
-            <LeagueTab league={league} userId={userId} members={members} />
+            <LeagueTab league={league} userId={userId} members={members} currentWeek={currentWeek} />
           )}
           {activeTab === 'trade' && (
             <TradeTab league={league} userId={userId} members={members} />
@@ -4431,8 +4433,8 @@ function TeamSettingsModal({ leagueId, userId, currentName, currentLogoUrl, onCl
   );
 }
 
-function MatchupTab({ league, userId, members = [] }: { league: any; userId: string | null; members?: any[] }) {
-  const CURRENT_WEEK = league?.week ?? 1;
+function MatchupTab({ league, userId, members = [], currentWeek = 5 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
+  const CURRENT_WEEK = currentWeek;
   const defaultWeek  = new Date().getDay() >= 2 ? Math.min(CURRENT_WEEK + 1, 15) : CURRENT_WEEK;
 
   const [picks,         setPicks]         = useState<any[]>([]);
@@ -4654,8 +4656,8 @@ function canFillSlot(unitType: string, slotLabel: string): boolean {
   return (SLOT_ELIGIBLE[slotLabel] ?? []).includes(unitType);
 }
 
-function TeamTab({ league, userId, members = [] }: { league: any; userId: string | null; members?: any[] }) {
-  const CURRENT_WEEK = league?.week ?? 1;
+function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
+  const CURRENT_WEEK = currentWeek;
   const defaultWeek  = new Date().getDay() >= 2 ? Math.min(CURRENT_WEEK + 1, 15) : CURRENT_WEEK;
 
   const [myPicks,       setMyPicks]       = useState<any[]>([]);
@@ -5098,9 +5100,9 @@ function getWeekMatchups(teams: any[], week: number): [any, any][] {
   return result;
 }
 
-function LeagueTab({ league, userId, members = [] }: { league: any; userId: string | null; members?: any[] }) {
+function LeagueTab({ league, userId, members = [], currentWeek = 5 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
   type LView = 'matchups' | 'roster' | 'trade';
-  const CURRENT_WEEK = league?.week ?? 1;
+  const CURRENT_WEEK = currentWeek;
   const defaultWeek  = new Date().getDay() >= 2 ? Math.min(CURRENT_WEEK + 1, 15) : CURRENT_WEEK;
 
   const [view,          setView]          = useState<LView>('matchups');
