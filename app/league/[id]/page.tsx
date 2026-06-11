@@ -46,6 +46,26 @@ function poolUrl(unitType: string, allowedSchools?: string[] | null): string {
   return `/api/player-pool${qs ? '?' + qs : ''}`;
 }
 
+// Module-level projection cache: key = `${school}||${unitType}`
+// Populated only once both pool and matchupCtx are ready; prevents re-render flashing.
+const projCache = new Map<string, number>();
+
+/** Canonical per-week projection: avgFpts × rankMult(defRankMap[opp]).
+ *  Returns 0 if unit or ctx not ready — callers treat 0 as "not loaded yet". */
+function fppg(unit: any, ctx: MatchupCtx): number {
+  if (!unit || !ctx) return 0;
+  const key = `${unit.school}||${unit.unitType}`;
+  if (projCache.has(key)) return projCache.get(key)!;
+  const avgF = (unit.avgFpts ?? unit.avgPerWeek ?? 0) as number;
+  const opp  = ctx.opponentMap[unit.school] ?? null;
+  const rank = opp
+    ? (unit.unitType === 'DEF' ? (ctx.offRankMap[opp] ?? 50) : (ctx.defRankMap[opp] ?? 50))
+    : 50;
+  const pts  = avgF * (opp ? rankMult(rank) : 1.0);
+  projCache.set(key, pts);
+  return pts;
+}
+
 type MatchupCtx = {
   opponentMap: Record<string, string>;
   rankMap:     Record<string, number>; // Elo rank (display only)
@@ -225,13 +245,16 @@ function effectivePts(
   ctx: MatchupCtx, gs: GameStats,
   playerData?: any
 ): { pts: number; isActual: boolean; base: number; storedMult: number | null; actual: number; projected: number; isPlayed: boolean } {
-  const mult0    = ctx?.multMap?.[school] ?? 1.0;
   const projBase = playerData ? liveProj(playerData) : weeklyProj(seasonPts);
-  const projPts  = projBase * mult0;
-
   const opponent = ctx?.opponentMap[school] ?? null;
   // BYE week — no game, no points
   if (ctx && !opponent) return { pts: 0, isActual: false, base: 0, storedMult: null, actual: 0, projected: 0, isPlayed: false };
+
+  // Use defRankMap-based multiplier (same formula as UnitExpansion) for consistent projections
+  const projRank = opponent && ctx
+    ? (unitType === 'DEF' ? (ctx.offRankMap[opponent] ?? 50) : (ctx.defRankMap[opponent] ?? 50))
+    : 50;
+  const projPts = opponent ? projBase * rankMult(projRank) : projBase;
 
   // schoolPoints stores unit_QB (raw base before ODR multiplier).
   // Actual FPTS = base × game_mult, matching what the sync job writes to unit_QB_fpts.
@@ -974,21 +997,10 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
   }
 
   if (lineupSubmitted && picks && picks.length > 0) {
-    const totalProj = picks.reduce((sum: number, pick: any) => {
-      const pSchool = pick.player_data?.school;
-      const pType   = pick.player_data?.unitType ?? '';
-      const pOpp    = matchupCtx?.opponentMap?.[pSchool];
-      const pRank   = pType === 'DEF'
-        ? (matchupCtx?.offRankMap?.[pOpp] ?? 50)
-        : (matchupCtx?.defRankMap?.[pOpp] ?? 50);
-      const pMult   = !pOpp ? 1.0
-        : pRank <= 5 ? 1.3 : pRank <= 10 ? 1.2 : pRank <= 15 ? 1.1
-        : pRank <= 25 ? 1.0 : pRank <= 35 ? 0.9 : pRank <= 50 ? 0.8
-        : pRank <= 80 ? 0.7 : pRank <= 100 ? 0.6 : 0.50;
-      const freshUnit = pool.find((p: any) => p.school === pSchool && p.unitType === pType);
-      const pAvgF = freshUnit?.avgFpts ?? pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0;
-      return sum + pAvgF * pMult;
-    }, 0);
+    const totalProj = (pool.length > 0 && matchupCtx) ? picks.reduce((sum: number, pick: any) => {
+      const freshUnit = pool.find((p: any) => p.school === pick.player_data?.school && p.unitType === pick.player_data?.unitType);
+      return sum + fppg(freshUnit, matchupCtx);
+    }, 0) : 0;
     return (
       <div style={{ maxWidth: 560 }}>
         {entryHeader}
@@ -1023,17 +1035,8 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
             const game = scheduleMap[school];
             const bdKey = `${school}-${unitType}`;
             const isExpanded = expandedPick === bdKey;
-            const opp      = matchupCtx?.opponentMap?.[school];
-            const oppRank  = unitType === 'DEF'
-              ? (matchupCtx?.offRankMap?.[opp] ?? 50)
-              : (matchupCtx?.defRankMap?.[opp] ?? 50);
-            const gameMult = !opp ? 1.0
-              : oppRank <= 5 ? 1.3 : oppRank <= 10 ? 1.2 : oppRank <= 15 ? 1.1
-              : oppRank <= 25 ? 1.0 : oppRank <= 35 ? 0.9 : oppRank <= 50 ? 0.8
-              : oppRank <= 80 ? 0.7 : oppRank <= 100 ? 0.6 : 0.50;
-            const freshUnit = pool.find((p: any) => p.school === school && p.unitType === unitType);
-            const avgF      = freshUnit?.avgFpts ?? pick.player_data?.avgFpts ?? pick.player_data?.avgPerWeek ?? 0;
-            const proj      = avgF * gameMult;
+            const freshUnit = pool.length > 0 ? pool.find((p: any) => p.school === school && p.unitType === unitType) : null;
+            const proj      = (freshUnit && matchupCtx) ? fppg(freshUnit, matchupCtx) : 0;
             return (
               <React.Fragment key={i}>
                 <div onClick={() => setExpandedPick(isExpanded ? null : bdKey)}
@@ -4105,6 +4108,7 @@ function MatchupTab({ league, userId }: { league: any; userId: string | null }) 
   }, [league?.id]);
 
   useEffect(() => {
+    projCache.clear();
     setGameStats(null);
     fetch(`/api/matchup-context?week=${week}&season=2025`)
       .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
@@ -4733,6 +4737,7 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
   }, []);
 
   useEffect(() => {
+    projCache.clear();
     setGameStats(null);
     fetch(`/api/matchup-context?week=${week}&season=2025`)
       .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
@@ -4860,45 +4865,81 @@ function LeagueTab({ league, userId }: { league: any; userId: string | null }) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {matchups.map(([teamA, teamB], i) => {
-            const totA = assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
-            const totB = assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
+            // Only compute totals when matchupCtx is ready to avoid showing stale numbers
+            const totA = matchupCtx ? assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0) : 0;
+            const totB = matchupCtx ? assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0) : 0;
             const isMeA = teamA.userId === userId;
             const isMeB = teamB.userId === userId;
+            const isMyMatchup = isMeA || isMeB;
             const statusText = gameStats ? 'FINAL' : `WK ${week}`;
+            const sum = totA + totB;
+            const winPctA = sum > 0 ? totA / sum : 0.5;
+            const winPctB = sum > 0 ? totB / sum : 0.5;
+            const aWins = totA >= totB;
+            const hasScores = matchupCtx && (totA > 0 || totB > 0);
+            const displayA = matchupCtx ? totA.toFixed(1) : '—';
+            const displayB = matchupCtx ? totB.toFixed(1) : '—';
             return (
-              <div key={i} style={{ background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 12, padding: '14px 16px' }}>
+              <div key={i} style={{ background: '#0c1422', border: `1px solid ${isMyMatchup ? 'rgba(212,168,40,.35)' : '#1a2b40'}`, borderRadius: 12, padding: '14px 16px' }}>
                 {/* Status */}
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
                   {statusText}
                 </div>
-                {/* Teams grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 28px 1fr', alignItems: 'center', gap: 6 }}>
+                {/* Row 1: Avatars + usernames + team names */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                   {/* Team A */}
                   <button onClick={() => { setSelectedTeam(teamA); setSelectedPlayer(null); setView('roster'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' as const }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: isMeA ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, color: isMeA ? C.bg : C.sub, flexShrink: 0 }}>
+                      <div style={{ width: 48, height: 48, borderRadius: '50%', flexShrink: 0, background: isMeA ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf2, border: `2px solid ${isMeA ? '#f0c94a' : C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 17, color: isMeA ? C.bg : C.sub }}>
                         {(teamA.teamName || '?').charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isMeA ? C.gold : C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 90 }}>{teamA.teamName}</div>
-                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: totA > 0 ? C.text : C.muted, lineHeight: 1.2 }}>{totA > 0 ? totA.toFixed(1) : '—'}</div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 2 }}>@{teamA.teamName}</div>
+                        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: isMeA ? C.gold : C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80 }}>{teamA.teamName}</div>
                       </div>
                     </div>
                   </button>
-                  <div style={{ textAlign: 'center', fontFamily: 'Anton,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted }}>VS</div>
+                  {/* VS badge */}
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, background: C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 8, letterSpacing: 1, color: C.muted }}>VS</div>
                   {/* Team B */}
-                  <button onClick={() => { setSelectedTeam(teamB); setSelectedPlayer(null); setView('roster'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'right' as const, width: '100%' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setSelectedTeam(teamB); setSelectedPlayer(null); setView('roster'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'right' as const }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
                       <div style={{ textAlign: 'right' as const }}>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isMeB ? C.gold : C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 90 }}>{teamB.teamName}</div>
-                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: totB > 0 ? C.text : C.muted, lineHeight: 1.2 }}>{totB > 0 ? totB.toFixed(1) : '—'}</div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 2 }}>@{teamB.teamName}</div>
+                        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: isMeB ? C.gold : C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80 }}>{teamB.teamName}</div>
                       </div>
-                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: isMeB ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, color: isMeB ? C.bg : C.sub, flexShrink: 0 }}>
+                      <div style={{ width: 48, height: 48, borderRadius: '50%', flexShrink: 0, background: isMeB ? 'linear-gradient(135deg,#d4a828,#f0c94a)' : C.surf2, border: `2px solid ${isMeB ? '#f0c94a' : C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 17, color: isMeB ? C.bg : C.sub }}>
                         {(teamB.teamName || '?').charAt(0).toUpperCase()}
                       </div>
                     </div>
                   </button>
                 </div>
+                {/* Row 2: Large scores */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, marginBottom: 10 }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: C.text, minWidth: 56, textAlign: 'right' as const }}>{displayA}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.muted }}>PTS</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: C.text, minWidth: 56, textAlign: 'left' as const }}>{displayB}</div>
+                </div>
+                {/* Row 3: Win probability bars */}
+                {hasScores && (
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                    {/* Team A: fills left-to-right */}
+                    <div style={{ flex: 1, height: 6, background: C.surf3, borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.round(winPctA * 100)}%`, height: '100%', background: aWins ? C.green : C.red, borderRadius: 3 }} />
+                    </div>
+                    {/* Team B: fills right-to-left */}
+                    <div style={{ flex: 1, height: 6, background: C.surf3, borderRadius: 3, overflow: 'hidden', display: 'flex', justifyContent: 'flex-end' }}>
+                      <div style={{ width: `${Math.round(winPctB * 100)}%`, height: '100%', background: !aWins ? C.green : C.red, borderRadius: 3 }} />
+                    </div>
+                  </div>
+                )}
+                {/* Row 4: W-L record + win% */}
+                {hasScores && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 0.5 }}>0-0 · {Math.round(winPctA * 100)}%</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 0.5 }}>{Math.round(winPctB * 100)}% · 0-0</div>
+                  </div>
+                )}
               </div>
             );
           })}
