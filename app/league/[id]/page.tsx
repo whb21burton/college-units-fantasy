@@ -4672,7 +4672,8 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
   const [memberId,      setMemberId]      = useState<string | null>(null);
   const [memberSlot,    setMemberSlot]    = useState<number | null>(null);
   const [memberName,    setMemberName]    = useState<string>('');
-  const [selectedBench, setSelectedBench] = useState<any | null>(null);
+  const [selectedBench,   setSelectedBench]   = useState<any | null>(null);
+  const [selectedStarter, setSelectedStarter] = useState<number | null>(null);
   const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
   const [logos,         setLogos]         = useState<Record<string, string>>({});
   const [isReady,       setIsReady]       = useState(false);
@@ -4788,23 +4789,27 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
     bench    = r.bench;
   }
 
-  const starterTotal = starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
-  const projTotal    = isReady ? starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).projected, 0) : 0;
-  // Future week or no actual game data this week → show 0.0 actual + proj below
-  const weekIsUnplayed = week > CURRENT_WEEK || !(gameStats?.completedSchools.length);
+  const starterEps    = starters.map(p => effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data));
+  const starterTotal  = starterEps.reduce((s, ep) => s + ep.pts, 0);
+  const projTotal     = isReady ? starterEps.reduce((s, ep) => s + ep.projected, 0) : 0;
+  // Unplayed = no starter has an actual scored result yet
+  const hasActualData = starterEps.some(ep => ep.isActual);
+  const weekIsUnplayed = !hasActualData;
 
-  async function doSwap(starterIdx: number) {
-    if (!selectedBench) return;
+  async function doSwap(starterIdx: number, benchPick?: any) {
+    const swapping = benchPick ?? selectedBench;
+    if (!swapping) return;
     const newStarters = [...starters];
     const evicted = newStarters[starterIdx];
-    newStarters[starterIdx] = selectedBench;
-    const newBench = bench.filter((p: any) => p.id !== selectedBench.id);
+    newStarters[starterIdx] = swapping;
+    const newBench = bench.filter((p: any) => p.id !== swapping.id);
     if (evicted) newBench.push(evicted);
     newBench.sort((a: any, b: any) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0));
     const newIds: (string | null)[] = newStarters.map(p => p?.id ?? null);
     const newLineups = { ...lineups, [weekKey]: newIds };
     setLineups(newLineups);
     setSelectedBench(null);
+    setSelectedStarter(null);
     if (memberId) {
       setSaving(true);
       await supabase.from('league_members').update({ roster: { lineups: newLineups } }).eq('id', memberId);
@@ -4915,16 +4920,19 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
       )}
 
       {/* Swap hint */}
-      {selectedBench && (
+      {(selectedBench || selectedStarter !== null) && (
         <div style={{
           padding: '9px 14px', marginBottom: 12,
           background: 'rgba(212,168,40,.08)', border: '1px solid rgba(212,168,40,.3)',
           borderRadius: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
-          <span>Move {selectedBench.player_data?.playerName || selectedBench.player_data?.school} — tap a highlighted slot</span>
+          {selectedBench
+            ? <span>Move {selectedBench.player_data?.playerName || selectedBench.player_data?.school} — tap a highlighted slot</span>
+            : <span>Swap {starters[selectedStarter!]?.player_data?.playerName || starters[selectedStarter!]?.player_data?.school} — tap a bench player</span>
+          }
           <button
-            onClick={() => setSelectedBench(null)}
+            onClick={() => { setSelectedBench(null); setSelectedStarter(null); }}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gold, fontSize: 14, lineHeight: 1, padding: '0 4px' }}
           >✕</button>
         </div>
@@ -4938,24 +4946,33 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
       </div>
 
       {STARTER_SLOT_LABELS.map((label, i) => {
-        const pick    = starters[i];
-        const color   = POS_COLORS[label] || C.muted;
-        const isTarget = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
-        const ep      = effectivePts(pick?.player_data?.school, pick?.player_data?.unitType, pick?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick?.player_data);
-        const name    = pick?.player_data?.playerName || pick?.player_data?.school;
-        const sub     = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;
-        const tier    = pick?.player_data?.tier;
+        const pick          = starters[i];
+        const color         = POS_COLORS[label] || C.muted;
+        const isTarget      = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
+        const isSelectedSt  = selectedStarter === i;
+        const ep            = starterEps[i];
+        const name          = pick?.player_data?.playerName || pick?.player_data?.school;
+        const sub           = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;
+        const tier          = pick?.player_data?.tier;
+
+        function handleStarterClick() {
+          if (isTarget) { doSwap(i); return; }
+          if (!pick) return;
+          if (selectedStarter === i) { setSelectedStarter(null); return; }
+          setSelectedBench(null);
+          setSelectedStarter(i);
+        }
 
         return (
           <div
             key={i}
-            onClick={() => { if (isTarget) doSwap(i); }}
+            onClick={handleStarterClick}
             style={{
               display: 'flex', alignItems: 'center', gap: 12,
               padding: '10px 14px', marginBottom: 4,
-              background: isTarget ? color + '18' : C.surf2,
-              border: '1px solid ' + (isTarget ? color + '88' : C.surf3),
-              borderRadius: 8, cursor: isTarget ? 'pointer' : 'default',
+              background: isTarget ? color + '18' : isSelectedSt ? 'rgba(212,168,40,.08)' : C.surf2,
+              border: '1px solid ' + (isTarget ? color + '88' : isSelectedSt ? 'rgba(212,168,40,.5)' : C.surf3),
+              borderRadius: 8, cursor: (isTarget || pick) ? 'pointer' : 'default',
               transition: 'all .15s',
             }}
           >
@@ -5007,11 +5024,13 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
             </div>
 
             {/* Swap indicator */}
-            {isTarget && (
+            {(isTarget || isSelectedSt) && (
               <div style={{
                 flexShrink: 0, padding: '3px 9px', borderRadius: 5,
-                background: color + '33', border: '1px solid ' + color + '88',
-                fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color,
+                background: isTarget ? color + '33' : 'rgba(212,168,40,.15)',
+                border: '1px solid ' + (isTarget ? color + '88' : 'rgba(212,168,40,.4)'),
+                fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1,
+                color: isTarget ? color : C.gold,
               }}>SWAP</div>
             )}
           </div>
@@ -5035,16 +5054,25 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
             const tier = pick.player_data?.tier;
             const pos  = pick.player_data?.unitType as string;
             const col  = POS_COLORS[pos] || C.muted;
+            // Is this bench player compatible with the currently selected starter slot?
+            const isStarterTarget = selectedStarter !== null &&
+              canFillSlot(pos, STARTER_SLOT_LABELS[selectedStarter]);
+
+            function handleBenchClick() {
+              if (isStarterTarget) { doSwap(selectedStarter!, pick); return; }
+              setSelectedStarter(null);
+              setSelectedBench(isSelected ? null : pick);
+            }
 
             return (
               <div
                 key={pick.id}
-                onClick={() => setSelectedBench(isSelected ? null : pick)}
+                onClick={handleBenchClick}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '10px 14px', marginBottom: 4,
-                  background: isSelected ? 'rgba(212,168,40,.1)' : C.surf,
-                  border: '1px solid ' + (isSelected ? 'rgba(212,168,40,.5)' : C.surf3),
+                  background: isStarterTarget ? col + '18' : isSelected ? 'rgba(212,168,40,.1)' : C.surf,
+                  border: '1px solid ' + (isStarterTarget ? col + '88' : isSelected ? 'rgba(212,168,40,.5)' : C.surf3),
                   borderRadius: 8, cursor: 'pointer',
                   transition: 'all .15s',
                 }}
@@ -5083,6 +5111,11 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, lineHeight: 1 }}>{bep.projected.toFixed(1)}</div>
                   )}
                 </div>
+
+                {/* Swap indicator when starter is selected */}
+                {isStarterTarget && (
+                  <div style={{ flexShrink: 0, padding: '3px 9px', borderRadius: 5, background: col + '33', border: '1px solid ' + col + '88', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: col }}>SWAP</div>
+                )}
               </div>
             );
           })}
