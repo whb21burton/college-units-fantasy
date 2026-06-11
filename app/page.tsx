@@ -295,6 +295,15 @@ function NewsSection() {
   );
 }
 
+type MobileTab = 'scores' | 'news' | 'fantasy' | 'profile';
+
+const MOBILE_NAV: { key: MobileTab; icon: string; label: string }[] = [
+  { key: 'scores',  icon: '🏈', label: 'Scores'  },
+  { key: 'news',    icon: '📰', label: 'News'    },
+  { key: 'fantasy', icon: '🏆', label: 'Fantasy' },
+  { key: 'profile', icon: '👤', label: 'Profile' },
+];
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
@@ -317,6 +326,16 @@ export default function HomePage() {
   const [introChecked, setIntroChecked] = useState(false);
   const [showAgeModal,   setShowAgeModal]   = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const [isMobile,     setIsMobile]     = useState(false);
+  const [mobileTab,    setMobileTab]    = useState<MobileTab>('scores');
+  const [mobileAuth,   setMobileAuth]   = useState<'signin' | 'signup'>('signin');
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   useEffect(() => {
     try {
@@ -451,6 +470,217 @@ export default function HomePage() {
   // Right column content — determined by view + user state
   const showLoggedIn  = !!user && (view === 'dashboard' || view === 'landing');
   const showLoggedOut = !user && view === 'landing';
+  const userName      = user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? '';
+
+  // ── MOBILE LAYOUT ────────────────────────────────────────────────────────────
+  if (isMobile) {
+    const navBg   = '#0c1422';
+    const navBdr  = '#1a2b40';
+    const gold    = '#f5a623';
+    const gray    = '#4a5d7a';
+
+    return (
+      <>
+        {showIntro && <IntroAnimation onComplete={handleIntroComplete} />}
+        <style>{`* { box-sizing: border-box; } input:focus { outline: none !important; border-color: ${gold} !important; }`}</style>
+        <div style={{ background: C.bg, color: C.text, height: '100dvh', display: 'flex', flexDirection: 'column' }}>
+
+          {/* ── Scrollable content area ── */}
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+
+            {/* SCORES */}
+            {mobileTab === 'scores' && <LiveScoreboard />}
+
+            {/* NEWS */}
+            {mobileTab === 'news' && (
+              <div style={{ flex: 1, overflowY: 'auto', padding: '14px 14px 12px' }}>
+                {/* Featured */}
+                <div style={{ background: 'linear-gradient(135deg,#0d1827,#131d30)', border: '1px solid rgba(212,168,40,.35)', borderRadius: 12, padding: '18px 16px', marginBottom: 16 }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: gold, textTransform: 'uppercase', marginBottom: 7 }}>⭐ Featured</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: C.text, lineHeight: 1.2, marginBottom: 8 }}>{FEATURED.headline}</div>
+                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>{FEATURED.summary}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>{FEATURED.date}</div>
+                </div>
+                {/* News list (full-width on mobile) */}
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>Latest News</div>
+                {NEWS.map((story, i) => (
+                  <div key={i} style={{ background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '13px 13px', marginBottom: 8 }}>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text, lineHeight: 1.35, marginBottom: 5 }}>{story.headline}</div>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub, lineHeight: 1.5, marginBottom: 6 }}>{story.summary}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1 }}>{story.date}</div>
+                  </div>
+                ))}
+                {/* Videos (full-width) */}
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', margin: '16px 0 10px' }}>Videos</div>
+                {VIDEOS.map((vid, i) => (
+                  <div key={i} style={{ background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 64, height: 56, background: 'linear-gradient(135deg,#0d1827,#1e2d47)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(212,168,40,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: C.bg }}>▶</div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0, padding: '8px 10px 8px 0' }}>
+                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{vid.title}</div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 3 }}>{vid.duration}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* FANTASY */}
+            {mobileTab === 'fantasy' && (
+              <div style={{ flex: 1, overflowY: 'auto' }}>
+                {user ? (
+                  <div style={{ padding: '24px 16px' }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: gold, textTransform: 'uppercase', marginBottom: 3 }}>Welcome back</div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, letterSpacing: 1, color: C.text, textTransform: 'uppercase', marginBottom: 20 }}>{userName}</div>
+
+                    <button onClick={() => router.push('/my-leagues')} style={{ width: '100%', padding: '14px 16px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, textAlign: 'left' as const }}>
+                      <div>
+                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 1, textTransform: 'uppercase' }}>My Leagues</div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginTop: 3 }}>
+                          {leagues.length} active{bracketCount > 0 ? ` · ${bracketCount} bracket${bracketCount !== 1 ? 's' : ''}` : ''}
+                        </div>
+                      </div>
+                      <span style={{ color: gold, fontSize: 18 }}>→</span>
+                    </button>
+
+                    {leagues.slice(0, 4).map((league: any) => (
+                      <button key={league.id} onClick={() => router.push(`/league/${league.id}`)}
+                        style={{ width: '100%', padding: '12px 14px', background: C.surf, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, textAlign: 'left' as const }}>
+                        <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 600, color: C.text }}>{league.name}</span>
+                        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 0.5, textTransform: 'uppercase' }}>{league.status}</span>
+                      </button>
+                    ))}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 16 }}>
+                      <button onClick={() => router.push('/create-league')} style={{ padding: '13px', background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: C.bg, textTransform: 'uppercase' as const }}>
+                        + Create
+                      </button>
+                      <button onClick={() => router.push('/leagues')} style={{ padding: '13px', background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: C.sub, textTransform: 'uppercase' as const }}>
+                        Browse
+                      </button>
+                    </div>
+                    <button onClick={() => router.push('/brackets')} style={{ width: '100%', marginTop: 8, padding: '13px', background: 'rgba(46,204,113,.08)', border: '1px solid rgba(46,204,113,.25)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: C.green, textTransform: 'uppercase' as const }}>
+                      🏆 Bracket Contests
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                    <img src="/logo.png" alt="CUF" style={{ width: 76, height: 76, objectFit: 'contain', marginBottom: 14, filter: 'drop-shadow(0 4px 20px rgba(212,168,40,.3))' }} />
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 6 }}>College Units Fantasy</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, letterSpacing: 1, marginBottom: 8, lineHeight: 1.5 }}>The college football fantasy experience</div>
+                    <div style={{ padding: '3px 12px', background: 'rgba(212,168,40,.12)', border: '1px solid rgba(212,168,40,.3)', borderRadius: 20, fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: gold, textTransform: 'uppercase', marginBottom: 28 }}>
+                      Season Starts Aug 2025
+                    </div>
+                    <button onClick={() => { setMobileTab('profile'); setMobileAuth('signup'); }} style={{ width: '100%', padding: '14px', background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg, textTransform: 'uppercase', marginBottom: 10 }}>
+                      Create Account
+                    </button>
+                    <button onClick={() => { setMobileTab('profile'); setMobileAuth('signin'); }} style={{ width: '100%', padding: '14px', background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.sub, textTransform: 'uppercase', marginBottom: 10 }}>
+                      Sign In
+                    </button>
+                    <button onClick={() => router.push('/leagues')} style={{ width: '100%', padding: '14px', background: 'rgba(212,168,40,.07)', border: '1px solid rgba(212,168,40,.2)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: gold, textTransform: 'uppercase' }}>
+                      🏟️ Browse Public Leagues
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* PROFILE */}
+            {mobileTab === 'profile' && (
+              <div style={{ flex: 1, overflowY: 'auto', padding: '24px 16px' }}>
+                {user ? (
+                  <>
+                    {/* Avatar + name */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
+                      <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'linear-gradient(135deg,#d4a828,#f0c94a)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 24, color: C.bg, flexShrink: 0 }}>
+                        {userName.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1 }}>{userName}</div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginTop: 2 }}>{user.email}</div>
+                      </div>
+                    </div>
+                    {/* Stats */}
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
+                      {[['Leagues', leagues.length], ['Brackets', bracketCount]].map(([label, count]) => (
+                        <div key={label as string} style={{ flex: 1, background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '14px 12px', textAlign: 'center' as const }}>
+                          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: gold }}>{count as number}</div>
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginTop: 3 }}>{label as string}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => router.push('/my-leagues')} style={{ width: '100%', padding: '13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: C.text, textTransform: 'uppercase', marginBottom: 8 }}>
+                      My Leagues →
+                    </button>
+                    {isAdmin && (
+                      <button onClick={() => router.push('/admin/platform')} style={{ width: '100%', padding: '13px', background: 'rgba(240,58,90,.1)', border: '1px solid rgba(240,58,90,.25)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: '#f03a5a', textTransform: 'uppercase', marginBottom: 8 }}>
+                        ⚡ Platform Manager
+                      </button>
+                    )}
+                    <button onClick={signOut} style={{ width: '100%', padding: '13px', background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase', marginTop: 8 }}>
+                      Sign Out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Auth mode toggle */}
+                    <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+                      {(['signin', 'signup'] as const).map(mode => (
+                        <button key={mode} onClick={() => { setMobileAuth(mode); setError(null); setMessage(null); }}
+                          style={{ flex: 1, padding: '11px', background: mobileAuth === mode ? 'rgba(212,168,40,.12)' : 'none', border: 'none', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: mobileAuth === mode ? gold : C.muted, textTransform: 'uppercase' }}>
+                          {mode === 'signin' ? 'Sign In' : 'Create Account'}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 18 }}>
+                      {mobileAuth === 'signin' ? 'Sign In' : 'Create Account'}
+                    </div>
+                    {mobileAuth === 'signup' && (
+                      <input style={{ width: '100%', padding: '12px 13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, outline: 'none', marginBottom: 10 }}
+                        type="text" placeholder="Display Name" value={displayName} onChange={e => setDisplayName(e.target.value)} />
+                    )}
+                    <input style={{ width: '100%', padding: '12px 13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, outline: 'none', marginBottom: 10 }}
+                      type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+                    <input style={{ width: '100%', padding: '12px 13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, outline: 'none', marginBottom: 10 }}
+                      type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') mobileAuth === 'signin' ? handleSignIn() : handleSignUp(); }} />
+                    {error   && <div style={{ color: C.red,   fontSize: 12, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{error}</div>}
+                    {message && <div style={{ color: C.green, fontSize: 12, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{message}</div>}
+                    <button onClick={mobileAuth === 'signin' ? handleSignIn : handleSignUp} disabled={loading}
+                      style={{ width: '100%', padding: '14px', background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg, textTransform: 'uppercase', marginBottom: 12 }}>
+                      {loading ? (mobileAuth === 'signin' ? 'Signing in…' : 'Creating…') : (mobileAuth === 'signin' ? 'Sign In' : 'Create Account')}
+                    </button>
+                    <button onClick={() => router.push('/leagues')} style={{ width: '100%', padding: '13px', background: 'rgba(212,168,40,.07)', border: '1px solid rgba(212,168,40,.2)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: gold, textTransform: 'uppercase' }}>
+                      🏟️ Browse Public Leagues
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+          </div>
+
+          {/* ── Bottom nav bar ── */}
+          <div style={{ height: 60, flexShrink: 0, background: navBg, borderTop: `1px solid ${navBdr}`, display: 'flex' }}>
+            {MOBILE_NAV.map(tab => (
+              <button key={tab.key} onClick={() => setMobileTab(tab.key)}
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', color: mobileTab === tab.key ? gold : gray, transition: 'color .12s', WebkitTapHighlightColor: 'transparent' }}>
+                <span style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</span>
+                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase' }}>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+        </div>
+
+        {PAID_CONTESTS_ENABLED && <WalletDrawer isOpen={showWallet} onClose={() => setShowWallet(false)} />}
+        {showTermsModal && <TermsAcceptanceModal onAccepted={() => { setShowTermsModal(false); setShowAgeModal(true); }} onDecline={() => { supabase.auth.signOut(); setShowTermsModal(false); }} />}
+        {showAgeModal  && <AgeVerificationModal  onVerified={() => { setShowAgeModal(false); setMobileTab('fantasy'); }} onDecline={() => { supabase.auth.signOut(); setShowAgeModal(false); }} />}
+      </>
+    );
+  }
+  // ── END MOBILE ────────────────────────────────────────────────────────────────
 
   return (
     <>
