@@ -295,15 +295,14 @@ function effectivePts(
 type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'trade' | 'ranks' | 'standings' | 'schedule' | 'playoffs' | 'lineup' | 'leaderboard' | 'chat';
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'draft',     label: 'Draft'     },
-  { key: 'team',      label: 'Team'      },
-  { key: 'league',    label: 'League'    },
-  { key: 'players',   label: 'Players'   },
-  { key: 'trade',     label: 'Trade'     },
-  { key: 'ranks',     label: 'Ranks'     },
-  { key: 'standings', label: 'Standings' },
-  { key: 'schedule',  label: 'Schedule'  },
-  { key: 'playoffs',  label: 'Playoffs'  },
+  { key: 'draft',    label: 'Draft'    },
+  { key: 'team',     label: 'Team'     },
+  { key: 'league',   label: 'League'   },
+  { key: 'players',  label: 'Players'  },
+  { key: 'trade',    label: 'Trade'    },
+  { key: 'ranks',    label: 'Ranks'    },
+  { key: 'schedule', label: 'Schedule' },
+  { key: 'chat',     label: 'Chat'     },
 ];
 
 const WEEKLY_TABS: { key: Tab; label: string }[] = [
@@ -452,10 +451,10 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
     const msg = chatInput.trim();
     setChatInput('');
     await supabase.from('league_messages').insert({
-      league_id: params.id,
-      user_id:   userId,
-      message:   msg,
-      team_name: myMember?.team_name || userEmail.split('@')[0],
+      league_id:    params.id,
+      user_id:      userId,
+      display_name: myMember?.team_name || userEmail.split('@')[0],
+      message:      msg,
     });
   }
 
@@ -710,14 +709,8 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
           {activeTab === 'ranks' && (
             <LeagueRanksTab league={league} members={members} userId={userId} />
           )}
-          {activeTab === 'standings' && (
-            <StandingsTab league={league} userId={userId} />
-          )}
           {activeTab === 'schedule' && (
             <ScheduleTab league={league} />
-          )}
-          {activeTab === 'playoffs' && (
-            <PlayoffTab league={league} userId={userId} />
           )}
           {activeTab === 'players' && (
             <WaiverTab league={league} userId={userId} />
@@ -750,7 +743,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
                     return (
                       <div key={msg.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 3 }}>
-                          {isMe ? 'You' : (msg.team_name || 'Unknown')}
+                          {isMe ? 'You' : (msg.display_name || msg.team_name || 'Unknown')}
                         </div>
                         <div style={{
                           maxWidth: '85%', padding: '8px 11px',
@@ -3395,8 +3388,8 @@ function LeagueRanksTab({
   }
 
   // Build W-L standings using allTeams + combined allScores
-  const record: Record<string, { wins: number; losses: number; pf: number }> = {};
-  for (const t of allTeams) record[t.id] = { wins: 0, losses: 0, pf: 0 };
+  const record: Record<string, { wins: number; losses: number; pf: number; pa: number }> = {};
+  for (const t of allTeams) record[t.id] = { wins: 0, losses: 0, pf: 0, pa: 0 };
 
   // Build round-robin schedule using the allTeams array (preserves draft_order)
   const regWeeks = 11; // 2025 season complete — always count all regular-season weeks
@@ -3407,6 +3400,8 @@ function LeagueRanksTab({
       const sb = allScores[b.id]?.[w] ?? 0;
       record[a.id].pf += sa;
       record[b.id].pf += sb;
+      record[a.id].pa += sb;
+      record[b.id].pa += sa;
       if (sa > sb)      { record[a.id].wins++;  record[b.id].losses++; }
       else if (sb > sa) { record[b.id].wins++;  record[a.id].losses++; }
     }
@@ -3518,7 +3513,7 @@ function LeagueRanksTab({
       {/* Standings table */}
       <div style={{ background: C.surf, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.surf3}`, marginBottom: 36 }}>
         <div style={{
-          display: 'grid', gridTemplateColumns: '28px 1fr 60px 60px 90px',
+          display: 'grid', gridTemplateColumns: '28px 1fr 60px 60px 80px 80px',
           gap: 8, padding: '8px 16px', borderBottom: `1px solid ${C.surf3}`,
           fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1,
           color: C.muted, textTransform: 'uppercase',
@@ -3527,6 +3522,7 @@ function LeagueRanksTab({
           <div style={{ textAlign: 'right' }}>W</div>
           <div style={{ textAlign: 'right' }}>L</div>
           <div style={{ textAlign: 'right' }}>PF</div>
+          <div style={{ textAlign: 'right' }}>PA</div>
         </div>
 
         {standings.map((team, idx) => {
@@ -3536,7 +3532,7 @@ function LeagueRanksTab({
           const hasPlayIn = seed >= 3 && seed <= 6 && standings.length >= 6;
           return (
             <div key={team.id} style={{
-              display: 'grid', gridTemplateColumns: '28px 1fr 60px 60px 90px',
+              display: 'grid', gridTemplateColumns: '28px 1fr 60px 60px 80px 80px',
               gap: 8, padding: '10px 16px',
               borderBottom: idx < standings.length - 1 ? `1px solid ${C.surf3}` : 'none',
               background: isUser ? C.surf2 : 'transparent',
@@ -3554,8 +3550,11 @@ function LeagueRanksTab({
               </div>
               <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 14, color: '#2ecc71', paddingTop: 1 }}>{team.wins}</div>
               <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.muted,   paddingTop: 1 }}>{team.losses}</div>
-              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.sub,     paddingTop: 1 }}>
+              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.sub, paddingTop: 1 }}>
                 {team.pf > 0 ? team.pf.toFixed(1) : '—'}
+              </div>
+              <div style={{ textAlign: 'right', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.muted, paddingTop: 1 }}>
+                {team.pa > 0 ? team.pa.toFixed(1) : '—'}
               </div>
             </div>
           );
