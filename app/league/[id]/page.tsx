@@ -2921,47 +2921,107 @@ function BkMatchup({
 /* ── Trade Tab ───────────────────────────────────────────────── */
 function TradeTab({ league, userId, members }: { league: any; userId: string | null; members: any[] }) {
   type TView = 'teams' | 'build' | 'inbox'
-  const [view, setView] = useState<TView>('teams')
+  type InboxTab = 'pending' | 'sent' | 'history'
+  const [view,      setView]      = useState<TView>('teams')
+  const [inboxTab,  setInboxTab]  = useState<InboxTab>('pending')
   const [targetTeam, setTargetTeam] = useState<any>(null)
-  const [allPicks, setAllPicks] = useState<any[]>([])
-  const [trades, setTrades] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [offer, setOffer] = useState<Set<string>>(new Set())
-  const [request, setRequest] = useState<Set<string>>(new Set())
+  const [allPicks,  setAllPicks]  = useState<any[]>([])
+  const [trades,    setTrades]    = useState<any[]>([])
+  const [weeklyScores, setWeeklyScores] = useState<Record<string, Record<number, number>>>({})
+  const [loading,   setLoading]   = useState(true)
+  const [offer,     setOffer]     = useState<Set<string>>(new Set())
+  const [request,   setRequest]   = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
-  const [toast, setToast] = useState('')
+  const [toast,     setToast]     = useState('')
 
   const draftOrder: any[] = league?.settings?.draft_order ?? []
-  const numTeams = draftOrder.length
-  const myEntry = draftOrder.find((t: any) => t.userId === userId)
-  const mySlotIdx = myEntry ? myEntry.slot - 1 : -1
+  const numTeams   = draftOrder.length
+  const myEntry    = draftOrder.find((t: any) => t.userId === userId)
+  const mySlotIdx  = myEntry ? myEntry.slot - 1 : -1
 
+  // Initial data load
   useEffect(() => {
     if (!league?.id || !userId) return
     async function load() {
-      const [{ data: picksData }, { data: tradesData }] = await Promise.all([
+      const [{ data: picksData }, { data: tradesData }, { data: scoresData }] = await Promise.all([
         supabase.from('draft_picks').select('*').eq('league_id', league.id).order('pick_number'),
         supabase.from('trades').select('*').eq('league_id', league.id)
           .or(`proposer_id.eq.${userId},receiver_id.eq.${userId}`)
           .order('created_at', { ascending: false }),
+        supabase.from('weekly_scores').select('user_id, week, score').eq('league_id', league.id),
       ])
       setAllPicks(picksData ?? [])
       setTrades(tradesData ?? [])
+      const sm: Record<string, Record<number, number>> = {}
+      for (const r of (scoresData ?? []) as any[]) {
+        if (!sm[r.user_id]) sm[r.user_id] = {}
+        sm[r.user_id][r.week] = parseFloat(r.score) || 0
+      }
+      setWeeklyScores(sm)
       setLoading(false)
     }
     load()
   }, [league?.id, userId])
 
+  // Realtime trade updates
+  useEffect(() => {
+    if (!league?.id) return
+    const ch = supabase.channel('trades-' + league.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trades', filter: 'league_id=eq.' + league.id }, async () => {
+        const { data } = await supabase.from('trades').select('*').eq('league_id', league.id)
+          .or(`proposer_id.eq.${userId},receiver_id.eq.${userId}`)
+          .order('created_at', { ascending: false })
+        setTrades(data ?? [])
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [league?.id, userId])
+
+  // ── Helpers ──────────────────────────────────────────────
   function getTeamPicks(slotIdx: number): any[] {
     if (numTeams === 0) return []
     return allPicks.filter(p => snakeIdx(p.pick_number, numTeams) === slotIdx)
   }
-
   function getMyPicks(): any[] {
     if (mySlotIdx < 0) return allPicks.filter((p: any) => p.user_id === userId)
     return getTeamPicks(mySlotIdx)
   }
 
+  const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K']
+  function groupByPos(picks: any[]): [string, any[]][] {
+    const g: Record<string, any[]> = {}
+    for (const p of picks) {
+      const pos = p.player_data?.unitType ?? 'OTHER'
+      if (!g[pos]) g[pos] = []
+      g[pos].push(p)
+    }
+    return POS_ORDER.filter(pos => g[pos]?.length > 0).map(pos => [pos, g[pos]])
+  }
+
+  // W-L from weekly_scores + round-robin schedule
+  function computeRecord(userId: string): { wins: number; losses: number } {
+    const allT = draftOrder.map((dt: any) => ({
+      id: dt.userId ?? `cpu:${dt.teamName}`,
+      team_name: dt.teamName,
+      isCpu: dt.type !== 'human',
+    }))
+    let wins = 0, losses = 0
+    for (let w = 1; w <= 11; w++) {
+      const pairs = buildRoundRobin(allT, w)
+      for (const [a, b] of pairs) {
+        if (a.id !== userId && b.id !== userId) continue
+        const myId  = a.id === userId ? a.id : b.id
+        const oppId = a.id === userId ? b.id : a.id
+        const ms = weeklyScores[myId]?.[w] ?? 0
+        const os = weeklyScores[oppId]?.[w] ?? 0
+        if (ms === 0 && os === 0) continue
+        if (ms > os) wins++; else if (os > ms) losses++
+      }
+    }
+    return { wins, losses }
+  }
+
+  // ── Trade actions ────────────────────────────────────────
   async function submitTrade() {
     if (!userId || offer.size === 0 || request.size === 0 || !targetTeam) return
     setSubmitting(true)
@@ -2974,20 +3034,18 @@ function TradeTab({ league, userId, members }: { league: any; userId: string | n
       status: 'pending',
     })
     setSubmitting(false)
-    if (!error) {
-      setToast('Trade sent!')
-      setTimeout(() => setToast(''), 3000)
-      setOffer(new Set())
-      setRequest(new Set())
-      setView('inbox')
-      const { data } = await supabase.from('trades').select('*').eq('league_id', league.id)
-        .or(`proposer_id.eq.${userId},receiver_id.eq.${userId}`)
-        .order('created_at', { ascending: false })
-      setTrades(data ?? [])
-    }
+    if (error) { console.error('[trade] insert error:', error); return }
+    setToast('Trade offer sent!')
+    setTimeout(() => setToast(''), 3000)
+    setOffer(new Set()); setRequest(new Set())
+    setView('inbox'); setInboxTab('sent')
+    const { data } = await supabase.from('trades').select('*').eq('league_id', league.id)
+      .or(`proposer_id.eq.${userId},receiver_id.eq.${userId}`)
+      .order('created_at', { ascending: false })
+    setTrades(data ?? [])
   }
 
-  async function respondTrade(tradeId: string, status: 'accepted' | 'declined') {
+  async function respondTrade(tradeId: string, status: 'accepted' | 'declined' | 'cancelled') {
     const trade = trades.find(t => t.id === tradeId)
     if (!trade) return
     if (status === 'accepted') {
@@ -3010,8 +3068,35 @@ function TradeTab({ league, userId, members }: { league: any; userId: string | n
 
   const pendingIncoming = trades.filter(t => t.receiver_id === userId && t.status === 'pending')
   const pendingOutgoing = trades.filter(t => t.proposer_id === userId && t.status === 'pending')
-  const completed = trades.filter(t => t.status !== 'pending')
-  const otherTeams = draftOrder.filter((t: any) => t.userId !== userId && t.type === 'human')
+  const historyTrades   = trades.filter(t => t.status !== 'pending')
+  const otherTeams      = draftOrder.filter((t: any) => t.userId !== userId && t.type === 'human')
+
+  // ── Small shared render helpers ──────────────────────────
+  function PosBadge({ pos }: { pos: string }) {
+    const col = UNIT_COLORS[pos] ?? C.muted
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        height: 18, minWidth: 32, padding: '0 5px', borderRadius: 4, flexShrink: 0,
+        background: col + '22', border: `1px solid ${col}55`,
+        fontFamily: 'Anton,sans-serif', fontSize: 9, color: col, letterSpacing: 0.5,
+      }}>{pos}</span>
+    )
+  }
+
+  function AssetChip({ pick, onRemove }: { pick: any; onRemove?: () => void }) {
+    const pos  = pick.player_data?.unitType ?? '?'
+    const name = pick.player_data?.playerName || pick.player_data?.school || '?'
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 6, marginBottom: 4 }}>
+        <PosBadge pos={pos} />
+        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+        {onRemove && (
+          <button onClick={onRemove} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 13, padding: '0 2px', lineHeight: 1 }}>×</button>
+        )}
+      </div>
+    )
+  }
 
   if (loading) return (
     <div style={{ padding: 60, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 13, letterSpacing: 1 }}>
@@ -3019,122 +3104,183 @@ function TradeTab({ league, userId, members }: { league: any; userId: string | n
     </div>
   )
 
-  // ── TRADE BUILDER ─────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // STEP 2: TRADE BUILDER
+  // ══════════════════════════════════════════════════════════
   if (view === 'build' && targetTeam) {
-    const myPicks = getMyPicks().sort((a: any, b: any) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0))
+    const myPicks    = getMyPicks()
     const theirSlotIdx = targetTeam.slot - 1
-    const theirPicks = getTeamPicks(theirSlotIdx).sort((a: any, b: any) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0))
+    const theirPicks = getTeamPicks(theirSlotIdx)
+    const myGroups   = groupByPos(myPicks)
+    const theirGroups = groupByPos(theirPicks)
+
+    const offerVal   = Array.from(offer).reduce((s, id) => s + liveProj(allPicks.find(x => x.id === id)?.player_data), 0)
+    const requestVal = Array.from(request).reduce((s, id) => s + liveProj(allPicks.find(x => x.id === id)?.player_data), 0)
+    const total      = offerVal + requestVal || 1
+    const offerPct   = Math.round((offerVal / total) * 100)
+    const fair       = offer.size > 0 && request.size > 0 && Math.abs(offerPct - 50) <= 12
+
+    const RosterColumn = ({ picks, groups, selectedIds, onToggle, label, accentColor }: {
+      picks: any[]; groups: [string, any[]][]; selectedIds: Set<string>;
+      onToggle: (id: string) => void; label: string; accentColor: string;
+    }) => (
+        <div style={{ flex: '0 0 35%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: accentColor, textTransform: 'uppercase', marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${C.surf3}` }}>
+            {label}
+          </div>
+          {picks.length === 0 && (
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, padding: '8px 0' }}>Empty roster</div>
+          )}
+          {groups.map(([pos, posPicksList]) => (
+            <div key={pos} style={{ marginBottom: 10 }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase', marginBottom: 4 }}>{pos}</div>
+              {posPicksList.map((pick: any) => {
+                const selected = selectedIds.has(pick.id)
+                const col = UNIT_COLORS[pos] ?? C.muted
+                return (
+                  <div key={pick.id} onClick={() => onToggle(pick.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '7px 9px', marginBottom: 3, borderRadius: 7, cursor: 'pointer',
+                      background: selected ? accentColor + '14' : C.surf2,
+                      border: `1px solid ${selected ? accentColor + 'aa' : C.surf3}`,
+                      transition: 'all .12s',
+                    }}>
+                    {/* Checkmark */}
+                    <div style={{
+                      width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                      border: `2px solid ${selected ? accentColor : C.surf3}`,
+                      background: selected ? accentColor : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {selected && <span style={{ color: '#fff', fontSize: 9, lineHeight: 1 }}>✓</span>}
+                    </div>
+                    <div style={{ width: 3, height: 22, borderRadius: 2, background: col, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: selected ? accentColor : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {pick.player_data?.playerName || pick.player_data?.school}
+                      </div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
+                        {pick.player_data?.school} · {liveProj(pick.player_data).toFixed(1)} proj
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )
 
     return (
-      <div style={{ maxWidth: 700 }}>
-        <button onClick={() => { setView('teams'); setOffer(new Set()); setRequest(new Set()) }}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, padding: '0 0 16px 0' }}>
-          ← Back
-        </button>
-        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 4 }}>
-          Propose Trade
-        </div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, marginBottom: 20 }}>
-          {myEntry?.teamName ?? 'You'} → {targetTeam.teamName}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
-          {/* You offer */}
+      <div style={{ maxWidth: 900 }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <button onClick={() => { setView('teams'); setOffer(new Set()); setRequest(new Set()) }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, padding: 0 }}>
+            ← Back
+          </button>
           <div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>
-              You offer ({offer.size})
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, letterSpacing: 2, color: C.text, textTransform: 'uppercase' }}>Trade Builder</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub }}>
+              {myEntry?.teamName ?? 'You'} ↔ {targetTeam.teamName}
             </div>
-            {myPicks.length === 0 && (
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>No players on your roster</div>
-            )}
-            {myPicks.map((pick: any) => {
-              const checked = offer.has(pick.id)
-              const pos = pick.player_data?.unitType as string
-              const col = UNIT_COLORS[pos] ?? C.muted
-              return (
-                <div key={pick.id} onClick={() => setOffer(prev => { const n = new Set(prev); n.has(pick.id) ? n.delete(pick.id) : n.add(pick.id); return n })}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', marginBottom: 4, background: checked ? 'rgba(245,166,35,.1)' : C.surf, border: `1px solid ${checked ? C.gold : C.surf3}`, borderRadius: 8, cursor: 'pointer', transition: 'all .12s' }}>
-                  <div style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${checked ? C.gold : C.surf3}`, background: checked ? C.gold : 'none', flexShrink: 0 }} />
-                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: col, flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: checked ? C.gold : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {pick.player_data?.playerName || pick.player_data?.school}
-                    </div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {liveProj(pick.player_data).toFixed(1)} pts/wk</div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* You receive */}
-          <div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.green, textTransform: 'uppercase', marginBottom: 8 }}>
-              You receive ({request.size})
-            </div>
-            {theirPicks.length === 0 && (
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>No players on their roster</div>
-            )}
-            {theirPicks.map((pick: any) => {
-              const checked = request.has(pick.id)
-              const pos = pick.player_data?.unitType as string
-              const col = UNIT_COLORS[pos] ?? C.muted
-              return (
-                <div key={pick.id} onClick={() => setRequest(prev => { const n = new Set(prev); n.has(pick.id) ? n.delete(pick.id) : n.add(pick.id); return n })}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', marginBottom: 4, background: checked ? 'rgba(21,198,120,.08)' : C.surf, border: `1px solid ${checked ? C.green : C.surf3}`, borderRadius: 8, cursor: 'pointer', transition: 'all .12s' }}>
-                  <div style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${checked ? C.green : C.surf3}`, background: checked ? C.green : 'none', flexShrink: 0 }} />
-                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: col, flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: checked ? C.green : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {pick.player_data?.playerName || pick.player_data?.school}
-                    </div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{pos} · {liveProj(pick.player_data).toFixed(1)} pts/wk</div>
-                  </div>
-                </div>
-              )
-            })}
           </div>
         </div>
 
-        {/* Value bar */}
-        {(offer.size > 0 || request.size > 0) && (() => {
-          const offerVal = Array.from(offer).reduce((s, id) => {
-            const p = allPicks.find(x => x.id === id)
-            return s + liveProj(p?.player_data)
-          }, 0)
-          const requestVal = Array.from(request).reduce((s, id) => {
-            const p = allPicks.find(x => x.id === id)
-            return s + liveProj(p?.player_data)
-          }, 0)
-          const total = offerVal + requestVal || 1
-          const offerPct = Math.round((offerVal / total) * 100)
-          const requestPct = 100 - offerPct
-          const fair = Math.abs(offerPct - 50) <= 10
-          return (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.gold }}>{offerPct}% your value</span>
-                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: fair ? C.green : C.muted }}>{fair ? '⚖ Fair trade' : '⚠ Uneven'}</span>
-                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.green }}>{requestPct}% their value</span>
-              </div>
-              <div style={{ height: 6, borderRadius: 3, background: C.surf3, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${offerPct}%`, background: `linear-gradient(90deg, ${C.gold}, ${C.green})`, borderRadius: 3, transition: 'width .3s ease' }} />
-              </div>
-            </div>
-          )
-        })()}
+        {/* 3-Column layout */}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          {/* LEFT: My roster */}
+          <RosterColumn
+            picks={myPicks} groups={myGroups}
+            selectedIds={offer}
+            onToggle={id => setOffer(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })}
+            label={`My Roster — I Send (${offer.size})`}
+            accentColor={C.gold}
+          />
 
-        <button onClick={submitTrade} disabled={offer.size === 0 || request.size === 0 || submitting}
-          style={{ width: '100%', padding: '14px', background: offer.size > 0 && request.size > 0 ? C.gold : C.surf3, border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: offer.size > 0 && request.size > 0 ? C.bg : C.muted, cursor: offer.size > 0 && request.size > 0 ? 'pointer' : 'not-allowed', textTransform: 'uppercase', transition: 'all .15s' }}>
-          {submitting ? 'Sending…' : 'Send Trade Offer'}
-        </button>
+          {/* CENTER: Trade Summary */}
+          <div style={{ flex: '0 0 28%', minWidth: 0 }}>
+            <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: '14px 14px', position: 'sticky', top: 16 }}>
+              {/* I SEND */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 8 }}>
+                  I Send {offer.size > 0 ? `(${offer.size})` : ''}
+                </div>
+                {offer.size === 0 ? (
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, padding: '6px 0' }}>Select from my roster →</div>
+                ) : (
+                  Array.from(offer).map(id => {
+                    const p = allPicks.find(x => x.id === id)
+                    return p ? <AssetChip key={id} pick={p} onRemove={() => setOffer(prev => { const n = new Set(prev); n.delete(id); return n })} /> : null
+                  })
+                )}
+              </div>
+
+              <div style={{ height: 1, background: C.surf3, marginBottom: 14 }} />
+
+              {/* I RECEIVE */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.green, textTransform: 'uppercase', marginBottom: 8 }}>
+                  I Receive {request.size > 0 ? `(${request.size})` : ''}
+                </div>
+                {request.size === 0 ? (
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, padding: '6px 0' }}>← Select from their roster</div>
+                ) : (
+                  Array.from(request).map(id => {
+                    const p = allPicks.find(x => x.id === id)
+                    return p ? <AssetChip key={id} pick={p} onRemove={() => setRequest(prev => { const n = new Set(prev); n.delete(id); return n })} /> : null
+                  })
+                )}
+              </div>
+
+              {/* Value bar */}
+              {(offer.size > 0 || request.size > 0) && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold }}>{offerPct}%</span>
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: fair ? C.green : C.muted }}>{fair ? '⚖ Fair' : '⚠ Uneven'}</span>
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green }}>{100 - offerPct}%</span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 3, background: C.surf3, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${offerPct}%`, background: `linear-gradient(90deg,${C.gold},${C.green})`, borderRadius: 3, transition: 'width .3s' }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Send button */}
+              <button onClick={submitTrade} disabled={offer.size === 0 || request.size === 0 || submitting}
+                style={{
+                  width: '100%', padding: '11px 0', borderRadius: 8, border: 'none',
+                  fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 2, textTransform: 'uppercase',
+                  background: offer.size > 0 && request.size > 0 ? C.green : C.surf3,
+                  color: offer.size > 0 && request.size > 0 ? '#fff' : C.muted,
+                  cursor: offer.size > 0 && request.size > 0 ? 'pointer' : 'not-allowed',
+                  transition: 'all .15s',
+                }}>
+                {submitting ? 'Sending…' : 'Send Offer'}
+              </button>
+            </div>
+          </div>
+
+          {/* RIGHT: Their roster */}
+          <RosterColumn
+            picks={theirPicks} groups={theirGroups}
+            selectedIds={request}
+            onToggle={id => setRequest(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })}
+            label={`${targetTeam.teamName} — I Receive (${request.size})`}
+            accentColor={C.green}
+          />
+        </div>
       </div>
     )
   }
 
-  // ── MAIN VIEW ─────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // STEP 1 + INBOX MAIN VIEW
+  // ══════════════════════════════════════════════════════════
   return (
-    <div style={{ maxWidth: 680 }}>
+    <div style={{ maxWidth: 820 }}>
       {toast && (
         <div style={{ background: '#14532d', border: `1px solid ${C.green}`, borderRadius: 8, padding: '10px 16px', marginBottom: 14, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.green }}>
           {toast}
@@ -3143,18 +3289,25 @@ function TradeTab({ league, userId, members }: { league: any; userId: string | n
 
       {/* Sub-nav */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-        {(['teams', 'inbox'] as const).map(v => (
-          <button key={v} onClick={() => setView(v)}
-            style={{ padding: '7px 18px', borderRadius: 6, border: `1px solid ${view === v ? C.gold : C.surf3}`, background: view === v ? 'rgba(245,166,35,.1)' : C.surf2, color: view === v ? C.gold : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase' }}>
-            {v === 'teams' ? 'New Trade' : `Inbox${pendingIncoming.length > 0 ? ` (${pendingIncoming.length})` : ''}`}
-          </button>
-        ))}
+        <button onClick={() => setView('teams')}
+          style={{ padding: '7px 18px', borderRadius: 6, border: `1px solid ${view === 'teams' ? C.gold : C.surf3}`, background: view === 'teams' ? 'rgba(245,166,35,.1)' : C.surf2, color: view === 'teams' ? C.gold : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase' }}>
+          New Trade
+        </button>
+        <button onClick={() => { setView('inbox'); setInboxTab('pending') }}
+          style={{ padding: '7px 18px', borderRadius: 6, border: `1px solid ${view === 'inbox' ? C.gold : C.surf3}`, background: view === 'inbox' ? 'rgba(245,166,35,.1)' : C.surf2, color: view === 'inbox' ? C.gold : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+          Inbox
+          {pendingIncoming.length > 0 && (
+            <span style={{ background: C.red, color: '#fff', borderRadius: 10, fontSize: 9, fontFamily: 'Anton,sans-serif', padding: '1px 6px', letterSpacing: 0.5 }}>
+              {pendingIncoming.length}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* New Trade — team picker */}
+      {/* ══ STEP 1: TEAM SELECTION ══ */}
       {view === 'teams' && (
         <div>
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 12 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 16 }}>
             Select a team to trade with
           </div>
           {otherTeams.length === 0 && (
@@ -3162,154 +3315,216 @@ function TradeTab({ league, userId, members }: { league: any; userId: string | n
               No other human teams to trade with.
             </div>
           )}
-          {otherTeams.map((team: any) => {
-            const slotIdx = team.slot - 1
-            const teamPicks = getTeamPicks(slotIdx)
-            const bestPick = [...teamPicks].sort((a: any, b: any) => (b.player_data?.projectedPoints ?? 0) - (a.player_data?.projectedPoints ?? 0))[0]
-            return (
-              <div key={team.userId} onClick={() => { setTargetTeam(team); setView('build') }}
-                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', marginBottom: 8, background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, cursor: 'pointer', transition: 'border-color .15s' }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = C.gold + '66'}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = C.surf3}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.sub, flexShrink: 0 }}>
-                  {(team.teamName || '?').charAt(0).toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text, fontWeight: 600 }}>{team.teamName}</div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
-                    {teamPicks.length} players · Best: {bestPick ? (bestPick.player_data?.playerName || bestPick.player_data?.school) : '—'}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+            {otherTeams.map((team: any) => {
+              const slotIdx   = team.slot - 1
+              const teamPicks = getTeamPicks(slotIdx)
+              const grouped   = groupByPos(teamPicks)
+              const rec       = computeRecord(team.userId)
+              const initial   = (team.teamName || '?').charAt(0).toUpperCase()
+              return (
+                <div key={team.userId}
+                  onClick={() => { setTargetTeam(team); setOffer(new Set()); setRequest(new Set()); setView('build') }}
+                  style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: '14px 16px', cursor: 'pointer', transition: 'border-color .15s' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = C.gold + '88'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = C.surf3}>
+                  {/* Avatar + name + record */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: C.surf2, border: `2px solid ${C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.sub, flexShrink: 0 }}>
+                      {initial}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {team.teamName}
+                      </div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 1 }}>@{team.teamName}</div>
+                      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: rec.wins >= rec.losses ? C.green : C.muted, marginTop: 2 }}>
+                        {rec.wins}-{rec.losses}
+                      </div>
+                    </div>
+                    <div style={{ color: C.muted, fontSize: 16 }}>›</div>
+                  </div>
+                  {/* Roster preview by position */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {grouped.map(([pos, posPicksList]) => (
+                      <div key={pos} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <PosBadge pos={pos} />
+                        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, lineHeight: 1.4, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {posPicksList.map((p: any) => p.player_data?.school ?? '?').join(', ')}
+                        </span>
+                      </div>
+                    ))}
+                    {grouped.length === 0 && (
+                      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>No picks yet</span>
+                    )}
                   </div>
                 </div>
-                <div style={{ color: C.muted, fontSize: 18 }}>›</div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
       )}
 
-      {/* Inbox */}
+      {/* ══ STEP 3: INBOX ══ */}
       {view === 'inbox' && (
         <div>
-          {trades.length === 0 && (
-            <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
-              No trades yet.
-            </div>
-          )}
+          {/* Inbox sub-tabs */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: `1px solid ${C.surf3}`, paddingBottom: 0 }}>
+            {([
+              { key: 'pending', label: `Pending${pendingIncoming.length > 0 ? ` (${pendingIncoming.length})` : ''}` },
+              { key: 'sent',    label: `Sent${pendingOutgoing.length > 0 ? ` (${pendingOutgoing.length})` : ''}` },
+              { key: 'history', label: 'History' },
+            ] as { key: InboxTab; label: string }[]).map(tab => (
+              <button key={tab.key} onClick={() => setInboxTab(tab.key)}
+                style={{
+                  padding: '7px 16px', background: 'none', border: 'none', cursor: 'pointer',
+                  fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, textTransform: 'uppercase',
+                  color: inboxTab === tab.key ? C.gold : C.sub,
+                  borderBottom: `2px solid ${inboxTab === tab.key ? C.gold : 'transparent'}`,
+                  marginBottom: -1, transition: 'color .12s',
+                }}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-          {pendingIncoming.length > 0 && (
-            <>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', marginBottom: 10 }}>
-                Incoming ({pendingIncoming.length})
-              </div>
-              {pendingIncoming.map(trade => {
-                const fromTeam = draftOrder.find((t: any) => t.userId === trade.proposer_id)
-                const offered = allPicks.filter(p => trade.offer_pick_ids.includes(p.id))
-                const requested = allPicks.filter(p => trade.request_pick_ids.includes(p.id))
-                return (
-                  <div key={trade.id} style={{ background: C.surf, border: `1px solid rgba(245,166,35,.3)`, borderRadius: 10, padding: '16px 18px', marginBottom: 12 }}>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.gold, marginBottom: 12 }}>
-                      From {fromTeam?.teamName ?? 'Unknown'}
+          {/* PENDING tab */}
+          {inboxTab === 'pending' && (
+            pendingIncoming.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>No pending trade offers.</div>
+            ) : pendingIncoming.map(trade => {
+              const fromTeam = draftOrder.find((t: any) => t.userId === trade.proposer_id)
+              const theyOffer  = allPicks.filter(p => trade.offer_pick_ids.includes(p.id))
+              const theyWant   = allPicks.filter(p => trade.request_pick_ids.includes(p.id))
+              const ts = new Date(trade.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+              return (
+                <div key={trade.id} style={{ background: C.surf, border: `1px solid rgba(245,166,35,.35)`, borderRadius: 12, padding: '16px 18px', marginBottom: 12 }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: C.surf2, border: `1px solid ${C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.sub }}>
+                      {(fromTeam?.teamName ?? '?').charAt(0).toUpperCase()}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-                      <div>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>They offer</div>
-                        {offered.map(p => (
-                          <div key={p.id} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 3 }}>
-                            {p.player_data?.playerName || p.player_data?.school}
-                            <span style={{ color: C.muted, fontSize: 10 }}> · {p.player_data?.unitType}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>They want</div>
-                        {requested.map(p => (
-                          <div key={p.id} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 3 }}>
-                            {p.player_data?.playerName || p.player_data?.school}
-                            <span style={{ color: C.muted, fontSize: 10 }}> · {p.player_data?.unitType}</span>
-                          </div>
-                        ))}
-                      </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, letterSpacing: 1, textTransform: 'uppercase' }}>Trade Offer</div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>From {fromTeam?.teamName ?? 'Unknown'}</div>
                     </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => respondTrade(trade.id, 'accepted')}
-                        style={{ flex: 1, padding: '10px', background: 'rgba(21,198,120,.12)', border: `1px solid rgba(21,198,120,.4)`, borderRadius: 7, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, color: C.green }}>
-                        ✓ Accept
-                      </button>
-                      <button onClick={() => respondTrade(trade.id, 'declined')}
-                        style={{ flex: 1, padding: '10px', background: 'rgba(240,58,90,.08)', border: `1px solid rgba(240,58,90,.25)`, borderRadius: 7, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, color: C.red }}>
-                        ✕ Decline
-                      </button>
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{ts}</span>
+                  </div>
+                  {/* Assets */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                    <div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>I Receive</div>
+                      {theyOffer.map(p => <AssetChip key={p.id} pick={p} />)}
+                      {theyOffer.length === 0 && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>—</span>}
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.red, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>I Send</div>
+                      {theyWant.map(p => <AssetChip key={p.id} pick={p} />)}
+                      {theyWant.length === 0 && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>—</span>}
                     </div>
                   </div>
-                )
-              })}
-            </>
+                  {/* Buttons */}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => respondTrade(trade.id, 'accepted')}
+                      style={{ flex: 1, padding: '10px', background: 'rgba(21,198,120,.12)', border: `1px solid rgba(21,198,120,.4)`, borderRadius: 7, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, color: C.green }}>
+                      ✓ Accept
+                    </button>
+                    <button onClick={() => respondTrade(trade.id, 'declined')}
+                      style={{ flex: 1, padding: '10px', background: 'rgba(240,58,90,.08)', border: `1px solid rgba(240,58,90,.25)`, borderRadius: 7, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: 1, color: C.red }}>
+                      ✕ Decline
+                    </button>
+                  </div>
+                </div>
+              )
+            })
           )}
 
-          {pendingOutgoing.length > 0 && (
-            <>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.sub, textTransform: 'uppercase', marginBottom: 10, marginTop: pendingIncoming.length > 0 ? 20 : 0 }}>
-                Outgoing ({pendingOutgoing.length})
-              </div>
-              {pendingOutgoing.map(trade => {
-                const toTeam = draftOrder.find((t: any) => t.userId === trade.receiver_id)
-                const offered = allPicks.filter(p => trade.offer_pick_ids.includes(p.id))
-                const requested = allPicks.filter(p => trade.request_pick_ids.includes(p.id))
-                return (
-                  <div key={trade.id} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '16px 18px', marginBottom: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>To {toTeam?.teamName ?? 'Unknown'}</div>
-                      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: C.gold, background: 'rgba(245,166,35,.1)', padding: '2px 8px', borderRadius: 4 }}>PENDING</span>
+          {/* SENT tab */}
+          {inboxTab === 'sent' && (
+            pendingOutgoing.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>No outgoing trade offers.</div>
+            ) : pendingOutgoing.map(trade => {
+              const toTeam  = draftOrder.find((t: any) => t.userId === trade.receiver_id)
+              const iOffer  = allPicks.filter(p => trade.offer_pick_ids.includes(p.id))
+              const iWant   = allPicks.filter(p => trade.request_pick_ids.includes(p.id))
+              const ts = new Date(trade.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+              return (
+                <div key={trade.id} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: '16px 18px', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: C.surf2, border: `1px solid ${C.surf3}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.sub }}>
+                      {(toTeam?.teamName ?? '?').charAt(0).toUpperCase()}
                     </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>Offer Sent</div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>To {toTeam?.teamName ?? 'Unknown'}</div>
+                    </div>
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.gold, background: 'rgba(245,166,35,.1)', padding: '2px 8px', borderRadius: 4, letterSpacing: 1 }}>PENDING</span>
+                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{ts}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                    <div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.red, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>I Send</div>
+                      {iOffer.map(p => <AssetChip key={p.id} pick={p} />)}
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>I Receive</div>
+                      {iWant.map(p => <AssetChip key={p.id} pick={p} />)}
+                    </div>
+                  </div>
+                  <button onClick={() => respondTrade(trade.id, 'cancelled')}
+                    style={{ width: '100%', padding: '9px', background: 'rgba(240,58,90,.08)', border: `1px solid rgba(240,58,90,.2)`, borderRadius: 7, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: C.red }}>
+                    Cancel Offer
+                  </button>
+                </div>
+              )
+            })
+          )}
+
+          {/* HISTORY tab */}
+          {inboxTab === 'history' && (
+            historyTrades.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>No trade history yet.</div>
+            ) : historyTrades.map(trade => {
+              const isProposer = trade.proposer_id === userId
+              const otherTeam  = draftOrder.find((t: any) => t.userId === (isProposer ? trade.receiver_id : trade.proposer_id))
+              const accepted   = trade.status === 'accepted'
+              const iSent      = allPicks.filter(p => trade.offer_pick_ids.includes(p.id))
+              const iGot       = allPicks.filter(p => trade.request_pick_ids.includes(p.id))
+              const ts = new Date(trade.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+              return (
+                <div key={trade.id} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '14px 16px', marginBottom: 8, opacity: 0.8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: accepted ? 12 : 0 }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
+                      {isProposer ? 'To' : 'From'} {otherTeam?.teamName ?? 'Unknown'} · {ts}
+                    </div>
+                    <span style={{
+                      fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1,
+                      color: accepted ? C.green : C.red,
+                      background: accepted ? 'rgba(21,198,120,.1)' : 'rgba(240,58,90,.1)',
+                      padding: '2px 8px', borderRadius: 4,
+                    }}>
+                      {trade.status.toUpperCase()}
+                    </span>
+                  </div>
+                  {accepted && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>You offered</div>
-                        {offered.map(p => (
-                          <div key={p.id} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 3 }}>
-                            {p.player_data?.playerName || p.player_data?.school}
-                            <span style={{ color: C.muted, fontSize: 10 }}> · {p.player_data?.unitType}</span>
-                          </div>
-                        ))}
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.red, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+                          {isProposer ? 'Sent' : 'Received'}
+                        </div>
+                        {(isProposer ? iSent : iGot).map(p => <AssetChip key={p.id} pick={p} />)}
                       </div>
                       <div>
-                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>You requested</div>
-                        {requested.map(p => (
-                          <div key={p.id} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text, marginBottom: 3 }}>
-                            {p.player_data?.playerName || p.player_data?.school}
-                            <span style={{ color: C.muted, fontSize: 10 }}> · {p.player_data?.unitType}</span>
-                          </div>
-                        ))}
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+                          {isProposer ? 'Received' : 'Sent'}
+                        </div>
+                        {(isProposer ? iGot : iSent).map(p => <AssetChip key={p.id} pick={p} />)}
                       </div>
                     </div>
-                  </div>
-                )
-              })}
-            </>
-          )}
-
-          {completed.length > 0 && (
-            <>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10, marginTop: 20 }}>
-                History
-              </div>
-              {completed.map(trade => {
-                const isProposer = trade.proposer_id === userId
-                const otherTeam = draftOrder.find((t: any) => t.userId === (isProposer ? trade.receiver_id : trade.proposer_id))
-                const accepted = trade.status === 'accepted'
-                return (
-                  <div key={trade.id} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: '12px 18px', marginBottom: 8, opacity: 0.7 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub }}>
-                        {isProposer ? 'To' : 'From'} {otherTeam?.teamName ?? 'Unknown'}
-                      </div>
-                      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: accepted ? C.green : C.red, background: accepted ? 'rgba(21,198,120,.1)' : 'rgba(240,58,90,.1)', padding: '2px 8px', borderRadius: 4 }}>
-                        {trade.status.toUpperCase()}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
-            </>
+                  )}
+                </div>
+              )
+            })
           )}
         </div>
       )}
