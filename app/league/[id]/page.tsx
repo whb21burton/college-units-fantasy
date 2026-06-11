@@ -4789,6 +4789,9 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
   }
 
   const starterTotal = starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0);
+  const projTotal    = isReady ? starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).projected, 0) : 0;
+  // Future week or no actual game data this week → show 0.0 actual + proj below
+  const weekIsUnplayed = week > CURRENT_WEEK || !(gameStats?.completedSchools.length);
 
   async function doSwap(starterIdx: number) {
     if (!selectedBench) return;
@@ -4876,8 +4879,15 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
         <TeamAvatar teamLogoUrl={teamLogoUrl} teamName={myTeamName} size={60} isMine />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.text, letterSpacing: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{myTeamName}</div>
-          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginTop: 3 }}>{gameStats?.completedSchools.length ? 'Actual' : 'Projected'} · Starters Only</div>
-          <div className="mob-score-med" style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: (gameStats?.completedSchools.length ?? 0) > 0 ? C.gold : C.sub, lineHeight: 1, marginTop: 3 }}>{(isReady || (gameStats?.completedSchools.length ?? 0) > 0) ? starterTotal.toFixed(1) : '—'}</div>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginTop: 3 }}>{weekIsUnplayed ? 'Projected' : 'Actual'} · Starters Only</div>
+          <div className="mob-score-med" style={{ fontFamily: 'Anton,sans-serif', fontSize: 28, color: C.gold, lineHeight: 1, marginTop: 3 }}>
+            {weekIsUnplayed ? '0.0' : (isReady || (gameStats?.completedSchools.length ?? 0) > 0) ? starterTotal.toFixed(1) : '—'}
+          </div>
+          {isReady && projTotal > 0 && (
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub, marginTop: 2 }}>
+              {projTotal.toFixed(1)} proj
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
           <button onClick={() => setShowSettings(true)}
@@ -4932,7 +4942,6 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
         const color   = POS_COLORS[label] || C.muted;
         const isTarget = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
         const ep      = effectivePts(pick?.player_data?.school, pick?.player_data?.unitType, pick?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick?.player_data);
-        const pts     = (isReady || ep.isActual) ? ep.pts.toFixed(1) : '—';
         const name    = pick?.player_data?.playerName || pick?.player_data?.school;
         const sub     = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;
         const tier    = pick?.player_data?.tier;
@@ -4983,9 +4992,18 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
               )}
             </div>
 
-            {/* Pts — gold if actual score, gray if projected */}
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: pick ? (ep.isActual ? C.gold : C.sub) : C.surf3, flexShrink: 0, minWidth: 42, textAlign: 'right' }}>
-              {pick ? pts : '—'}
+            {/* Pts — actual in gold (0.0 for unplayed), proj in gray below */}
+            <div style={{ flexShrink: 0, minWidth: 42, textAlign: 'right' as const }}>
+              {pick ? (
+                <>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: C.gold }}>{ep.actual.toFixed(1)}</div>
+                  {isReady && ep.projected > 0 && (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, lineHeight: 1 }}>{ep.projected.toFixed(1)}</div>
+                  )}
+                </>
+              ) : (
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: C.surf3 }}>—</div>
+              )}
             </div>
 
             {/* Swap indicator */}
@@ -5012,7 +5030,6 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
           {bench.map((pick: any) => {
             const isSelected = selectedBench?.id === pick.id;
             const bep  = effectivePts(pick.player_data?.school, pick.player_data?.unitType, pick.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick.player_data);
-            const pts  = (isReady || bep.isActual) ? bep.pts.toFixed(1) : '—';
             const name = pick.player_data?.playerName || pick.player_data?.school;
             const sub  = pick.player_data?.playerName ? pick.player_data.school : pick.player_data?.conference;
             const tier = pick.player_data?.tier;
@@ -5059,9 +5076,12 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
                   />
                 </div>
 
-                {/* Pts — gold if actual score, gray if projected */}
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: bep.isActual ? C.gold : C.sub, flexShrink: 0, minWidth: 42, textAlign: 'right' }}>
-                  {pts}
+                {/* Pts — actual in gold (0.0 for unplayed), proj in gray below */}
+                <div style={{ flexShrink: 0, minWidth: 42, textAlign: 'right' as const }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: C.gold }}>{bep.actual.toFixed(1)}</div>
+                  {isReady && bep.projected > 0 && (
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.sub, lineHeight: 1 }}>{bep.projected.toFixed(1)}</div>
+                  )}
                 </div>
               </div>
             );
