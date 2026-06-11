@@ -5689,6 +5689,8 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
     });
   }
 
+  const draftComplete = league?.status === 'active';
+
   // ── Shared styles ────────────────────────────────────────────────────────────
   const inputFull: React.CSSProperties = {
     padding: '10px 12px', background: C.surf2, border: '1px solid ' + C.surf3,
@@ -5788,12 +5790,22 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 18, lineHeight: 1 }}>✕</button>
         </div>
 
+        {/* Draft-complete banner */}
+        {draftComplete && (
+          <div style={{ background: 'rgba(245,166,35,.12)', border: '1px solid rgba(245,166,35,.4)', borderRadius: 8, padding: '8px 12px', marginBottom: 16, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, letterSpacing: 0.5 }}>
+            ⚠️ Draft is complete. Only League Name can be changed.
+          </div>
+        )}
+
         {/* ── League Info ── */}
         <div style={{ ...sectionHead, borderTop: 'none', marginTop: 0, paddingTop: 0 }}>League Info</div>
         <div style={{ marginBottom: 14 }}>
           <span style={lbl}>League Name</span>
           <input style={{ ...inputFull, width: '100%' }} value={name} onChange={e => setName(e.target.value)} maxLength={40} />
         </div>
+
+        {/* Fields disabled after draft */}
+        <div style={{ opacity: draftComplete ? 0.4 : 1, pointerEvents: draftComplete ? 'none' : 'auto' }}>
         <div style={{ marginBottom: 6 }}>
           <span style={lbl}>League Size (2–32)</span>
           <input type="number" min={2} max={32} value={leagueSize}
@@ -5930,6 +5942,7 @@ function CommissionerSettingsModal({ league, onClose, onUpdate }: {
             );
           })}
         </div>
+        </div>{/* end draft-disabled wrapper */}
 
         {/* Error */}
         {error && (
