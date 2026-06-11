@@ -212,8 +212,18 @@ function PlayerInfoLines({
   const oppRankType = isDefUnit ? 'OFF' : 'DEF';
 
   const storedMult = ctx?.multMap?.[school] ?? null;
-  const mult = storedMult ?? 1.0;
-  const { label: diffLabel, color: diffColor } = odrInfo(mult);
+
+  // For projected games, derive the multiplier from SP+ ranks (never from multMap,
+  // which is written by the sync job and may have used the wrong map for DEF units).
+  // DEF faces opponent offense → offRankMap; all others face opponent defense → defRankMap.
+  const projRank = (opponent && ctx)
+    ? (isDefUnit ? (ctx.offRankMap[opponent] ?? 50) : (ctx.defRankMap[opponent] ?? 50))
+    : 50;
+  const projMult = opponent ? rankMult(projRank) : 1.0;
+
+  // ODR label/color: actual mult for played weeks, SP+-derived mult for projected
+  const displayMult = (ep.isActual && storedMult != null) ? storedMult : projMult;
+  const { label: diffLabel, color: diffColor } = odrInfo(displayMult);
 
   // Team units show "School UnitType Unit"; QB/K show player name
   const name = playerName ? playerName : `${school} ${unitType} Unit`;
@@ -227,13 +237,13 @@ function PlayerInfoLines({
       : school;
 
   // Line 4: score breakdown
-  // Played: "base × mult = actual"  (base is unit_QB raw, mult is game_mult, result is unit_QB_fpts)
-  // Projected: "base × mult = proj" using ODR-derived multiplier
+  // Played: "base × storedMult = actual"  (storedMult is the real game_mult from cached_stats)
+  // Projected: "base × projMult = proj"   (projMult from SP+ ranks, correct per unit type)
   const breakdownLine = (!opponent)
     ? 'No game this week'
     : ep.isActual && ep.storedMult != null
       ? `${ep.base.toFixed(1)} × ${ep.storedMult.toFixed(2)} = ${ep.pts.toFixed(1)}`
-      : `${ep.base.toFixed(1)} × ${mult.toFixed(2)} = ${ep.pts.toFixed(1)} proj`;
+      : `${ep.base.toFixed(1)} × ${projMult.toFixed(2)} = ${ep.pts.toFixed(1)} proj`;
 
   return (
     <div style={{ minWidth: 0, textAlign: align === 'right' ? 'right' : 'left' }}>
@@ -4578,7 +4588,6 @@ function TeamTab({ league, userId }: { league: any; userId: string | null }) {
         const color   = POS_COLORS[label] || C.muted;
         const isTarget = selectedBench != null && canFillSlot(selectedBench.player_data?.unitType, label);
         const ep      = effectivePts(pick?.player_data?.school, pick?.player_data?.unitType, pick?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, pick?.player_data);
-        const mp      = matchupProj(liveProj(pick?.player_data), pick?.player_data?.school ?? '', pick?.player_data?.unitType ?? '', matchupCtx);
         const pts     = (isReady || ep.isActual) ? ep.pts.toFixed(1) : '—';
         const name    = pick?.player_data?.playerName || pick?.player_data?.school;
         const sub     = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;
