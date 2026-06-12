@@ -237,12 +237,12 @@ function PlayerInfoLines({
       : school;
 
   // Line 4: score breakdown
-  // Played: "base × storedMult = actual"  (storedMult is the real game_mult from cached_stats)
-  // Projected: "base × projMult = proj"   (projMult from SP+ ranks, correct per unit type)
+  // Played: actual score (base=avgFpts cannot be multiplied by storedMult to reproduce actual)
+  // Projected: "avgFpts × projMult = proj"
   const breakdownLine = (!opponent)
     ? 'No game this week'
-    : ep.isActual && ep.storedMult != null
-      ? `${ep.base.toFixed(1)} × ${ep.storedMult.toFixed(2)} = ${ep.pts.toFixed(1)}`
+    : ep.isActual
+      ? `${ep.pts.toFixed(1)} pts`
       : `${ep.base.toFixed(1)} × ${projMult.toFixed(2)} = ${ep.pts.toFixed(1)} proj`;
 
   return (
@@ -284,7 +284,10 @@ function effectivePts(
   ctx: MatchupCtx, gs: GameStats,
   playerData?: any
 ): { pts: number; isActual: boolean; base: number; storedMult: number | null; actual: number; projected: number; isPlayed: boolean } {
-  const projBase = playerData ? liveProj(playerData) : weeklyProj(seasonPts);
+  // avgF is the per-week average used for all projections (never the raw stored WGTD base)
+  const avgF = playerData
+    ? ((playerData.avgFpts ?? 0) > 0 ? playerData.avgFpts : (playerData.avgPerWeek ?? 0))
+    : weeklyProj(seasonPts);
   const opponent = ctx?.opponentMap[school] ?? null;
   // BYE week — no game, no points
   if (ctx && !opponent) return { pts: 0, isActual: false, base: 0, storedMult: null, actual: 0, projected: 0, isPlayed: false };
@@ -293,19 +296,19 @@ function effectivePts(
   const projRank = opponent && ctx
     ? (unitType === 'DEF' ? (ctx.offRankMap[opponent] ?? 50) : (ctx.defRankMap[opponent] ?? 50))
     : 50;
-  const projPts = opponent ? projBase * rankMult(projRank) : projBase;
+  const projPts = opponent ? avgF * rankMult(projRank) : avgF;
 
-  // schoolPoints stores unit_QB (raw base before ODR multiplier).
-  // Actual FPTS = base × game_mult, matching what the sync job writes to unit_QB_fpts.
+  // schoolPoints stores the raw WGTD base; actual FPTS = base × game_mult.
+  // We return base: avgF so the breakdown always shows the per-week average, not raw WGTD.
   const storedBase = gs?.schoolPoints?.[school]?.[unitType];
   const storedMult = gs?.schoolMults?.[school] ?? null;
   if (storedBase != null) {
     const actual = storedMult != null ? storedBase * storedMult : storedBase;
-    return { pts: actual, isActual: true, base: storedBase, storedMult, actual, projected: projPts, isPlayed: true };
+    return { pts: actual, isActual: true, base: avgF, storedMult, actual, projected: projPts, isPlayed: true };
   }
 
   // No stored stats — show projection (whether game is future or stats not yet synced)
-  return { pts: projPts, isActual: false, base: projBase, storedMult: null, actual: 0, projected: projPts, isPlayed: false };
+  return { pts: projPts, isActual: false, base: avgF, storedMult: null, actual: 0, projected: projPts, isPlayed: false };
 }
 
 type Tab = 'draft' | 'matchup' | 'team' | 'league' | 'players' | 'trade' | 'ranks' | 'standings' | 'schedule' | 'playoffs' | 'lineup' | 'leaderboard' | 'chat';
