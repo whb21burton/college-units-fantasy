@@ -4562,9 +4562,9 @@ function MatchupTab({ league, userId, members = [], currentWeek = 5 }: { league:
     const winPctMe = sum > 0 ? myTotal / sum : 0.5;
     const winPctOp = 1 - winPctMe;
 
-    function MobilePickRow({ myPick, oppPick, label, isBench = false }: {
+    const MobilePickRow = ({ myPick, oppPick, label, isBench = false }: {
       myPick: any | null; oppPick: any | null; label: string; isBench?: boolean;
-    }) {
+    }) => {
       const posColor  = POS_COLORS[label] || C.muted;
       const myEp      = myPick  ? epOf(myPick)  : null;
       const oppEp     = oppPick ? epOf(oppPick) : null;
@@ -4617,7 +4617,7 @@ function MatchupTab({ league, userId, members = [], currentWeek = 5 }: { league:
           </div>
         </div>
       );
-    }
+    };
 
     return (
       <div style={{ background: C.bg }}>
