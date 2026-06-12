@@ -152,15 +152,37 @@ export async function POST(request: NextRequest) {
 
     for (const league of leagues ?? []) {
       const draftOrder: any[] = league.settings?.draft_order ?? [];
+      const storedSchedule: any[] = league.settings?.schedule ?? [];
       const numTeams = draftOrder.length;
-      if (numTeams < 2) continue;
+
+      // DEBUG 1: draft_order and schedule lengths
+      console.log(`[weekly-sync] league=${league.id} draftOrder.length=${numTeams} schedule.length=${storedSchedule.length}`);
+
+      if (numTeams < 2) { console.log(`[weekly-sync] skipping — numTeams < 2`); continue; }
+
+      // DEBUG 2: what getWeekMatchups returns (will be [] for odd team counts)
+      const derivedMatchups = getWeekMatchups(draftOrder, week);
+      console.log(`[weekly-sync] getWeekMatchups(week=${week}) returned ${derivedMatchups.length} pairs (returns [] if numTeams is odd)`);
+
+      // DEBUG 3: week-N games from stored schedule
+      const weekGamesFromSchedule = storedSchedule.filter((g: any) => g.week === week);
+      console.log(`[weekly-sync] stored schedule games for week ${week}:`, JSON.stringify(weekGamesFromSchedule));
 
       // Fetch all picks for the league
       const { data: allPicks } = await admin
         .from('draft_picks')
         .select('id, pick_number, player_data')
         .eq('league_id', league.id);
-      if (!allPicks?.length) continue;
+
+      // DEBUG 4: picks count per slot
+      console.log(`[weekly-sync] allPicks.length=${allPicks?.length ?? 0}`);
+      for (let slot = 0; slot < numTeams; slot++) {
+        const slotPicks = (allPicks ?? []).filter(p => snakeIdx(p.pick_number, numTeams) === slot);
+        const teamEntry = draftOrder.find((t: any) => t.slot - 1 === slot);
+        console.log(`[weekly-sync]   slot ${slot} (${teamEntry?.teamName ?? teamEntry?.userId ?? '?'}): ${slotPicks.length} picks`);
+      }
+
+      if (!allPicks?.length) { console.log(`[weekly-sync] skipping — no picks`); continue; }
 
       // Fetch member lineups (custom starter overrides)
       const { data: members } = await admin
@@ -185,7 +207,10 @@ export async function POST(request: NextRequest) {
         const score2 = parseFloat(calcTeamScore(picks2, lineupMap[team2.userId], schoolPoints, schoolMults).toFixed(2));
         const winnerId = score1 > score2 ? team1.userId : score2 > score1 ? team2.userId : null;
 
-        await admin.from('matchups').upsert(
+        // DEBUG 5: scores and upsert result
+        console.log(`[weekly-sync] matchup: ${team1.teamName ?? team1.userId} (${score1}) vs ${team2.teamName ?? team2.userId} (${score2}) winner=${winnerId ?? 'tie'}`);
+
+        const { error: upsertErr } = await admin.from('matchups').upsert(
           {
             league_id:   league.id,
             week,
@@ -197,6 +222,11 @@ export async function POST(request: NextRequest) {
           },
           { onConflict: 'league_id,week,team1_id' },
         );
+        if (upsertErr) {
+          console.error(`[weekly-sync] upsert error:`, upsertErr.message, upsertErr.details ?? '');
+        } else {
+          console.log(`[weekly-sync] upsert OK for week=${week} team1=${team1.userId} team2=${team2.userId}`);
+        }
         matchupsUpdated++;
       }
       leaguesUpdated++;
