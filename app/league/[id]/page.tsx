@@ -3554,6 +3554,15 @@ function LeagueRanksTab({
   const [loading,      setLoading]      = useState(true);
   const [calculating,  setCalculating]  = useState(false);
   const [calcMsg,      setCalcMsg]      = useState('');
+  const [isMobile,     setIsMobile]     = useState(false);
+  const [mobileSection,setMobileSection]= useState<'standings'|'bracket'>('standings');
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   const currentWeek    = league?.current_week ?? 1;
   const isCommissioner = league?.commissioner_id === userId;
@@ -3709,6 +3718,203 @@ function LeagueRanksTab({
       Loading…
     </div>
   );
+
+  // ── MOBILE ──────────────────────────────────────────────────────────────────
+  if (isMobile) {
+    const NAV_BG = '#0c1422';
+    const LINE   = '#1a2b40';
+    const CARD_H = 44;
+
+    // Compact team card for bracket
+    const MbCard = ({ team, score, isBye, isWinner }: { team?: any; score?: number; isBye?: boolean; isWinner?: boolean }) => {
+      if (isBye) return (
+        <div style={{ background: '#0d1525', borderRadius: 8, padding: '8px 10px', border: `1px solid ${LINE}`, height: CARD_H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>BYE</span>
+        </div>
+      );
+      if (!team) return (
+        <div style={{ background: '#0d1525', borderRadius: 8, padding: '8px 10px', border: `1px solid ${LINE}`, height: CARD_H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>TBD</span>
+        </div>
+      );
+      return (
+        <div style={{ background: '#0d1525', borderRadius: 8, padding: '8px 10px', border: `1px solid ${isWinner ? C.gold + '66' : LINE}`, height: CARD_H, display: 'flex', alignItems: 'center', gap: 7 }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.surf3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 9, color: C.muted }}>
+            {team.team_name?.slice(0, 2).toUpperCase()}
+          </div>
+          <span style={{ flex: 1, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: isWinner ? C.gold : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {team.team_name}
+          </span>
+          {score != null && score > 0 && (
+            <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 11, color: isWinner ? C.gold : C.sub, flexShrink: 0 }}>{score.toFixed(0)}</span>
+          )}
+        </div>
+      );
+    };
+
+    // Score lookups for bracket display
+    const sc = (team: any, wk: number) => team ? (allScores[team.id]?.[wk] ?? 0) : 0;
+
+    // Connector between bracket columns: top half + bottom half
+    const Connector = ({ nPairs = 1 }: { nPairs?: number }) => (
+      <div style={{ flexShrink: 0, width: 16, display: 'flex', flexDirection: 'column', alignSelf: 'stretch' }}>
+        {Array.from({ length: nPairs }).map((_, i) => (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, borderRight: `1px solid ${LINE}`, borderBottom: `1px solid ${LINE}` }} />
+            <div style={{ flex: 1, borderRight: `1px solid ${LINE}`, borderTop: `1px solid ${LINE}` }} />
+          </div>
+        ))}
+      </div>
+    );
+
+    return (
+      <div style={{ paddingBottom: '80px' }}>
+        {/* Toggle buttons */}
+        <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderRadius: 8, overflow: 'hidden', border: `1px solid ${LINE}` }}>
+          {(['standings', 'bracket'] as const).map(sec => (
+            <button key={sec} onClick={() => setMobileSection(sec)}
+              style={{ flex: 1, padding: '10px', background: mobileSection === sec ? 'rgba(212,168,40,.15)' : NAV_BG, border: 'none', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: mobileSection === sec ? C.gold : C.muted, textTransform: 'uppercase' }}>
+              {sec === 'standings' ? 'Standings' : '🏆 Bracket'}
+            </button>
+          ))}
+        </div>
+
+        {/* ── STANDINGS ── */}
+        {mobileSection === 'standings' && (
+          <div>
+            {standings.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>No standings yet</div>
+            ) : standings.map((team, idx) => {
+              const seed   = idx + 1;
+              const isUser = !team.isCpu && team.id === userId;
+              const hasBye = seed <= 2 && standings.length >= 6;
+              return (
+                <div key={team.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '11px 14px',
+                  background: isUser ? '#0d1c2e' : 'transparent',
+                  borderBottom: `1px solid ${LINE}`,
+                }}>
+                  {/* Rank */}
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: SEED_COLORS[seed] ?? C.muted, minWidth: 22, textAlign: 'center' }}>{seed}</div>
+                  {/* Avatar */}
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: C.surf3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 11, color: isUser ? C.gold : C.muted, border: isUser ? `1px solid ${C.gold}60` : 'none' }}>
+                    {team.team_name?.slice(0, 2).toUpperCase()}
+                  </div>
+                  {/* Name + status */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 700, color: isUser ? C.gold : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {team.team_name}{team.isCpu && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, marginLeft: 5 }}>CPU</span>}
+                    </div>
+                    {hasBye && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.green, marginTop: 1 }}>BYE · Wk 12</div>}
+                  </div>
+                  {/* W-L */}
+                  <div style={{ textAlign: 'center', minWidth: 36 }}>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text }}>{team.wins}-{team.losses}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 0.5 }}>W-L</div>
+                  </div>
+                  {/* PF */}
+                  <div style={{ textAlign: 'right', minWidth: 44 }}>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub }}>{team.pf > 0 ? team.pf.toFixed(0) : '—'}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 0.5 }}>PF</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── BRACKET ── */}
+        {mobileSection === 'bracket' && (
+          <div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 12 }}>
+              Playoff Bracket
+            </div>
+
+            {!showBracket ? (
+              <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>Draft must be complete to see the bracket.</div>
+            ) : (
+              <div style={{ overflowX: 'auto', paddingBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'stretch', minWidth: 340 }}>
+
+                  {/* Round 1 column */}
+                  <div style={{ flex: '0 0 115px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', textAlign: 'center', marginBottom: 4 }}>Round 1</div>
+                    <MbCard team={s(1)} isBye isWinner />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <MbCard team={s(3)} score={sc(s(3), PLAY_IN)} isWinner={pi36 === 'a'} />
+                      <MbCard team={s(6)} score={sc(s(6), PLAY_IN)} isWinner={pi36 === 'b'} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <MbCard team={s(4)} score={sc(s(4), PLAY_IN)} isWinner={pi45 === 'a'} />
+                      <MbCard team={s(5)} score={sc(s(5), PLAY_IN)} isWinner={pi45 === 'b'} />
+                    </div>
+                    <MbCard team={s(2)} isBye isWinner />
+                  </div>
+
+                  {/* Connector R1 → Semis */}
+                  <Connector nPairs={2} />
+
+                  {/* Semis column */}
+                  <div style={{ flex: '0 0 105px', display: 'flex', flexDirection: 'column', justifyContent: 'space-around', gap: 6 }}>
+                    <div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', textAlign: 'center', marginBottom: 4 }}>Semis</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <MbCard team={s(1)} score={sc(s(1), SEMI)} isWinner={semi1 === 'a'} />
+                        <MbCard team={semi1Opp} score={sc(semi1Opp, SEMI)} isWinner={semi1 === 'b'} />
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
+                        <MbCard team={s(2)} score={sc(s(2), SEMI)} isWinner={semi2 === 'a'} />
+                        <MbCard team={semi2Opp} score={sc(semi2Opp, SEMI)} isWinner={semi2 === 'b'} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Connector Semis → Champ */}
+                  <Connector nPairs={1} />
+
+                  {/* Championship column */}
+                  <div style={{ flex: '0 0 105px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: C.gold, textTransform: 'uppercase', textAlign: 'center', marginBottom: 4 }}>🏆 Champ</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <MbCard team={champA} score={sc(champA, CHAMP)} isWinner={champRes === 'a'} />
+                      <MbCard team={champB} score={sc(champB, CHAMP)} isWinner={champRes === 'b'} />
+                    </div>
+                    {champion && (
+                      <div style={{ marginTop: 8, padding: '7px 10px', background: 'rgba(212,168,40,.1)', borderRadius: 8, border: `1px solid ${C.gold}44`, textAlign: 'center' }}>
+                        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.gold }}>CHAMPION</div>
+                        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, marginTop: 2 }}>{champion.team_name}</div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+            )}
+
+            {/* 3rd/5th place on mobile */}
+            {showBracket && standings.length >= 6 && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>3rd Place · Week 14</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 14 }}>
+                  <MbCard team={loserS1} score={sc(loserS1, CHAMP)} isWinner={place3Res === 'a'} />
+                  <MbCard team={loserS2} score={sc(loserS2, CHAMP)} isWinner={place3Res === 'b'} />
+                </div>
+                <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 8 }}>5th Place · Week 14</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <MbCard team={loser36} score={sc(loser36, CHAMP)} isWinner={place5Res === 'a'} />
+                  <MbCard team={loser45} score={sc(loser45, CHAMP)} isWinner={place5Res === 'b'} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+  // ── END MOBILE ──────────────────────────────────────────────────────────────
 
   function RoundHdr({ label, sub }: { label: string; sub: string }) {
     return (
