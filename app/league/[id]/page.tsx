@@ -4459,6 +4459,14 @@ function MatchupTab({ league, userId, members = [], currentWeek = 5 }: { league:
   const [isReady,       setIsReady]       = useState(false);
   const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
   const [logos,         setLogos]         = useState<Record<string, string>>({});
+  const [isMobile,      setIsMobile]      = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   useEffect(() => {
     fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d.logos ?? {})).catch(() => {});
@@ -4547,6 +4555,139 @@ function MatchupTab({ league, userId, members = [], currentWeek = 5 }: { league:
   const oppTeamName = oppEntry?.teamName ?? 'BYE';
   const iAhead      = myTotal >= oppTotal;
   const benchLen    = Math.max(myRoster.bench.length, oppRoster.bench.length);
+
+  // ── MOBILE LAYOUT ────────────────────────────────────────────────────────
+  if (isMobile) {
+    const sum      = myTotal + oppTotal;
+    const winPctMe = sum > 0 ? myTotal / sum : 0.5;
+    const winPctOp = 1 - winPctMe;
+
+    function MobilePickRow({ myPick, oppPick, label, isBench = false }: {
+      myPick: any | null; oppPick: any | null; label: string; isBench?: boolean;
+    }) {
+      const posColor  = POS_COLORS[label] || C.muted;
+      const myEp      = myPick  ? epOf(myPick)  : null;
+      const oppEp     = oppPick ? epOf(oppPick) : null;
+      const myName    = myPick  ? (myPick.player_data?.playerName  || myPick.player_data?.school  || '—') : '—';
+      const oppName   = oppPick ? (oppPick.player_data?.playerName || oppPick.player_data?.school || '—') : '—';
+      const myOpp     = myPick  ? (matchupCtx?.opponentMap[myPick.player_data?.school]  ?? '') : '';
+      const oppOpp    = oppPick ? (matchupCtx?.opponentMap[oppPick.player_data?.school] ?? '') : '';
+
+      function ScoreCell({ ep, align }: { ep: ReturnType<typeof epOf> | null; align: 'left' | 'right' }) {
+        if (!ep || statsLoading) return <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.muted }}>—</span>;
+        const pts = ep.isActual ? ep.actual : ep.projected;
+        const col = ep.isActual ? C.gold : C.sub;
+        return <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: col }}>{pts.toFixed(1)}</span>;
+      }
+
+      return (
+        <div style={{
+          display: 'grid', gridTemplateColumns: '35% 30% 35%',
+          alignItems: 'center', padding: '9px 10px',
+          borderBottom: `1px solid ${C.surf3}`,
+          opacity: isBench ? 0.65 : 1,
+          background: 'transparent',
+        }}>
+          {/* Left — my player */}
+          <div style={{ textAlign: 'right', paddingRight: 8, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.text, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{myName}</div>
+            {myOpp && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 0.3 }}>vs {myOpp}</div>}
+            <ScoreCell ep={myEp} align="right" />
+          </div>
+
+          {/* Center — position badge */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+            <div style={{
+              padding: '2px 8px', borderRadius: 12,
+              background: posColor + '22', border: `1px solid ${posColor}66`,
+              fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: posColor, fontWeight: 700,
+            }}>{label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
+              {!statsLoading && myEp && <span style={{ color: myEp.isActual ? C.gold : C.sub }}>{(myEp.isActual ? myEp.actual : myEp.projected).toFixed(1)}</span>}
+              <span>-</span>
+              {!statsLoading && oppEp && <span style={{ color: oppEp.isActual ? C.gold : C.sub }}>{(oppEp.isActual ? oppEp.actual : oppEp.projected).toFixed(1)}</span>}
+            </div>
+          </div>
+
+          {/* Right — opp player */}
+          <div style={{ textAlign: 'left', paddingLeft: 8, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.text, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{oppName}</div>
+            {oppOpp && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 0.3 }}>vs {oppOpp}</div>}
+            <ScoreCell ep={oppEp} align="left" />
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ background: C.bg }}>
+
+        {/* Header */}
+        <div style={{ padding: '14px 14px 10px', background: 'linear-gradient(180deg,#0e1f35,#05080f)' }}>
+          {/* Scores row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', marginBottom: 6 }}>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 34, color: iAhead ? C.gold : C.sub, lineHeight: 1 }}>
+                {statsLoading ? '—' : myActual.toFixed(1)}
+              </div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
+                {Math.round(winPctMe * 100)}% win
+              </div>
+              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: C.text, marginTop: 4 }}>{myTeamName}</div>
+            </div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, padding: '0 10px' }}>VS</div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 34, color: !iAhead ? C.gold : C.sub, lineHeight: 1 }}>
+                {statsLoading ? '—' : oppActual.toFixed(1)}
+              </div>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 2 }}>
+                {Math.round(winPctOp * 100)}% win
+              </div>
+              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 700, color: C.text, marginTop: 4 }}>{oppTeamName}</div>
+            </div>
+          </div>
+
+          {/* Win probability bar */}
+          <div style={{ height: 4, borderRadius: 2, background: C.surf3, overflow: 'hidden', marginTop: 8 }}>
+            <div style={{ height: '100%', width: `${winPctMe * 100}%`, background: iAhead ? C.gold : C.sub, borderRadius: 2, transition: 'width .4s ease' }} />
+          </div>
+        </div>
+
+        {/* Week selector */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.surf3}` }}>
+          <button onClick={() => setWeek(w => Math.max(1, w - 1))} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: 18, padding: '0 6px' }}>‹</button>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 3, color: C.muted, textTransform: 'uppercase' }}>
+            Week {week} · {gameStats?.completedSchools.length ? 'Actual' : 'Projected'}
+          </div>
+          <button onClick={() => setWeek(w => Math.min(15, w + 1))} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: 18, padding: '0 6px' }}>›</button>
+        </div>
+
+        {/* Starters label */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px 6px' }}>
+          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Starters</span>
+          <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+        </div>
+
+        {STARTER_SLOT_LABELS.map((label, i) => (
+          <MobilePickRow key={label + i} myPick={myRoster.starters[i] ?? null} oppPick={oppRoster.starters[i] ?? null} label={label} />
+        ))}
+
+        {/* Bench */}
+        {benchLen > 0 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px 6px' }}>
+              <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase' }}>Bench</span>
+              <div style={{ flex: 1, height: 1, background: C.surf3 }} />
+            </div>
+            {Array.from({ length: benchLen }).map((_, i) => (
+              <MobilePickRow key={'bn' + i} myPick={myRoster.bench[i] ?? null} oppPick={oppRoster.bench[i] ?? null} label="BN" isBench />
+            ))}
+          </>
+        )}
+      </div>
+    );
+  }
+  // ── END MOBILE ────────────────────────────────────────────────────────────
 
   return (
     <div style={{ maxWidth: 820 }}>
