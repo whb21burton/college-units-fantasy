@@ -5380,6 +5380,14 @@ function LeagueTab({ league, userId, members = [], currentWeek = 5 }: { league: 
   const [submitting,    setSubmitting]    = useState(false);
   const [trades,        setTrades]        = useState<any[]>([]);
   const [tradeMsg,      setTradeMsg]      = useState('');
+  const [isMobile,      setIsMobile]      = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   const draftOrder: any[] = league?.settings?.draft_order || [];
   const numTeams           = draftOrder.length;
@@ -5499,7 +5507,109 @@ function LeagueTab({ league, userId, members = [], currentWeek = 5 }: { league: 
   );
 
   /* ── Matchups view ── */
-  if (view === 'matchups') return (
+  if (view === 'matchups') {
+    // Shared card data builder
+    const matchupCards = matchups.map(([teamA, teamB], i) => {
+      const totA = isReady ? assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0) : 0;
+      const totB = isReady ? assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0) : 0;
+      const isMeA = teamA.userId === userId;
+      const isMeB = teamB.userId === userId;
+      const isMyMatchup = isMeA || isMeB;
+      const sum = totA + totB;
+      const winPctA = sum > 0 ? totA / sum : 0.5;
+      const winPctB = 1 - winPctA;
+      const aWins = totA >= totB;
+      const hasScores = isReady && (totA > 0 || totB > 0);
+      const displayA = isReady ? totA.toFixed(1) : '—';
+      const displayB = isReady ? totB.toFixed(1) : '—';
+      return { i, teamA, teamB, totA, totB, isMeA, isMeB, isMyMatchup, sum, winPctA, winPctB, aWins, hasScores, displayA, displayB };
+    });
+
+    // ── MOBILE ──────────────────────────────────────────────────────────────
+    if (isMobile) return (
+      <div style={{ paddingBottom: '80px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, letterSpacing: 2, color: C.text, textTransform: 'uppercase' }}>
+            Matchups
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={() => setWeek(w => Math.max(1, w - 1))} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: 18, padding: '0 4px' }}>‹</button>
+            <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, letterSpacing: 1 }}>Week {week}</span>
+            <button onClick={() => setWeek(w => Math.min(13, w + 1))} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: 18, padding: '0 4px' }}>›</button>
+          </div>
+        </div>
+
+        {matchupCards.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
+            Complete the draft first to see matchups.
+          </div>
+        ) : matchupCards.map(({ i, teamA, teamB, isMeA, isMeB, isMyMatchup, winPctA, winPctB, aWins, hasScores, displayA, displayB }) => (
+          <div key={i} style={{
+            background: '#0c1422',
+            border: `1px solid ${isMyMatchup ? 'rgba(212,168,40,.4)' : '#1a2b40'}`,
+            borderRadius: 12, padding: 16, marginBottom: 12,
+          }}>
+            {/* 3-column row: left team / VS / right team */}
+            <div style={{ display: 'grid', gridTemplateColumns: '40% 20% 40%', alignItems: 'center', marginBottom: 12 }}>
+
+              {/* Left team (A) */}
+              <button onClick={() => { setSelectedTeam(teamA); setSelectedPlayer(null); setView('roster'); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' as const }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <TeamAvatar teamLogoUrl={getMemberLogo(teamA.userId)} teamName={teamA.teamName} size={44} isMine={isMeA} />
+                  <div style={{ minWidth: 0 }}>
+                    {hasScores && (
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, color: aWins ? C.green : C.red, marginBottom: 1 }}>
+                        {Math.round(winPctA * 100)}%
+                      </div>
+                    )}
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: isMeA ? C.gold : C.text, lineHeight: 1 }}>{displayA}</div>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700, color: isMeA ? C.gold : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90, marginTop: 2 }}>
+                      {teamA.teamName.length > 18 ? teamA.teamName.slice(0, 18) + '…' : teamA.teamName}
+                    </div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 1 }}>@{teamA.teamName?.slice(0, 10)} · 0-0</div>
+                  </div>
+                </div>
+              </button>
+
+              {/* Center: VS badge */}
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 9, letterSpacing: 1, color: C.muted }}>VS</div>
+              </div>
+
+              {/* Right team (B) */}
+              <button onClick={() => { setSelectedTeam(teamB); setSelectedPlayer(null); setView('roster'); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'right' as const }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                  <div style={{ minWidth: 0, textAlign: 'right' as const }}>
+                    {hasScores && (
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, color: !aWins ? C.green : C.red, marginBottom: 1 }}>
+                        {Math.round(winPctB * 100)}%
+                      </div>
+                    )}
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: isMeB ? C.gold : C.text, lineHeight: 1 }}>{displayB}</div>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700, color: isMeB ? C.gold : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90, marginTop: 2, direction: 'rtl' }}>
+                      {teamB.teamName.length > 18 ? teamB.teamName.slice(0, 18) + '…' : teamB.teamName}
+                    </div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginTop: 1 }}>0-0 · @{teamB.teamName?.slice(0, 10)}</div>
+                  </div>
+                  <TeamAvatar teamLogoUrl={getMemberLogo(teamB.userId)} teamName={teamB.teamName} size={44} isMine={isMeB} />
+                </div>
+              </button>
+            </div>
+
+            {/* Win probability bar */}
+            <div style={{ height: 4, borderRadius: 2, overflow: 'hidden', background: C.red }}>
+              <div style={{ height: '100%', width: `${Math.round(winPctA * 100)}%`, background: C.green, borderRadius: '2px 0 0 2px', transition: 'width .3s ease' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+    // ── END MOBILE ───────────────────────────────────────────────────────────
+
+    return (
     <div style={{ maxWidth: 900 }}>
       {/* Header + week selector */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -5528,21 +5638,8 @@ function LeagueTab({ league, userId, members = [], currentWeek = 5 }: { league: 
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          {matchups.map(([teamA, teamB], i) => {
-            // Only compute totals once isReady (pool + matchupCtx loaded) to avoid flash
-            const totA = isReady ? assignRoster(getTeamPicks(teamA)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0) : 0;
-            const totB = isReady ? assignRoster(getTeamPicks(teamB)).starters.reduce((s, p) => s + effectivePts(p?.player_data?.school, p?.player_data?.unitType, p?.player_data?.projectedPoints ?? 0, matchupCtx, gameStats, p?.player_data).pts, 0) : 0;
-            const isMeA = teamA.userId === userId;
-            const isMeB = teamB.userId === userId;
-            const isMyMatchup = isMeA || isMeB;
+          {matchupCards.map(({ i, teamA, teamB, isMeA, isMeB, isMyMatchup, winPctA, winPctB, aWins, hasScores, displayA, displayB }) => {
             const statusText = gameStats ? 'FINAL' : `WK ${week}`;
-            const sum = totA + totB;
-            const winPctA = sum > 0 ? totA / sum : 0.5;
-            const winPctB = sum > 0 ? totB / sum : 0.5;
-            const aWins = totA >= totB;
-            const hasScores = isReady && (totA > 0 || totB > 0);
-            const displayA = isReady ? totA.toFixed(1) : '—';
-            const displayB = isReady ? totB.toFixed(1) : '—';
             return (
               <div key={i} style={{ background: '#0c1422', border: `1px solid ${isMyMatchup ? 'rgba(212,168,40,.35)' : '#1a2b40'}`, borderRadius: 12, padding: '14px 16px' }}>
                 {/* Status */}
@@ -5583,11 +5680,9 @@ function LeagueTab({ league, userId, members = [], currentWeek = 5 }: { league: 
                 {/* Row 3: Win probability bars */}
                 {hasScores && (
                   <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                    {/* Team A: fills left-to-right */}
                     <div style={{ flex: 1, height: 6, background: C.surf3, borderRadius: 3, overflow: 'hidden' }}>
                       <div style={{ width: `${Math.round(winPctA * 100)}%`, height: '100%', background: aWins ? C.green : C.red, borderRadius: 3 }} />
                     </div>
-                    {/* Team B: fills right-to-left */}
                     <div style={{ flex: 1, height: 6, background: C.surf3, borderRadius: 3, overflow: 'hidden', display: 'flex', justifyContent: 'flex-end' }}>
                       <div style={{ width: `${Math.round(winPctB * 100)}%`, height: '100%', background: !aWins ? C.green : C.red, borderRadius: 3 }} />
                     </div>
@@ -5656,6 +5751,7 @@ function LeagueTab({ league, userId, members = [], currentWeek = 5 }: { league: 
       )}
     </div>
   );
+  } // end if (view === 'matchups')
 
   /* ── Roster view ── */
   if (view === 'roster' && selectedTeam) {
