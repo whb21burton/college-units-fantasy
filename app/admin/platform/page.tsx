@@ -1629,6 +1629,105 @@ function CurrentWeekControl() {
   )
 }
 
+function CronControlPanel() {
+  const [syncState,    setSyncState]    = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  const [syncResult,   setSyncResult]   = useState<string | null>(null)
+  const [advanceState, setAdvanceState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  const [advanceResult, setAdvanceResult] = useState<string | null>(null)
+
+  async function runCron(path: string, setLoading: (s: any) => void, setResult: (s: string) => void) {
+    setLoading('loading')
+    setResult(null as any)
+    try {
+      const res = await fetch(path, { method: 'POST' })
+      const data = await res.json()
+      setLoading(res.ok ? 'done' : 'error')
+      setResult(JSON.stringify(data, null, 2))
+    } catch (err: any) {
+      setLoading('error')
+      setResult(err.message)
+    }
+  }
+
+  const stateColor = (s: string) =>
+    s === 'done' ? C.green : s === 'error' ? C.red : s === 'loading' ? C.gold : C.muted
+
+  return (
+    <div style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
+      <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.text, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+        🤖 Cron Jobs
+      </div>
+      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 20, letterSpacing: 0.5 }}>
+        Manual triggers for scheduled automation. These run automatically on their cron schedule.
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Weekly Sync */}
+        <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: 16 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.text, letterSpacing: 1, marginBottom: 4 }}>
+            🔄 Weekly Sync
+          </div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 14, letterSpacing: 0.5, lineHeight: 1.5 }}>
+            Sync stats from CFBD and write final matchup scores for the current week. Runs Sunday 8AM.
+          </div>
+          <button
+            onClick={() => runCron('/api/cron/weekly-sync', setSyncState, setSyncResult)}
+            disabled={syncState === 'loading'}
+            style={{
+              width: '100%', padding: '10px', borderRadius: 8, cursor: syncState === 'loading' ? 'not-allowed' : 'pointer',
+              background: 'rgba(245,166,35,.12)', border: `1px solid ${C.gold}`,
+              fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5,
+              color: C.gold, textTransform: 'uppercase', opacity: syncState === 'loading' ? 0.6 : 1,
+            }}>
+            {syncState === 'loading' ? 'Running…' : '🔄 Run Weekly Sync Now'}
+          </button>
+          {syncResult && (
+            <div style={{ marginTop: 10, padding: '8px 10px', background: C.bg, borderRadius: 6, border: `1px solid ${stateColor(syncState)}33` }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: stateColor(syncState), letterSpacing: 1, marginBottom: 4 }}>
+                {syncState === 'done' ? '✓ Success' : '✗ Error'}
+              </div>
+              <pre style={{ fontFamily: 'monospace', fontSize: 9, color: C.sub, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, maxHeight: 140, overflowY: 'auto' }}>
+                {syncResult}
+              </pre>
+            </div>
+          )}
+        </div>
+
+        {/* Advance Week */}
+        <div style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 10, padding: 16 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.text, letterSpacing: 1, marginBottom: 4 }}>
+            ⏭ Advance Week
+          </div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, marginBottom: 14, letterSpacing: 0.5, lineHeight: 1.5 }}>
+            Increment current_week in platform_settings and all active leagues. Posts a chat message to each league. Runs Monday 8AM.
+          </div>
+          <button
+            onClick={() => runCron('/api/cron/advance-week', setAdvanceState, setAdvanceResult)}
+            disabled={advanceState === 'loading'}
+            style={{
+              width: '100%', padding: '10px', borderRadius: 8, cursor: advanceState === 'loading' ? 'not-allowed' : 'pointer',
+              background: 'rgba(21,198,120,.1)', border: `1px solid ${C.green}`,
+              fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5,
+              color: C.green, textTransform: 'uppercase', opacity: advanceState === 'loading' ? 0.6 : 1,
+            }}>
+            {advanceState === 'loading' ? 'Running…' : '⏭ Advance Week Now'}
+          </button>
+          {advanceResult && (
+            <div style={{ marginTop: 10, padding: '8px 10px', background: C.bg, borderRadius: 6, border: `1px solid ${stateColor(advanceState)}33` }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: stateColor(advanceState), letterSpacing: 1, marginBottom: 4 }}>
+                {advanceState === 'done' ? '✓ Success' : '✗ Error'}
+              </div>
+              <pre style={{ fontFamily: 'monospace', fontSize: 9, color: C.sub, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, maxHeight: 140, overflowY: 'auto' }}>
+                {advanceResult}
+              </pre>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PlatformManagerPage() {
   const router = useRouter()
   const supabase = createClientComponentClient()
@@ -1657,6 +1756,7 @@ export default function PlatformManagerPage() {
         </div>
 
         <CurrentWeekControl />
+        <CronControlPanel />
         <PageControls />
         <LiveContestsPanel />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 20 }}>
