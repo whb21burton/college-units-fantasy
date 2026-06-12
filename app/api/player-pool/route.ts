@@ -13,7 +13,6 @@ import { createAdminClient } from '@/lib/supabase-server';
 import { CONFERENCES, FULL_POOL, type DraftUnit, type UnitType, type Tier, type Conference } from '@/lib/playerPool';
 
 const SEASON          = 2025;
-const TOTAL_WEEKS     = 4; // weeks played so far — update as season progresses
 const UNIT_TYPES: UnitType[] = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
 // Normalize cached_stats school names to match CONFERENCES canonical names.
@@ -52,6 +51,13 @@ export async function GET(req: Request) {
 
     const admin = createAdminClient();
 
+    const { data: weekSetting } = await admin
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'current_week')
+      .single();
+    const CURRENT_WEEK = parseInt(weekSetting?.value ?? '5');
+
     // Build school→conference lookup from CONFERENCES constant
     const schoolConf: Record<string, Conference> = {};
     for (const [conf, schools] of Object.entries(CONFERENCES) as [Conference, string[]][]) {
@@ -76,7 +82,7 @@ export async function GET(req: Request) {
       .in('stat_type', ['unit_QB_fpts', 'unit_RB_fpts', 'unit_WR_fpts',
                         'unit_TE_fpts', 'unit_DEF_fpts', 'unit_K_fpts'])
       .is('player_name', null)
-      .lte('week', 4);
+      .lte('week', CURRENT_WEEK);
 
     if (allowedSchools && allowedSchools.length > 0) {
       statsQuery = statsQuery.in('school', allowedSchools);
@@ -92,7 +98,7 @@ export async function GET(req: Request) {
       .select('school, game_id, value')
       .eq('season', SEASON)
       .eq('stat_type', 'rb1_opportunity')
-      .lte('week', 4)
+      .lte('week', CURRENT_WEEK)
       .not('player_name', 'is', null);   // role rows always have player_name set
 
     // Aggregate per-school: CI = avg rb1_opportunity; stability = fraction of weeks where ≥ 0.40
@@ -178,7 +184,7 @@ export async function GET(req: Request) {
             if (weeksPlayed > 0) {
               const avgPerWeek = liveSums[key] / weeksPlayed;
               const avgFpts    = (fptsSums[key] ?? 0) / weeksPlayed;
-              allEntries.push({ school, unitType, pts: avgFpts * TOTAL_WEEKS, seasonTotal: liveSums[key], weeksPlayed, avgPerWeek, avgFpts, isLive: true });
+              allEntries.push({ school, unitType, pts: avgFpts * CURRENT_WEEK, seasonTotal: liveSums[key], weeksPlayed, avgPerWeek, avgFpts, isLive: true });
             } else {
               const fp = fullPoolMap[key] ?? 0;
               allEntries.push({ school, unitType, pts: fp, seasonTotal: fp, weeksPlayed: 0, avgPerWeek: 0, avgFpts: 0, isLive: false });
