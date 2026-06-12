@@ -37,12 +37,15 @@ const DRAFT_ORDER = [
 // IDs passed to generateSchedule: userId for humans, teamName for CPUs
 const TEAM_IDS = DRAFT_ORDER.map(t => (t as any).userId ?? t.teamName);
 
-export async function POST() {
-  // Auth: admin session only
-  const supabase = createRouteHandlerClient({ cookies });
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user?.email !== ADMIN_EMAIL) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function POST(request: Request) {
+  // Auth: Bearer CRON_SECRET OR admin session
+  const authHeader = request.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    const supabase = createRouteHandlerClient({ cookies });
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email !== ADMIN_EMAIL) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
   const admin = createAdminClient();
