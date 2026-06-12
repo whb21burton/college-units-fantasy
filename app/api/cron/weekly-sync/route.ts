@@ -163,32 +163,33 @@ export async function POST(request: NextRequest) {
         .eq('league_id', league.id);
       if (!allPicks?.length) continue;
 
+      // Select league_members.id (PK) — works for CPU bots whose user_id is NULL
       const { data: members } = await admin
         .from('league_members')
-        .select('user_id, team_name, roster')
+        .select('id, user_id, team_name, roster')
         .eq('league_id', league.id);
 
-      // Build teamName → user_id map from league_members (covers CPU bots that lack userId in draft_order)
+      // teamName → league_members.id (non-null for every row, including CPU bots)
       const memberByName: Record<string, string> = {};
       for (const m of members ?? []) {
-        if (m.team_name) memberByName[m.team_name] = m.user_id;
+        if (m.team_name) memberByName[m.team_name] = m.id;
       }
 
-      // Build scheduleId → {slot, userId} from draft_order.
-      // scheduleId = userId for humans, teamName for CPUs (matches what generateSchedule stored).
-      // Resolve userId: prefer draft_order.userId, fall back to memberByName lookup.
-      const teamByScheduleId: Record<string, { slot: number; userId: string | undefined }> = {};
+      // scheduleId → { slot, memberId }
+      // scheduleId = userId for humans, teamName for CPUs (set by generateSchedule)
+      // memberId = league_members.id — non-null for all team types
+      const teamByScheduleId: Record<string, { slot: number; memberId: string | undefined }> = {};
       for (const t of draftOrder) {
         const scheduleId = t.userId ?? t.teamName;
-        const resolvedId = t.userId ?? memberByName[t.teamName];
-        teamByScheduleId[scheduleId] = { slot: t.slot, userId: resolvedId };
+        teamByScheduleId[scheduleId] = { slot: t.slot, memberId: memberByName[t.teamName] };
       }
 
+      // Lineup overrides keyed by league_members.id
       const weekKey = `week_${week}`;
       const lineupMap: Record<string, (string | null)[]> = {};
       for (const m of members ?? []) {
         const lineup = m.roster?.lineups?.[weekKey];
-        if (lineup) lineupMap[m.user_id] = lineup;
+        if (lineup) lineupMap[m.id] = lineup;
       }
 
       // Use settings.schedule (source of truth) — works for any team count including odd.
@@ -209,19 +210,19 @@ export async function POST(request: NextRequest) {
         const picks1 = allPicks.filter(p => snakeIdx(p.pick_number, numTeams) === team1.slot - 1);
         const picks2 = allPicks.filter(p => snakeIdx(p.pick_number, numTeams) === team2.slot - 1);
 
-        const score1 = parseFloat(calcTeamScore(picks1, team1.userId ? lineupMap[team1.userId] : undefined, schoolPoints, schoolMults).toFixed(2));
-        const score2 = parseFloat(calcTeamScore(picks2, team2.userId ? lineupMap[team2.userId] : undefined, schoolPoints, schoolMults).toFixed(2));
-        const winnerId = score1 > score2 ? (team1.userId ?? null) : score2 > score1 ? (team2.userId ?? null) : null;
+        const score1 = parseFloat(calcTeamScore(picks1, team1.memberId ? lineupMap[team1.memberId] : undefined, schoolPoints, schoolMults).toFixed(2));
+        const score2 = parseFloat(calcTeamScore(picks2, team2.memberId ? lineupMap[team2.memberId] : undefined, schoolPoints, schoolMults).toFixed(2));
+        const winnerId = score1 > score2 ? (team1.memberId ?? null) : score2 > score1 ? (team2.memberId ?? null) : null;
 
-        // Only upsert if both teams have resolvable UUIDs (required by matchups FK constraint)
-        if (!team1.userId || !team2.userId) continue;
+        // Skip if either team has no resolvable member ID
+        if (!team1.memberId || !team2.memberId) continue;
 
         await admin.from('matchups').upsert(
           {
             league_id:   league.id,
             week,
-            team1_id:    team1.userId,
-            team2_id:    team2.userId,
+            team1_id:    team1.memberId,
+            team2_id:    team2.memberId,
             team1_score: score1,
             team2_score: score2,
             winner_id:   winnerId,
