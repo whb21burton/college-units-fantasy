@@ -258,9 +258,15 @@ function PlayerInfoLines({
 
 type GameStats = {
   completedSchools: string[];
+  liveSchools?: string[];
   schoolPoints: Record<string, Partial<Record<string, number>>>;
   schoolMults:  Record<string, number>;
 } | null;
+
+function isGameLocked(school: string, gameStats: GameStats): boolean {
+  return gameStats?.completedSchools?.includes(school) ||
+         gameStats?.liveSchools?.includes(school) || false;
+}
 
 /**
  * Returns pts for the unit this week.
@@ -2822,7 +2828,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
               {isDrafted ? (
                 <div style={{ padding: '5px 8px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.muted, textAlign: 'center' }}>DRAFTED</div>
               ) : lockedSchools.has(p.school) ? (
-                <div style={{ padding: '5px 8px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.red, textAlign: 'center', letterSpacing: .5 }}>🔒 LOCKED</div>
+                <div title="Game has started - cannot add" style={{ padding: '5px 8px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.red, textAlign: 'center', letterSpacing: .5 }}>🔒 LOCKED</div>
               ) : (
                 <button onClick={e => { e.stopPropagation(); setAdding(p); }} style={{ padding: '6px 10px', background: 'rgba(21,198,120,.12)', border: '1px solid rgba(21,198,120,.35)', borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700, color: C.green, cursor: 'pointer' }}>+ ADD</button>
               )}
@@ -4674,6 +4680,7 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
   const [memberName,    setMemberName]    = useState<string>('');
   const [selectedBench,   setSelectedBench]   = useState<any | null>(null);
   const [selectedStarter, setSelectedStarter] = useState<number | null>(null);
+  const [swapLockMsg,     setSwapLockMsg]     = useState<string | null>(null);
   const [viewingPlayer, setViewingPlayer] = useState<any | null>(null);
   const [logos,         setLogos]         = useState<Record<string, string>>({});
   const [isReady,       setIsReady]       = useState(false);
@@ -4695,6 +4702,9 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
   useEffect(() => {
     setIsReady(false);
     setGameStats(null);
+    setSwapLockMsg(null);
+    setSelectedBench(null);
+    setSelectedStarter(null);
     fetch(`/api/matchup-context?week=${week}&season=2025`)
       .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
     fetch(`/api/game-stats?week=${week}&season=2025`)
@@ -4799,6 +4809,19 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
   async function doSwap(starterIdx: number, benchPick?: any) {
     const swapping = benchPick ?? selectedBench;
     if (!swapping) return;
+
+    const starterSchool = starters[starterIdx]?.player_data?.school ?? '';
+    const benchSchool   = swapping.player_data?.school ?? '';
+    if (starterSchool && isGameLocked(starterSchool, gameStats)) {
+      setSwapLockMsg(`⛔ ${starterSchool} game has already started. Lineup is locked.`);
+      return;
+    }
+    if (benchSchool && isGameLocked(benchSchool, gameStats)) {
+      setSwapLockMsg(`⛔ ${benchSchool} game has already started. Lineup is locked.`);
+      return;
+    }
+    setSwapLockMsg(null);
+
     const newStarters = [...starters];
     const evicted = newStarters[starterIdx];
     newStarters[starterIdx] = swapping;
@@ -4932,8 +4955,24 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
             : <span>Swap {starters[selectedStarter!]?.player_data?.playerName || starters[selectedStarter!]?.player_data?.school} — tap a bench player</span>
           }
           <button
-            onClick={() => { setSelectedBench(null); setSelectedStarter(null); }}
+            onClick={() => { setSelectedBench(null); setSelectedStarter(null); setSwapLockMsg(null); }}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.gold, fontSize: 14, lineHeight: 1, padding: '0 4px' }}
+          >✕</button>
+        </div>
+      )}
+
+      {/* Swap lock error */}
+      {swapLockMsg && (
+        <div style={{
+          padding: '9px 14px', marginBottom: 12,
+          background: 'rgba(231,76,60,.08)', border: '1px solid rgba(231,76,60,.35)',
+          borderRadius: 8, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.red,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span>{swapLockMsg}</span>
+          <button
+            onClick={() => setSwapLockMsg(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.red, fontSize: 14, lineHeight: 1, padding: '0 4px' }}
           >✕</button>
         </div>
       )}
@@ -4954,12 +4993,18 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
         const name          = pick?.player_data?.playerName || pick?.player_data?.school;
         const sub           = pick?.player_data?.playerName ? pick.player_data.school : pick?.player_data?.conference;
         const tier          = pick?.player_data?.tier;
+        const isLockedSt    = pick ? isGameLocked(pick.player_data?.school ?? '', gameStats) : false;
 
         function handleStarterClick() {
           if (isTarget) { doSwap(i); return; }
           if (!pick) return;
-          if (selectedStarter === i) { setSelectedStarter(null); return; }
+          if (isLockedSt) {
+            setSwapLockMsg(`⛔ ${pick.player_data?.school} game has already started. Lineup is locked.`);
+            return;
+          }
+          if (selectedStarter === i) { setSelectedStarter(null); setSwapLockMsg(null); return; }
           setSelectedBench(null);
+          setSwapLockMsg(null);
           setSelectedStarter(i);
         }
 
@@ -4967,6 +5012,7 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
           <div
             key={i}
             onClick={handleStarterClick}
+            title={isLockedSt ? 'Game in progress - locked' : undefined}
             style={{
               display: 'flex', alignItems: 'center', gap: 12,
               padding: '10px 14px', marginBottom: 4,
@@ -4974,6 +5020,7 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
               border: '1px solid ' + (isTarget ? color + '88' : isSelectedSt ? 'rgba(212,168,40,.5)' : C.surf3),
               borderRadius: 8, cursor: (isTarget || pick) ? 'pointer' : 'default',
               transition: 'all .15s',
+              opacity: isLockedSt ? 0.6 : 1,
             }}
           >
             {/* Slot badge */}
@@ -5023,8 +5070,10 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
               )}
             </div>
 
-            {/* Swap indicator */}
-            {(isTarget || isSelectedSt) && (
+            {/* Lock / swap indicator */}
+            {isLockedSt ? (
+              <div style={{ flexShrink: 0, fontSize: 14 }}>🔒</div>
+            ) : (isTarget || isSelectedSt) && (
               <div style={{
                 flexShrink: 0, padding: '3px 9px', borderRadius: 5,
                 background: isTarget ? color + '33' : 'rgba(212,168,40,.15)',
@@ -5057,10 +5106,16 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
             // Is this bench player compatible with the currently selected starter slot?
             const isStarterTarget = selectedStarter !== null &&
               canFillSlot(pos, STARTER_SLOT_LABELS[selectedStarter]);
+            const isLockedBn = isGameLocked(pick.player_data?.school ?? '', gameStats);
 
             function handleBenchClick() {
+              if (isLockedBn) {
+                setSwapLockMsg(`⛔ ${pick.player_data?.school} game has already started. Lineup is locked.`);
+                return;
+              }
               if (isStarterTarget) { doSwap(selectedStarter!, pick); return; }
               setSelectedStarter(null);
+              setSwapLockMsg(null);
               setSelectedBench(isSelected ? null : pick);
             }
 
@@ -5068,6 +5123,7 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
               <div
                 key={pick.id}
                 onClick={handleBenchClick}
+                title={isLockedBn ? 'Game in progress - locked' : undefined}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '10px 14px', marginBottom: 4,
@@ -5075,6 +5131,7 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
                   border: '1px solid ' + (isStarterTarget ? col + '88' : isSelected ? 'rgba(212,168,40,.5)' : C.surf3),
                   borderRadius: 8, cursor: 'pointer',
                   transition: 'all .15s',
+                  opacity: isLockedBn ? 0.6 : 1,
                 }}
               >
                 {/* Pos pill (bench) */}
@@ -5112,8 +5169,10 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
                   )}
                 </div>
 
-                {/* Swap indicator when starter is selected */}
-                {isStarterTarget && (
+                {/* Lock / swap indicator */}
+                {isLockedBn ? (
+                  <div style={{ flexShrink: 0, fontSize: 14 }}>🔒</div>
+                ) : isStarterTarget && (
                   <div style={{ flexShrink: 0, padding: '3px 9px', borderRadius: 5, background: col + '33', border: '1px solid ' + col + '88', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: col }}>SWAP</div>
                 )}
               </div>

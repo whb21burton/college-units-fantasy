@@ -485,3 +485,22 @@ export async function getCompletedSchoolsForWeek(week: number, season: number): 
   }
   return Array.from(schools);
 }
+
+// ── getLiveSchoolsForWeek ────────────────────────────────────────────────────
+// Returns schools whose game is currently in progress for a given week.
+// TODO: expand status values if the scoring cron uses different strings (e.g. 'live', 'active').
+export async function getLiveSchoolsForWeek(week: number, season: number): Promise<string[]> {
+  const { data } = await (createAdminClient())
+    .from('cached_scores')
+    .select('home_team, away_team')
+    .eq('week', week)
+    .eq('season', season)
+    .eq('status', 'in_progress');
+
+  const schools = new Set<string>();
+  for (const row of data ?? []) {
+    schools.add(row.home_team);
+    schools.add(row.away_team);
+  }
+  return Array.from(schools);
+}
