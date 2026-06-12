@@ -154,41 +154,35 @@ export async function POST(request: NextRequest) {
       const draftOrder: any[] = league.settings?.draft_order ?? [];
       const storedSchedule: any[] = league.settings?.schedule ?? [];
       const numTeams = draftOrder.length;
+      if (numTeams < 2) continue;
 
-      // DEBUG 1: draft_order and schedule lengths
-      console.log(`[weekly-sync] league=${league.id} draftOrder.length=${numTeams} schedule.length=${storedSchedule.length}`);
-
-      if (numTeams < 2) { console.log(`[weekly-sync] skipping — numTeams < 2`); continue; }
-
-      // DEBUG 2: what getWeekMatchups returns (will be [] for odd team counts)
-      const derivedMatchups = getWeekMatchups(draftOrder, week);
-      console.log(`[weekly-sync] getWeekMatchups(week=${week}) returned ${derivedMatchups.length} pairs (returns [] if numTeams is odd)`);
-
-      // DEBUG 3: week-N games from stored schedule
-      const weekGamesFromSchedule = storedSchedule.filter((g: any) => g.week === week);
-      console.log(`[weekly-sync] stored schedule games for week ${week}:`, JSON.stringify(weekGamesFromSchedule));
-
-      // Fetch all picks for the league
+      // Fetch all picks and member lineups
       const { data: allPicks } = await admin
         .from('draft_picks')
         .select('id, pick_number, player_data')
         .eq('league_id', league.id);
+      if (!allPicks?.length) continue;
 
-      // DEBUG 4: picks count per slot
-      console.log(`[weekly-sync] allPicks.length=${allPicks?.length ?? 0}`);
-      for (let slot = 0; slot < numTeams; slot++) {
-        const slotPicks = (allPicks ?? []).filter(p => snakeIdx(p.pick_number, numTeams) === slot);
-        const teamEntry = draftOrder.find((t: any) => t.slot - 1 === slot);
-        console.log(`[weekly-sync]   slot ${slot} (${teamEntry?.teamName ?? teamEntry?.userId ?? '?'}): ${slotPicks.length} picks`);
-      }
-
-      if (!allPicks?.length) { console.log(`[weekly-sync] skipping — no picks`); continue; }
-
-      // Fetch member lineups (custom starter overrides)
       const { data: members } = await admin
         .from('league_members')
-        .select('user_id, roster')
+        .select('user_id, team_name, roster')
         .eq('league_id', league.id);
+
+      // Build teamName → user_id map from league_members (covers CPU bots that lack userId in draft_order)
+      const memberByName: Record<string, string> = {};
+      for (const m of members ?? []) {
+        if (m.team_name) memberByName[m.team_name] = m.user_id;
+      }
+
+      // Build scheduleId → {slot, userId} from draft_order.
+      // scheduleId = userId for humans, teamName for CPUs (matches what generateSchedule stored).
+      // Resolve userId: prefer draft_order.userId, fall back to memberByName lookup.
+      const teamByScheduleId: Record<string, { slot: number; userId: string | undefined }> = {};
+      for (const t of draftOrder) {
+        const scheduleId = t.userId ?? t.teamName;
+        const resolvedId = t.userId ?? memberByName[t.teamName];
+        teamByScheduleId[scheduleId] = { slot: t.slot, userId: resolvedId };
+      }
 
       const weekKey = `week_${week}`;
       const lineupMap: Record<string, (string | null)[]> = {};
@@ -197,20 +191,32 @@ export async function POST(request: NextRequest) {
         if (lineup) lineupMap[m.user_id] = lineup;
       }
 
-      // Calculate score for each matchup and upsert
-      const weekMatchups = getWeekMatchups(draftOrder, week);
+      // Use settings.schedule (source of truth) — works for any team count including odd.
+      const weekGames = storedSchedule.filter((g: any) => g.week === week);
+
+      // Fall back to getWeekMatchups for leagues without a stored schedule.
+      const weekMatchups: [any, any][] = weekGames.length > 0
+        ? weekGames
+            .map((g: any) => {
+              const t1 = teamByScheduleId[g.home];
+              const t2 = teamByScheduleId[g.away];
+              return t1 && t2 ? [t1, t2] as [any, any] : null;
+            })
+            .filter((pair): pair is [any, any] => pair !== null)
+        : getWeekMatchups(draftOrder, week);
+
       for (const [team1, team2] of weekMatchups) {
         const picks1 = allPicks.filter(p => snakeIdx(p.pick_number, numTeams) === team1.slot - 1);
         const picks2 = allPicks.filter(p => snakeIdx(p.pick_number, numTeams) === team2.slot - 1);
 
-        const score1 = parseFloat(calcTeamScore(picks1, lineupMap[team1.userId], schoolPoints, schoolMults).toFixed(2));
-        const score2 = parseFloat(calcTeamScore(picks2, lineupMap[team2.userId], schoolPoints, schoolMults).toFixed(2));
-        const winnerId = score1 > score2 ? team1.userId : score2 > score1 ? team2.userId : null;
+        const score1 = parseFloat(calcTeamScore(picks1, team1.userId ? lineupMap[team1.userId] : undefined, schoolPoints, schoolMults).toFixed(2));
+        const score2 = parseFloat(calcTeamScore(picks2, team2.userId ? lineupMap[team2.userId] : undefined, schoolPoints, schoolMults).toFixed(2));
+        const winnerId = score1 > score2 ? (team1.userId ?? null) : score2 > score1 ? (team2.userId ?? null) : null;
 
-        // DEBUG 5: scores and upsert result
-        console.log(`[weekly-sync] matchup: ${team1.teamName ?? team1.userId} (${score1}) vs ${team2.teamName ?? team2.userId} (${score2}) winner=${winnerId ?? 'tie'}`);
+        // Only upsert if both teams have resolvable UUIDs (required by matchups FK constraint)
+        if (!team1.userId || !team2.userId) continue;
 
-        const { error: upsertErr } = await admin.from('matchups').upsert(
+        await admin.from('matchups').upsert(
           {
             league_id:   league.id,
             week,
@@ -222,11 +228,6 @@ export async function POST(request: NextRequest) {
           },
           { onConflict: 'league_id,week,team1_id' },
         );
-        if (upsertErr) {
-          console.error(`[weekly-sync] upsert error:`, upsertErr.message, upsertErr.details ?? '');
-        } else {
-          console.log(`[weekly-sync] upsert OK for week=${week} team1=${team1.userId} team2=${team2.userId}`);
-        }
         matchupsUpdated++;
       }
       leaguesUpdated++;
