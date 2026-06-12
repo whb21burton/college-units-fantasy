@@ -115,13 +115,19 @@ export async function POST(request: NextRequest) {
   const start = Date.now();
 
   try {
-    // 1. Get current week
-    const { data: weekRow } = await admin
-      .from('platform_settings')
-      .select('value')
-      .eq('key', 'current_week')
-      .single();
-    const week = parseInt(weekRow?.value ?? '1', 10);
+    // 1. Resolve week: ?week= param overrides platform_settings
+    const weekParam = new URL(request.url).searchParams.get('week');
+    let week: number;
+    if (weekParam) {
+      week = parseInt(weekParam, 10);
+    } else {
+      const { data: weekRow } = await admin
+        .from('platform_settings')
+        .select('value')
+        .eq('key', 'current_week')
+        .single();
+      week = parseInt(weekRow?.value ?? '1', 10);
+    }
 
     // 2. Sync scores + stats (batched to avoid timeouts)
     const scoresUpdated = await syncScores(week, CURRENT_SEASON);
