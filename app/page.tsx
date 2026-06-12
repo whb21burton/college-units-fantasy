@@ -204,179 +204,185 @@ function LiveScoreboard() {
 
 // ── Season Recap Data ─────────────────────────────────────────────────────────
 
-type RecapUnit = { school: string; conf: string; pos: string; player?: string; avg: number; total: number };
+type RecapUnit = { s: string; t: number; a: number; w: number };
+type RecapUnitWithPos = RecapUnit & { pos: string };
 
 const RECAP_QBs: RecapUnit[] = [
-  { school: 'Vanderbilt',    conf: 'SEC',     pos: 'QB', player: 'Diego Pavia',      avg: 41.8, total: 460 },
-  { school: 'Penn State',    conf: 'Big Ten', pos: 'QB', player: 'Drew Allar',       avg: 38.6, total: 425 },
-  { school: 'Miami',         conf: 'ACC',     pos: 'QB', player: 'Cam Ward',         avg: 37.9, total: 417 },
-  { school: 'Oregon',        conf: 'Big Ten', pos: 'QB', player: 'Dillon Gabriel',   avg: 36.4, total: 401 },
-  { school: 'Texas',         conf: 'SEC',     pos: 'QB', player: 'Quinn Ewers',      avg: 35.8, total: 394 },
-  { school: 'Ohio State',    conf: 'Big Ten', pos: 'QB', player: 'Will Howard',      avg: 34.7, total: 382 },
-  { school: 'Georgia',       conf: 'SEC',     pos: 'QB', player: 'Gunner Stockton',  avg: 33.2, total: 365 },
-  { school: 'Alabama',       conf: 'SEC',     pos: 'QB', player: 'Ty Simpson',       avg: 32.1, total: 353 },
-  { school: 'Notre Dame',    conf: 'Ind',     pos: 'QB', player: 'Riley Leonard',    avg: 31.4, total: 345 },
-  { school: 'Colorado',      conf: 'Big 12',  pos: 'QB', player: 'Shedeur Sanders',  avg: 30.8, total: 339 },
-  { school: 'Ole Miss',      conf: 'SEC',     pos: 'QB', player: 'Austin Simmons',   avg: 29.6, total: 326 },
-  { school: 'Iowa State',    conf: 'Big 12',  pos: 'QB', player: 'Rocco Becht',      avg: 28.9, total: 318 },
-  { school: 'Boise State',   conf: 'MWC',     pos: 'QB', player: 'Maddux Madsen',    avg: 28.2, total: 310 },
-  { school: 'LSU',           conf: 'SEC',     pos: 'QB', player: 'Garrett Nussmeier',avg: 27.8, total: 306 },
-  { school: 'Indiana',       conf: 'Big Ten', pos: 'QB', player: 'Kurtis Rourke',    avg: 27.3, total: 300 },
-  { school: 'Clemson',       conf: 'ACC',     pos: 'QB', player: 'Cade Klubnik',     avg: 26.7, total: 294 },
-  { school: 'SMU',           conf: 'ACC',     pos: 'QB', player: 'Kevin Jennings',   avg: 26.1, total: 287 },
-  { school: 'Kansas State',  conf: 'Big 12',  pos: 'QB', player: 'Avery Johnson',    avg: 25.5, total: 281 },
-  { school: 'Missouri',      conf: 'SEC',     pos: 'QB', player: 'Brady Cook',       avg: 24.9, total: 274 },
-  { school: 'Michigan',      conf: 'Big Ten', pos: 'QB', player: 'Davis Warren',     avg: 24.3, total: 267 },
-  { school: 'Arizona State', conf: 'Big 12',  pos: 'QB', player: 'Sam Leavitt',      avg: 23.8, total: 262 },
-  { school: 'Pittsburgh',    conf: 'ACC',     pos: 'QB', player: 'Eli Holstein',     avg: 23.2, total: 255 },
-  { school: 'Tennessee',     conf: 'SEC',     pos: 'QB', player: 'Nico Iamaleava',   avg: 22.7, total: 250 },
-  { school: 'Oklahoma',      conf: 'SEC',     pos: 'QB', player: 'Michael Hawkins',  avg: 22.1, total: 243 },
-  { school: 'Wisconsin',     conf: 'Big Ten', pos: 'QB', player: 'Braedyn Locke',    avg: 21.6, total: 238 },
+  {s:"Vanderbilt",t:432.91,a:36.08,w:12},
+  {s:"Ole Miss",t:404.04,a:33.67,w:12},
+  {s:"Alabama",t:386.69,a:32.22,w:12},
+  {s:"Baylor",t:382.69,a:31.89,w:12},
+  {s:"Arkansas",t:376.45,a:31.37,w:12},
+  {s:"USC",t:369.87,a:30.82,w:12},
+  {s:"Texas A&M",t:363.23,a:30.27,w:12},
+  {s:"Cincinnati",t:349.91,a:29.16,w:12},
+  {s:"Georgia Tech",t:349.37,a:29.11,w:12},
+  {s:"Tennessee",t:343.07,a:28.59,w:12},
+  {s:"Ohio State",t:339.99,a:28.33,w:12},
+  {s:"Indiana",t:338.40,a:28.20,w:12},
+  {s:"Florida State",t:335.83,a:27.99,w:12},
+  {s:"Rutgers",t:331.76,a:27.65,w:12},
+  {s:"Oklahoma",t:329.89,a:27.49,w:12},
+  {s:"BYU",t:329.02,a:27.42,w:12},
+  {s:"Texas",t:327.09,a:27.26,w:12},
+  {s:"Washington",t:318.37,a:26.53,w:12},
+  {s:"Duke",t:315.39,a:26.28,w:12},
+  {s:"Georgia",t:314.44,a:26.20,w:12},
+  {s:"Utah",t:313.17,a:26.10,w:12},
+  {s:"Kansas",t:311.52,a:25.96,w:12},
+  {s:"TCU",t:310.68,a:25.89,w:12},
+  {s:"Mississippi State",t:308.39,a:25.70,w:12},
+  {s:"Auburn",t:307.41,a:25.62,w:12},
 ];
 
 const RECAP_RBs: RecapUnit[] = [
-  { school: 'Boise State',   conf: 'MWC',     pos: 'RB', avg: 28.4, total: 312 },
-  { school: 'Texas',         conf: 'SEC',     pos: 'RB', avg: 26.9, total: 296 },
-  { school: 'Alabama',       conf: 'SEC',     pos: 'RB', avg: 25.8, total: 284 },
-  { school: 'Ohio State',    conf: 'Big Ten', pos: 'RB', avg: 24.7, total: 272 },
-  { school: 'Penn State',    conf: 'Big Ten', pos: 'RB', avg: 23.6, total: 260 },
-  { school: 'Georgia',       conf: 'SEC',     pos: 'RB', avg: 22.5, total: 248 },
-  { school: 'Clemson',       conf: 'ACC',     pos: 'RB', avg: 21.4, total: 235 },
-  { school: 'Oregon',        conf: 'Big Ten', pos: 'RB', avg: 20.3, total: 223 },
-  { school: 'Notre Dame',    conf: 'Ind',     pos: 'RB', avg: 19.8, total: 218 },
-  { school: 'Indiana',       conf: 'Big Ten', pos: 'RB', avg: 19.2, total: 211 },
-  { school: 'Colorado',      conf: 'Big 12',  pos: 'RB', avg: 18.7, total: 206 },
-  { school: 'Iowa State',    conf: 'Big 12',  pos: 'RB', avg: 18.1, total: 199 },
-  { school: 'Miami',         conf: 'ACC',     pos: 'RB', avg: 17.6, total: 194 },
-  { school: 'LSU',           conf: 'SEC',     pos: 'RB', avg: 17.1, total: 188 },
-  { school: 'Ole Miss',      conf: 'SEC',     pos: 'RB', avg: 16.6, total: 183 },
-  { school: 'Arizona State', conf: 'Big 12',  pos: 'RB', avg: 16.1, total: 177 },
-  { school: 'Wisconsin',     conf: 'Big Ten', pos: 'RB', avg: 15.8, total: 174 },
-  { school: 'Michigan',      conf: 'Big Ten', pos: 'RB', avg: 15.3, total: 168 },
-  { school: 'Kansas State',  conf: 'Big 12',  pos: 'RB', avg: 14.8, total: 163 },
-  { school: 'Tennessee',     conf: 'SEC',     pos: 'RB', avg: 14.4, total: 158 },
-  { school: 'Vanderbilt',    conf: 'SEC',     pos: 'RB', avg: 13.9, total: 153 },
-  { school: 'SMU',           conf: 'ACC',     pos: 'RB', avg: 13.5, total: 149 },
-  { school: 'Missouri',      conf: 'SEC',     pos: 'RB', avg: 13.1, total: 144 },
-  { school: 'Pittsburgh',    conf: 'ACC',     pos: 'RB', avg: 12.7, total: 140 },
-  { school: 'Oklahoma',      conf: 'SEC',     pos: 'RB', avg: 12.3, total: 135 },
+  {s:"Notre Dame",t:275.03,a:22.92,w:12},
+  {s:"Michigan",t:263.40,a:21.95,w:12},
+  {s:"Penn State",t:263.06,a:21.92,w:12},
+  {s:"Rutgers",t:234.86,a:19.57,w:12},
+  {s:"Texas Tech",t:228.75,a:19.06,w:12},
+  {s:"Ole Miss",t:227.58,a:18.97,w:12},
+  {s:"Missouri",t:223.02,a:18.59,w:12},
+  {s:"Nebraska",t:221.89,a:18.49,w:12},
+  {s:"Oregon",t:218.10,a:18.18,w:12},
+  {s:"Texas A&M",t:204.75,a:17.06,w:12},
+  {s:"Tennessee",t:200.96,a:16.75,w:12},
+  {s:"Washington",t:197.19,a:16.43,w:12},
+  {s:"USC",t:196.84,a:16.40,w:12},
+  {s:"Indiana",t:196.21,a:16.35,w:12},
+  {s:"Ohio State",t:191.58,a:15.97,w:12},
+  {s:"Vanderbilt",t:183.87,a:15.32,w:12},
+  {s:"Florida",t:182.16,a:15.18,w:12},
+  {s:"Miami",t:178.15,a:14.85,w:12},
+  {s:"Duke",t:177.31,a:14.78,w:12},
+  {s:"Virginia",t:177.01,a:14.75,w:12},
+  {s:"Arkansas",t:175.35,a:14.61,w:12},
+  {s:"Northwestern",t:174.18,a:14.52,w:12},
+  {s:"Liberty",t:173.48,a:14.46,w:12},
+  {s:"Iowa State",t:173.43,a:14.45,w:12},
+  {s:"BYU",t:173.25,a:14.44,w:12},
 ];
 
 const RECAP_WRs: RecapUnit[] = [
-  { school: 'Oregon',        conf: 'Big Ten', pos: 'WR', avg: 24.1, total: 265 },
-  { school: 'Ohio State',    conf: 'Big Ten', pos: 'WR', avg: 22.8, total: 251 },
-  { school: 'Miami',         conf: 'ACC',     pos: 'WR', avg: 21.5, total: 237 },
-  { school: 'Penn State',    conf: 'Big Ten', pos: 'WR', avg: 20.4, total: 224 },
-  { school: 'Texas',         conf: 'SEC',     pos: 'WR', avg: 19.3, total: 212 },
-  { school: 'Colorado',      conf: 'Big 12',  pos: 'WR', avg: 18.7, total: 206 },
-  { school: 'Notre Dame',    conf: 'Ind',     pos: 'WR', avg: 18.1, total: 199 },
-  { school: 'Georgia',       conf: 'SEC',     pos: 'WR', avg: 17.5, total: 193 },
-  { school: 'Alabama',       conf: 'SEC',     pos: 'WR', avg: 16.9, total: 186 },
-  { school: 'LSU',           conf: 'SEC',     pos: 'WR', avg: 16.3, total: 179 },
-  { school: 'Ole Miss',      conf: 'SEC',     pos: 'WR', avg: 15.8, total: 174 },
-  { school: 'Vanderbilt',    conf: 'SEC',     pos: 'WR', avg: 15.2, total: 167 },
-  { school: 'Clemson',       conf: 'ACC',     pos: 'WR', avg: 14.7, total: 162 },
-  { school: 'SMU',           conf: 'ACC',     pos: 'WR', avg: 14.2, total: 156 },
-  { school: 'Indiana',       conf: 'Big Ten', pos: 'WR', avg: 13.7, total: 151 },
-  { school: 'Boise State',   conf: 'MWC',     pos: 'WR', avg: 13.2, total: 145 },
-  { school: 'Iowa State',    conf: 'Big 12',  pos: 'WR', avg: 12.8, total: 141 },
-  { school: 'Arizona State', conf: 'Big 12',  pos: 'WR', avg: 12.3, total: 135 },
-  { school: 'Kansas State',  conf: 'Big 12',  pos: 'WR', avg: 11.9, total: 131 },
-  { school: 'Michigan',      conf: 'Big Ten', pos: 'WR', avg: 11.4, total: 125 },
-  { school: 'Missouri',      conf: 'SEC',     pos: 'WR', avg: 11.0, total: 121 },
-  { school: 'Pittsburgh',    conf: 'ACC',     pos: 'WR', avg: 10.6, total: 117 },
-  { school: 'Tennessee',     conf: 'SEC',     pos: 'WR', avg: 10.2, total: 112 },
-  { school: 'Oklahoma',      conf: 'SEC',     pos: 'WR', avg:  9.8, total: 108 },
-  { school: 'Wisconsin',     conf: 'Big Ten', pos: 'WR', avg:  9.4, total: 103 },
+  {s:"USC",t:238.69,a:19.89,w:12},
+  {s:"Indiana",t:231.99,a:19.33,w:12},
+  {s:"TCU",t:223.98,a:18.67,w:12},
+  {s:"Ohio State",t:223.12,a:18.59,w:12},
+  {s:"Tennessee",t:222.23,a:18.52,w:12},
+  {s:"Alabama",t:214.39,a:17.87,w:12},
+  {s:"Rutgers",t:213.40,a:17.78,w:12},
+  {s:"Texas A&M",t:209.03,a:17.42,w:12},
+  {s:"Florida State",t:202.68,a:16.89,w:12},
+  {s:"Baylor",t:199.58,a:16.63,w:12},
+  {s:"Miami",t:198.61,a:16.55,w:12},
+  {s:"Oklahoma",t:191.80,a:15.98,w:12},
+  {s:"South Carolina",t:184.26,a:15.36,w:12},
+  {s:"BYU",t:180.87,a:15.07,w:12},
+  {s:"Ole Miss",t:180.58,a:15.05,w:12},
+  {s:"Clemson",t:179.98,a:15.00,w:12},
+  {s:"Texas",t:179.93,a:14.99,w:12},
+  {s:"Colorado",t:178.24,a:14.85,w:12},
+  {s:"Washington",t:177.57,a:14.80,w:12},
+  {s:"Cincinnati",t:176.42,a:14.70,w:12},
+  {s:"Louisville",t:172.42,a:14.37,w:12},
+  {s:"Illinois",t:170.33,a:14.19,w:12},
+  {s:"Mississippi State",t:168.21,a:14.02,w:12},
+  {s:"Vanderbilt",t:166.46,a:13.87,w:12},
+  {s:"Duke",t:161.23,a:13.44,w:12},
 ];
 
 const RECAP_TEs: RecapUnit[] = [
-  { school: 'Penn State',    conf: 'Big Ten', pos: 'TE', avg: 16.4, total: 180 },
-  { school: 'Georgia',       conf: 'SEC',     pos: 'TE', avg: 15.1, total: 166 },
-  { school: 'Notre Dame',    conf: 'Ind',     pos: 'TE', avg: 14.2, total: 156 },
-  { school: 'Texas',         conf: 'SEC',     pos: 'TE', avg: 13.3, total: 146 },
-  { school: 'Oregon',        conf: 'Big Ten', pos: 'TE', avg: 12.5, total: 138 },
-  { school: 'Ohio State',    conf: 'Big Ten', pos: 'TE', avg: 11.8, total: 130 },
-  { school: 'Alabama',       conf: 'SEC',     pos: 'TE', avg: 11.1, total: 122 },
-  { school: 'Clemson',       conf: 'ACC',     pos: 'TE', avg: 10.4, total: 114 },
-  { school: 'Miami',         conf: 'ACC',     pos: 'TE', avg:  9.8, total: 108 },
-  { school: 'Iowa State',    conf: 'Big 12',  pos: 'TE', avg:  9.2, total: 101 },
-  { school: 'LSU',           conf: 'SEC',     pos: 'TE', avg:  8.7, total:  96 },
-  { school: 'Indiana',       conf: 'Big Ten', pos: 'TE', avg:  8.2, total:  90 },
-  { school: 'Kansas State',  conf: 'Big 12',  pos: 'TE', avg:  7.8, total:  86 },
-  { school: 'Ole Miss',      conf: 'SEC',     pos: 'TE', avg:  7.4, total:  81 },
-  { school: 'Missouri',      conf: 'SEC',     pos: 'TE', avg:  7.0, total:  77 },
-  { school: 'Colorado',      conf: 'Big 12',  pos: 'TE', avg:  6.7, total:  74 },
-  { school: 'Michigan',      conf: 'Big Ten', pos: 'TE', avg:  6.4, total:  70 },
-  { school: 'Vanderbilt',    conf: 'SEC',     pos: 'TE', avg:  6.1, total:  67 },
-  { school: 'Boise State',   conf: 'MWC',     pos: 'TE', avg:  5.8, total:  64 },
-  { school: 'SMU',           conf: 'ACC',     pos: 'TE', avg:  5.5, total:  61 },
-  { school: 'Tennessee',     conf: 'SEC',     pos: 'TE', avg:  5.3, total:  58 },
-  { school: 'Pittsburgh',    conf: 'ACC',     pos: 'TE', avg:  5.0, total:  55 },
-  { school: 'Arizona State', conf: 'Big 12',  pos: 'TE', avg:  4.8, total:  53 },
-  { school: 'Wisconsin',     conf: 'Big Ten', pos: 'TE', avg:  4.5, total:  50 },
-  { school: 'Oklahoma',      conf: 'SEC',     pos: 'TE', avg:  4.3, total:  47 },
+  {s:"Vanderbilt",t:108.23,a:9.02,w:12},
+  {s:"Kansas",t:98.86,a:8.24,w:12},
+  {s:"Oregon",t:96.56,a:8.05,w:12},
+  {s:"Arkansas",t:93.40,a:7.78,w:12},
+  {s:"Utah",t:92.44,a:7.70,w:12},
+  {s:"Baylor",t:89.92,a:7.49,w:12},
+  {s:"NC State",t:82.53,a:6.88,w:12},
+  {s:"LSU",t:81.64,a:6.80,w:12},
+  {s:"Wisconsin",t:76.02,a:6.34,w:12},
+  {s:"Iowa State",t:75.61,a:6.30,w:12},
+  {s:"Boston College",t:74.37,a:6.20,w:12},
+  {s:"USC",t:73.63,a:6.14,w:12},
+  {s:"Kansas State",t:73.20,a:6.10,w:12},
+  {s:"UCF",t:72.65,a:6.05,w:12},
+  {s:"Florida State",t:70.44,a:5.87,w:12},
+  {s:"Michigan State",t:69.40,a:5.78,w:12},
+  {s:"Ole Miss",t:68.81,a:5.73,w:12},
+  {s:"Duke",t:67.29,a:5.61,w:12},
+  {s:"Alabama",t:65.58,a:5.47,w:12},
+  {s:"Houston",t:62.82,a:5.24,w:12},
+  {s:"Tennessee",t:62.60,a:5.22,w:12},
+  {s:"Ohio State",t:62.31,a:5.19,w:12},
+  {s:"Mississippi State",t:61.68,a:5.61,w:11},
+  {s:"SMU",t:59.96,a:5.00,w:12},
+  {s:"Pittsburgh",t:58.75,a:4.90,w:12},
 ];
 
 const RECAP_DEFs: RecapUnit[] = [
-  { school: 'Ohio State',    conf: 'Big Ten', pos: 'DEF', avg: 14.8, total: 163 },
-  { school: 'Georgia',       conf: 'SEC',     pos: 'DEF', avg: 13.9, total: 153 },
-  { school: 'Penn State',    conf: 'Big Ten', pos: 'DEF', avg: 13.1, total: 144 },
-  { school: 'Texas',         conf: 'SEC',     pos: 'DEF', avg: 12.4, total: 136 },
-  { school: 'Notre Dame',    conf: 'Ind',     pos: 'DEF', avg: 11.7, total: 129 },
-  { school: 'Alabama',       conf: 'SEC',     pos: 'DEF', avg: 11.0, total: 121 },
-  { school: 'Clemson',       conf: 'ACC',     pos: 'DEF', avg: 10.4, total: 114 },
-  { school: 'Boise State',   conf: 'MWC',     pos: 'DEF', avg:  9.8, total: 108 },
-  { school: 'Indiana',       conf: 'Big Ten', pos: 'DEF', avg:  9.3, total: 102 },
-  { school: 'Iowa State',    conf: 'Big 12',  pos: 'DEF', avg:  8.8, total:  97 },
-  { school: 'Oregon',        conf: 'Big Ten', pos: 'DEF', avg:  8.3, total:  91 },
-  { school: 'LSU',           conf: 'SEC',     pos: 'DEF', avg:  7.9, total:  87 },
-  { school: 'Vanderbilt',    conf: 'SEC',     pos: 'DEF', avg:  7.5, total:  83 },
-  { school: 'Kansas State',  conf: 'Big 12',  pos: 'DEF', avg:  7.1, total:  78 },
-  { school: 'Miami',         conf: 'ACC',     pos: 'DEF', avg:  6.8, total:  75 },
-  { school: 'Missouri',      conf: 'SEC',     pos: 'DEF', avg:  6.4, total:  70 },
-  { school: 'Arizona State', conf: 'Big 12',  pos: 'DEF', avg:  6.1, total:  67 },
-  { school: 'Michigan',      conf: 'Big Ten', pos: 'DEF', avg:  5.8, total:  64 },
-  { school: 'Tennessee',     conf: 'SEC',     pos: 'DEF', avg:  5.5, total:  61 },
-  { school: 'Ole Miss',      conf: 'SEC',     pos: 'DEF', avg:  5.2, total:  57 },
-  { school: 'Wisconsin',     conf: 'Big Ten', pos: 'DEF', avg:  4.9, total:  54 },
-  { school: 'Colorado',      conf: 'Big 12',  pos: 'DEF', avg:  4.7, total:  52 },
-  { school: 'SMU',           conf: 'ACC',     pos: 'DEF', avg:  4.4, total:  48 },
-  { school: 'Pittsburgh',    conf: 'ACC',     pos: 'DEF', avg:  4.2, total:  46 },
-  { school: 'Oklahoma',      conf: 'SEC',     pos: 'DEF', avg:  4.0, total:  44 },
+  {s:"Indiana",t:135.80,a:11.32,w:12},
+  {s:"Texas Tech",t:126.20,a:10.52,w:12},
+  {s:"Oklahoma",t:125.00,a:10.42,w:12},
+  {s:"Oregon",t:121.40,a:10.12,w:12},
+  {s:"Notre Dame",t:120.60,a:10.05,w:12},
+  {s:"Miami",t:115.40,a:9.62,w:12},
+  {s:"Ohio State",t:115.10,a:9.59,w:12},
+  {s:"Alabama",t:114.70,a:9.56,w:12},
+  {s:"BYU",t:113.00,a:9.42,w:12},
+  {s:"Pittsburgh",t:111.70,a:9.31,w:12},
+  {s:"Texas",t:111.40,a:9.28,w:12},
+  {s:"South Carolina",t:109.60,a:9.13,w:12},
+  {s:"Iowa",t:102.60,a:8.55,w:12},
+  {s:"LSU",t:100.90,a:8.41,w:12},
+  {s:"Kansas State",t:98.00,a:8.17,w:12},
+  {s:"Utah",t:95.10,a:7.93,w:12},
+  {s:"Maryland",t:93.80,a:7.82,w:12},
+  {s:"Missouri",t:93.70,a:7.81,w:12},
+  {s:"SMU",t:92.80,a:7.73,w:12},
+  {s:"Texas A&M",t:92.70,a:7.73,w:12},
+  {s:"Tennessee",t:92.60,a:7.72,w:12},
+  {s:"Wisconsin",t:91.00,a:7.58,w:12},
+  {s:"Minnesota",t:89.50,a:8.14,w:11},
+  {s:"Wake Forest",t:85.70,a:7.14,w:12},
+  {s:"Clemson",t:85.40,a:7.12,w:12},
 ];
 
 const RECAP_Ks: RecapUnit[] = [
-  { school: 'Boise State',   conf: 'MWC',     pos: 'K', player: 'Jonah Dalmas',     avg: 10.8, total: 119 },
-  { school: 'Alabama',       conf: 'SEC',     pos: 'K', player: 'Will Reichard',    avg: 10.1, total: 111 },
-  { school: 'Georgia',       conf: 'SEC',     pos: 'K', player: 'Peyton Woodring',  avg:  9.5, total: 105 },
-  { school: 'Ohio State',    conf: 'Big Ten', pos: 'K', player: 'Jayden Fielding',  avg:  9.0, total:  99 },
-  { school: 'Texas',         conf: 'SEC',     pos: 'K', player: 'Bert Auburn',      avg:  8.5, total:  94 },
-  { school: 'Penn State',    conf: 'Big Ten', pos: 'K', player: 'Ryan Barker',      avg:  8.1, total:  89 },
-  { school: 'Notre Dame',    conf: 'Ind',     pos: 'K', player: 'Mitch Jeter',      avg:  7.7, total:  85 },
-  { school: 'Iowa State',    conf: 'Big 12',  pos: 'K', player: 'Kyle Konrardy',    avg:  7.3, total:  80 },
-  { school: 'Oregon',        conf: 'Big Ten', pos: 'K', player: 'Atticus Sappington',avg: 6.9, total:  76 },
-  { school: 'Clemson',       conf: 'ACC',     pos: 'K', player: 'Jonathan Weitz',   avg:  6.5, total:  72 },
-  { school: 'Miami',         conf: 'ACC',     pos: 'K', player: 'Andres Borregales',avg:  6.2, total:  68 },
-  { school: 'Kansas State',  conf: 'Big 12',  pos: 'K', player: 'Matthew McCane',   avg:  5.9, total:  65 },
-  { school: 'LSU',           conf: 'SEC',     pos: 'K', player: 'Damian Ramos',     avg:  5.6, total:  62 },
-  { school: 'Missouri',      conf: 'SEC',     pos: 'K', player: 'Gabe Blair',       avg:  5.3, total:  58 },
-  { school: 'Indiana',       conf: 'Big Ten', pos: 'K', player: 'James Evans',      avg:  5.1, total:  56 },
-  { school: 'Michigan',      conf: 'Big Ten', pos: 'K', player: 'Adam Samaha',      avg:  4.9, total:  54 },
-  { school: 'Colorado',      conf: 'Big 12',  pos: 'K', player: 'Alejandro Mata',   avg:  4.7, total:  52 },
-  { school: 'Ole Miss',      conf: 'SEC',     pos: 'K', player: 'Caden Davis',      avg:  4.5, total:  50 },
-  { school: 'Arizona State', conf: 'Big 12',  pos: 'K', player: 'Tyler Loop',       avg:  4.3, total:  47 },
-  { school: 'Vanderbilt',    conf: 'SEC',     pos: 'K', player: 'Brock Taylor',     avg:  4.1, total:  45 },
-  { school: 'SMU',           conf: 'ACC',     pos: 'K', player: 'Collin Rogers',    avg:  3.9, total:  43 },
-  { school: 'Tennessee',     conf: 'SEC',     pos: 'K', player: 'Brent Cimaglia',   avg:  3.7, total:  41 },
-  { school: 'Wisconsin',     conf: 'Big Ten', pos: 'K', player: 'Nathanial Vakos',  avg:  3.5, total:  39 },
-  { school: 'Pittsburgh',    conf: 'ACC',     pos: 'K', player: 'Alex Kessman',     avg:  3.4, total:  37 },
-  { school: 'Oklahoma',      conf: 'SEC',     pos: 'K', player: 'Cameron Dicker',   avg:  3.2, total:  35 },
+  {s:"Ole Miss",t:92.90,a:7.74,w:12},
+  {s:"Oklahoma",t:84.10,a:7.01,w:12},
+  {s:"BYU",t:82.30,a:6.86,w:12},
+  {s:"Texas A&M",t:81.50,a:6.79,w:12},
+  {s:"Oregon",t:80.80,a:6.73,w:12},
+  {s:"Indiana",t:80.60,a:6.72,w:12},
+  {s:"LSU",t:80.50,a:6.71,w:12},
+  {s:"Georgia Tech",t:79.80,a:6.65,w:12},
+  {s:"Ohio State",t:77.80,a:6.48,w:12},
+  {s:"Iowa",t:76.70,a:6.39,w:12},
+  {s:"Michigan",t:74.80,a:6.23,w:12},
+  {s:"Arkansas",t:74.10,a:6.18,w:12},
+  {s:"Tennessee",t:74.00,a:6.17,w:12},
+  {s:"Texas",t:73.80,a:6.15,w:12},
+  {s:"Alabama",t:73.20,a:6.10,w:12},
+  {s:"Baylor",t:72.70,a:6.61,w:11},
+  {s:"Louisville",t:71.40,a:5.95,w:12},
+  {s:"Nebraska",t:70.30,a:5.86,w:12},
+  {s:"Arizona",t:70.20,a:5.85,w:12},
+  {s:"Texas Tech",t:70.10,a:5.84,w:12},
+  {s:"Auburn",t:70.00,a:5.83,w:12},
+  {s:"USC",t:69.80,a:6.35,w:11},
+  {s:"Pittsburgh",t:69.70,a:5.81,w:12},
+  {s:"Illinois",t:69.60,a:5.80,w:12},
+  {s:"Vanderbilt",t:69.40,a:5.78,w:12},
 ];
 
-const ALL_RECAP_UNITS: RecapUnit[] = [
-  ...RECAP_QBs, ...RECAP_RBs, ...RECAP_WRs, ...RECAP_TEs, ...RECAP_DEFs, ...RECAP_Ks,
-].sort((a, b) => b.total - a.total);
+const ALL_RECAP_UNITS: RecapUnitWithPos[] = [
+  ...RECAP_QBs.map(u => ({ ...u, pos: 'QB' })),
+  ...RECAP_RBs.map(u => ({ ...u, pos: 'RB' })),
+  ...RECAP_WRs.map(u => ({ ...u, pos: 'WR' })),
+  ...RECAP_TEs.map(u => ({ ...u, pos: 'TE' })),
+  ...RECAP_DEFs.map(u => ({ ...u, pos: 'DEF' })),
+  ...RECAP_Ks.map(u => ({ ...u, pos: 'K' })),
+].sort((a, b) => b.t - a.t);
 
 const RECAP_TOP100 = ALL_RECAP_UNITS.slice(0, 100);
 
@@ -388,9 +394,7 @@ const POS_COLOR: Record<string, string> = {
 
 function SeasonRecapModal({ onClose }: { onClose: () => void }) {
   const [activePos, setActivePos] = useState<string>('QB');
-  const posData: Record<string, RecapUnit[]> = {
-    QB: RECAP_QBs, RB: RECAP_RBs, WR: RECAP_WRs, TE: RECAP_TEs, DEF: RECAP_DEFs, K: RECAP_Ks,
-  };
+  const posData: Record<string, RecapUnit[]> = { QB: RECAP_QBs, RB: RECAP_RBs, WR: RECAP_WRs, TE: RECAP_TEs, DEF: RECAP_DEFs, K: RECAP_Ks };
   const rows = posData[activePos] ?? [];
 
   return (
@@ -434,12 +438,12 @@ function SeasonRecapModal({ onClose }: { onClose: () => void }) {
             2025 College Football Season<br />by the Numbers
           </div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 24, maxWidth: 560 }}>
-            We tracked every unit across 73 FBS schools through 11 weeks of the 2025 season.
-            Vanderbilt QB Diego Pavia ran away with the #1 overall ranking.
+            We tracked every unit across 73 FBS schools through 14 weeks of the 2025 season.
+            Vanderbilt QB ran away with the #1 overall ranking at 432.9 total FPTS.
           </div>
           {/* Stats banner */}
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-            {[['73', 'Schools Tracked'], ['11', 'Weeks Played'], ['438', 'Units Ranked'], ['460', 'Top Score (VU QB)']].map(([n, l]) => (
+            {[['73', 'Schools Tracked'], ['14', 'Weeks Tracked'], ['438', 'Units Ranked'], ['432.9', 'Top Unit FPTS']].map(([n, l]) => (
               <div key={l}>
                 <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.gold, lineHeight: 1 }}>{n}</div>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 3 }}>{l}</div>
@@ -476,22 +480,18 @@ function SeasonRecapModal({ onClose }: { onClose: () => void }) {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {['#','School','Conf', activePos === 'QB' || activePos === 'K' ? 'Player' : null,'Avg/Wk','Season Pts'].filter(Boolean).map(h => (
-                    <th key={h!} style={{ padding: '10px 14px', textAlign: h === '#' ? 'center' : 'left', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase', fontWeight: 400 }}>{h}</th>
+                  {['#','School','Avg/Wk','Season Pts'].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: h === '#' ? 'center' : 'left', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase', fontWeight: 400 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((u, i) => (
-                  <tr key={u.school} style={{ borderBottom: i < rows.length - 1 ? `1px solid ${C.border}` : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.015)' }}>
+                  <tr key={u.s} style={{ borderBottom: i < rows.length - 1 ? `1px solid ${C.border}` : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.015)' }}>
                     <td style={{ padding: '9px 14px', textAlign: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, color: i < 3 ? C.gold : C.muted }}>{i + 1}</td>
-                    <td style={{ padding: '9px 14px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.text }}>{u.school}</td>
-                    <td style={{ padding: '9px 14px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{u.conf}</td>
-                    {(activePos === 'QB' || activePos === 'K') && (
-                      <td style={{ padding: '9px 14px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub }}>{u.player ?? '—'}</td>
-                    )}
-                    <td style={{ padding: '9px 14px', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.sub }}>{u.avg.toFixed(1)}</td>
-                    <td style={{ padding: '9px 14px', fontFamily: 'Anton,sans-serif', fontSize: 14, color: POS_COLOR[activePos] }}>{u.total}</td>
+                    <td style={{ padding: '9px 14px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.text }}>{u.s}</td>
+                    <td style={{ padding: '9px 14px', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.sub }}>{u.a.toFixed(1)}</td>
+                    <td style={{ padding: '9px 14px', fontFamily: 'Anton,sans-serif', fontSize: 14, color: POS_COLOR[activePos] }}>{u.t.toFixed(1)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -506,22 +506,21 @@ function SeasonRecapModal({ onClose }: { onClose: () => void }) {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {['#','School','Conf','Pos','Avg/Wk','Season Pts'].map(h => (
+                  {['#','School','Pos','Avg/Wk','Season Pts'].map(h => (
                     <th key={h} style={{ padding: '10px 14px', textAlign: h === '#' ? 'center' : 'left', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase', fontWeight: 400 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {RECAP_TOP100.map((u, i) => (
-                  <tr key={`${u.school}-${u.pos}`} style={{ borderBottom: i < 99 ? `1px solid ${C.border}` : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.015)' }}>
+                  <tr key={`${u.s}-${u.pos}`} style={{ borderBottom: i < 99 ? `1px solid ${C.border}` : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.015)' }}>
                     <td style={{ padding: '8px 14px', textAlign: 'center', fontFamily: 'Anton,sans-serif', fontSize: 12, color: i < 3 ? C.gold : C.muted }}>{i + 1}</td>
-                    <td style={{ padding: '8px 14px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.text }}>{u.school}</td>
-                    <td style={{ padding: '8px 14px', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{u.conf}</td>
+                    <td style={{ padding: '8px 14px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.text }}>{u.s}</td>
                     <td style={{ padding: '8px 14px' }}>
                       <span style={{ background: POS_COLOR[u.pos] + '22', border: `1px solid ${POS_COLOR[u.pos]}66`, borderRadius: 4, padding: '2px 7px', fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: POS_COLOR[u.pos] }}>{u.pos}</span>
                     </td>
-                    <td style={{ padding: '8px 14px', fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub }}>{u.avg.toFixed(1)}</td>
-                    <td style={{ padding: '8px 14px', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>{u.total}</td>
+                    <td style={{ padding: '8px 14px', fontFamily: 'Anton,sans-serif', fontSize: 12, color: C.sub }}>{u.a.toFixed(1)}</td>
+                    <td style={{ padding: '8px 14px', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold }}>{u.t.toFixed(1)}</td>
                   </tr>
                 ))}
               </tbody>
