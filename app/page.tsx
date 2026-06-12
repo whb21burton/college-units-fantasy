@@ -148,7 +148,7 @@ function LiveScoreboard() {
       </div>
 
       {/* Games */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 8px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 8px 80px' }}>
         {sport === 'football' ? (
           <div style={{ textAlign: 'center', padding: '36px 12px' }}>
             <div style={{ fontSize: 32, marginBottom: 10 }}>🏈</div>
@@ -860,7 +860,7 @@ export default function HomePage() {
 
             {/* NEWS */}
             {mobileTab === 'news' && (
-              <div style={{ flex: 1, overflowY: 'auto', padding: '14px 14px 12px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '14px 14px 80px' }}>
                 {showRecap && <SeasonRecapModal onClose={() => setShowRecap(false)} />}
                 {/* Season Recap card */}
                 <div
@@ -905,7 +905,7 @@ export default function HomePage() {
 
             {/* FANTASY */}
             {mobileTab === 'fantasy' && (
-              <div style={{ flex: 1, overflowY: 'auto' }}>
+              <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '80px' }}>
                 {user ? (
                   <div style={{ padding: '24px 16px' }}>
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: gold, textTransform: 'uppercase', marginBottom: 3 }}>Welcome back</div>
@@ -965,7 +965,7 @@ export default function HomePage() {
 
             {/* PROFILE */}
             {mobileTab === 'profile' && (
-              <div style={{ flex: 1, overflowY: 'auto', padding: '24px 16px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '24px 16px 80px' }}>
                 {user ? (
                   <>
                     {/* Avatar + name */}

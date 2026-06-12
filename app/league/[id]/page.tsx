@@ -4620,7 +4620,7 @@ function MatchupTab({ league, userId, members = [], currentWeek = 5 }: { league:
     };
 
     return (
-      <div style={{ background: C.bg }}>
+      <div style={{ background: C.bg, paddingBottom: '80px' }}>
 
         {/* Header */}
         <div style={{ padding: '14px 14px 10px', background: 'linear-gradient(180deg,#0e1f35,#05080f)' }}>
