@@ -1209,11 +1209,13 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
   const allGamesComplete = league?.status === 'completed' || league?.status === 'scoring';
 
   useEffect(() => {
-    fetch(`/api/matchup-context?week=5&season=2025`)
+    const w = league?.current_week ?? 5;
+    fetch(`/api/matchup-context?week=${w}&season=2025`)
       .then(r => r.json())
       .then(d => setMatchupCtx(d))
       .catch(() => {});
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [league?.current_week]);
 
   async function loadEntryPicks(userId: string, entryNumber: number) {
     const key = `${userId}::${entryNumber}`;
@@ -1965,8 +1967,8 @@ const STAT_COLS: Record<string, { key: string; label: string }[]> = {
   K:   [{ key: 'pts', label: 'PTS' }],
 };
 
-function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
-  player: any; onBack: () => void; onAdd: () => void; canAdd: boolean;
+function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 5 }: {
+  player: any; onBack: () => void; onAdd: () => void; canAdd: boolean; currentWeek?: number;
 }) {
   const [stats,         setStats]         = useState<any | null>(null);
   const [loading,       setLoading]       = useState(true);
@@ -1975,8 +1977,9 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
 
   useEffect(() => {
     fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d.logos ?? {})).catch(() => {});
-    fetch('/api/matchup-context?week=5&season=2025').then(r => r.json()).then(d => setMatchupCtx(d)).catch(() => {});
-  }, []);
+    fetch(`/api/matchup-context?week=${currentWeek}&season=2025`).then(r => r.json()).then(d => setMatchupCtx(d)).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWeek]);
 
   useEffect(() => {
     setLoading(true);
@@ -2232,7 +2235,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd }: {
       <UnitExpansion
         school={player.school}
         unitType={player.unitType}
-        currentWeek={5}
+        currentWeek={currentWeek}
         season={2025}
       />
 
@@ -2569,6 +2572,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         onBack={() => setViewing(null)}
         onAdd={() => { setViewing(null); setAdding(viewing); }}
         canAdd={!!userId && !draftedKeys.has(`${viewing.school}||${viewing.unitType}`)}
+        currentWeek={league?.current_week ?? 5}
       />
     );
   }
@@ -4530,7 +4534,7 @@ function MatchupTab({ league, userId, members = [], currentWeek = 5 }: { league:
   );
 
   if (viewingPlayer) return (
-    <PlayerDetailView player={viewingPlayer} onBack={() => setViewingPlayer(null)} onAdd={() => {}} canAdd={false} />
+    <PlayerDetailView player={viewingPlayer} onBack={() => setViewingPlayer(null)} onAdd={() => {}} canAdd={false} currentWeek={week} />
   );
 
   if (!myEntry || numTeams === 0) return (
@@ -4850,7 +4854,7 @@ function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: an
   );
 
   if (viewingPlayer) return (
-    <PlayerDetailView player={viewingPlayer} onBack={() => setViewingPlayer(null)} onAdd={() => {}} canAdd={false} />
+    <PlayerDetailView player={viewingPlayer} onBack={() => setViewingPlayer(null)} onAdd={() => {}} canAdd={false} currentWeek={week} />
   );
 
   if (myPicksRaw.length === 0) return (
