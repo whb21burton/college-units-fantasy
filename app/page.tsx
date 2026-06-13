@@ -30,13 +30,16 @@ function GameCard({ game }: { game: any }) {
   return (
     <div style={{
       background: C.surf2,
-      border: `1px solid ${isLive ? 'rgba(46,204,113,.3)' : C.border}`,
+      border: `1px solid ${isLive ? 'rgba(231,76,60,.35)' : C.border}`,
       borderRadius: 8, padding: '9px 11px', marginBottom: 6,
-      boxShadow: isLive ? '0 0 10px rgba(46,204,113,.05)' : 'none',
+      boxShadow: isLive ? '0 0 10px rgba(231,76,60,.08)' : 'none',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase',
-          color: isLive ? C.green : isFinal ? C.muted : C.gold }}>
+        <span style={{
+          fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase',
+          color: isLive ? C.red : isFinal ? C.muted : C.text,
+          animation: isLive ? 'cuf-pulse 1.4s ease-in-out infinite' : 'none',
+        }}>
           {isLive ? `● LIVE${game.period ? ` · ${game.period}` : ''}` : game.statusText}
         </span>
         {game.broadcast && (
@@ -74,18 +77,42 @@ const SPORT_TABS: { key: Sport; label: string; icon: string }[] = [
   { key: 'football',   label: 'Football',   icon: '🏈' },
 ];
 
+const _pad = (n: number) => String(n).padStart(2, '0');
+const _fmtDate = (d: Date) => `${d.getFullYear()}${_pad(d.getMonth() + 1)}${_pad(d.getDate())}`;
+const _gameDateStr = (iso: string) => _fmtDate(new Date(iso));
+
 function buildDateRange(): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const fmt = (d: Date) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
   const today = new Date();
-  const end   = new Date(today);
-  end.setDate(today.getDate() + 3);
-  return `${fmt(today)}-${fmt(end)}`;
+  const start = new Date(today); start.setDate(today.getDate() - 3);
+  const end   = new Date(today); end.setDate(today.getDate() + 1);
+  return `${_fmtDate(start)}-${_fmtDate(end)}`;
 }
 
-function gameDay(isoDate: string): string {
-  const d = new Date(isoDate);
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+function dayLabel(isoDate: string): string {
+  const today     = new Date();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const ds = _gameDateStr(isoDate);
+  if (ds === _fmtDate(today))     return 'TODAY';
+  if (ds === _fmtDate(yesterday)) return 'YESTERDAY';
+  return new Date(isoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+}
+
+function sortGames(raw: any[]): any[] {
+  const todayStr = _fmtDate(new Date());
+  const priority = (g: any) => {
+    const ds = _gameDateStr(g.date);
+    if (g.status === 'in')                        return 0; // live
+    if (g.status === 'pre' && ds === todayStr)    return 1; // today upcoming
+    if (ds === todayStr)                           return 2; // today final
+    return 3;                                                // past
+  };
+  return [...raw].sort((a, b) => {
+    const pa = priority(a), pb = priority(b);
+    if (pa !== pb) return pa - pb;
+    // Past: newest first; everything else: chronological
+    const mul = pa === 3 ? -1 : 1;
+    return mul * (new Date(a.date).getTime() - new Date(b.date).getTime());
+  });
 }
 
 function LiveScoreboard() {
@@ -93,7 +120,9 @@ function LiveScoreboard() {
   const [games, setGames]             = useState<any[]>([]);
   const [loading, setLoading]         = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const todayRef  = useRef<HTMLDivElement>(null);
 
   const fetchScores = useCallback(async () => {
     if (sport === 'football') return;
@@ -102,17 +131,10 @@ function LiveScoreboard() {
       const endpoint = sport === 'baseball'
         ? '/api/scores/college-baseball'
         : '/api/scores/college-basketball';
-      const range = buildDateRange();
-      const res = await fetch(`${endpoint}?date=${range}`);
+      const res = await fetch(`${endpoint}?date=${buildDateRange()}`);
       if (res.ok) {
         const data = await res.json();
-        // Sort: in-progress first, then by start time
-        const sorted = (data.games ?? []).slice().sort((a: any, b: any) => {
-          if (a.status === 'in' && b.status !== 'in') return -1;
-          if (a.status !== 'in' && b.status === 'in') return  1;
-          return new Date(a.date).getTime() - new Date(b.date).getTime();
-        });
-        setGames(sorted);
+        setGames(sortGames(data.games ?? []));
         setLastUpdated(new Date());
       }
     } catch {}
@@ -129,8 +151,17 @@ function LiveScoreboard() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [sport, fetchScores]);
 
+  // Auto-scroll to TODAY section after first load
+  useEffect(() => {
+    if (!games.length || !scrollRef.current || !todayRef.current) return;
+    const offset = todayRef.current.offsetTop - 8;
+    scrollRef.current.scrollTop = Math.max(0, offset);
+  }, [games.length > 0 && sport]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <style>{`@keyframes cuf-pulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+
       {/* Sport tabs */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         {SPORT_TABS.map(tab => (
@@ -148,7 +179,7 @@ function LiveScoreboard() {
       </div>
 
       {/* Games */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 8px 80px' }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '10px 8px 80px' }}>
         {sport === 'football' ? (
           <div style={{ textAlign: 'center', padding: '36px 12px' }}>
             <div style={{ fontSize: 32, marginBottom: 10 }}>🏈</div>
@@ -166,23 +197,28 @@ function LiveScoreboard() {
         ) : games.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '36px 12px' }}>
             <div style={{ fontSize: 26, marginBottom: 8 }}>{sport === 'baseball' ? '⚾' : '🏀'}</div>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>No games today</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>No games in the last 3 days</div>
           </div>
         ) : (
           games.map((g: any, idx: number) => {
-            const day     = gameDay(g.date);
-            const prevDay = idx > 0 ? gameDay(games[idx - 1].date) : null;
-            const showSep = day !== prevDay;
+            const label   = dayLabel(g.date);
+            const prevLbl = idx > 0 ? dayLabel(games[idx - 1].date) : null;
+            const showSep = label !== prevLbl;
+            const isToday = label === 'TODAY';
             return (
               <div key={g.id}>
                 {showSep && (
-                  <div style={{
-                    padding: '6px 4px 4px',
-                    fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2,
-                    color: C.muted, textTransform: 'uppercase' as const,
-                    ...(idx > 0 ? { borderTop: `1px solid ${C.border}`, marginTop: 6, paddingTop: 10 } : {}),
-                  }}>
-                    {day}
+                  <div
+                    ref={isToday ? todayRef : undefined}
+                    style={{
+                      padding: '6px 4px 4px',
+                      fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2,
+                      color: isToday ? C.gold : C.muted,
+                      textTransform: 'uppercase' as const,
+                      ...(idx > 0 ? { borderTop: `1px solid ${C.border}`, marginTop: 6, paddingTop: 10 } : {}),
+                    }}
+                  >
+                    {label}
                   </div>
                 )}
                 <GameCard game={g} />
