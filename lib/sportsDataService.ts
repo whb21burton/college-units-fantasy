@@ -265,36 +265,74 @@ export async function syncStats(
     from += PAGE
   }
 
-  // Strip name suffixes for matching (Jr., Sr., II, III, IV, V)
+  // Strip name suffixes (Jr., Sr., II, III, IV, V) and middle initials (e.g. "A.")
   const stripSuffix = (name: string) =>
     name.replace(/\s+(Jr\.?|Sr\.?|II|III|IV|V)$/i, '').trim()
+  const stripMiddle = (name: string) =>
+    name.replace(/\s+[A-Z]\.\s+/, ' ').trim()
+  const normStr = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+
+  // nameInRoster tracks every school+name combo present in season_rosters (any position).
+  // Used to prevent the stat-based fallback from running on players who ARE in the roster
+  // but whose name didn't match via posLookup (e.g. middle-initial mismatch → Jeremiah Smith).
+  const nameInRoster = new Set<string>()
 
   for (const p of cachedPlayerRows ?? []) {
     if (!p.player_name || !p.position || !p.school) continue
-    const exact    = `${p.school}||${p.player_name}`
-    const norm     = `${p.school}||${p.player_name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()}`
-    const stripped = `${p.school}||${stripSuffix(p.player_name)}`
-    const strippedNorm = `${p.school}||${stripSuffix(p.player_name).toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()}`
-    posLookup[exact]        = p.position
-    posLookup[norm]         = p.position
-    posLookup[stripped]     = p.position
-    posLookup[strippedNorm] = p.position
+    const n  = p.player_name
+    const sf = stripSuffix(n)
+    const sm = stripMiddle(n)
+    const sfm = stripSuffix(stripMiddle(n))
+    const variants = [
+      `${p.school}||${n}`,
+      `${p.school}||${normStr(n)}`,
+      `${p.school}||${sf}`,
+      `${p.school}||${normStr(sf)}`,
+      `${p.school}||${sm}`,
+      `${p.school}||${normStr(sm)}`,
+      `${p.school}||${sfm}`,
+      `${p.school}||${normStr(sfm)}`,
+    ]
+    for (const v of variants) {
+      posLookup[v]   = p.position
+      nameInRoster.add(v)
+    }
   }
-
 
   const teInLookup = Object.values(posLookup).filter(p => p === 'TE').length
   if (teInLookup === 0) {
     console.error('[posLookup] WARNING: 0 TEs found — cached_players may be empty for this season')
   }
 
-  // Helper: look up a player's position
   const getPos = (school: string, name: string): string | null => {
-    const stripped = stripSuffix(name)
+    const sf  = stripSuffix(name)
+    const sm  = stripMiddle(name)
+    const sfm = stripSuffix(stripMiddle(name))
     return posLookup[`${school}||${name}`]
-      ?? posLookup[`${school}||${name.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()}`]
-      ?? posLookup[`${school}||${stripped}`]
-      ?? posLookup[`${school}||${stripped.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()}`]
+      ?? posLookup[`${school}||${normStr(name)}`]
+      ?? posLookup[`${school}||${sf}`]
+      ?? posLookup[`${school}||${normStr(sf)}`]
+      ?? posLookup[`${school}||${sm}`]
+      ?? posLookup[`${school}||${normStr(sm)}`]
+      ?? posLookup[`${school}||${sfm}`]
+      ?? posLookup[`${school}||${normStr(sfm)}`]
       ?? null
+  }
+
+  // Returns true if the player exists in season_rosters under ANY name variant.
+  // Fallback position assignment must not run for roster-known players.
+  const isInRoster = (school: string, name: string): boolean => {
+    const sf  = stripSuffix(name)
+    const sm  = stripMiddle(name)
+    const sfm = stripSuffix(stripMiddle(name))
+    return nameInRoster.has(`${school}||${name}`)
+      || nameInRoster.has(`${school}||${normStr(name)}`)
+      || nameInRoster.has(`${school}||${sf}`)
+      || nameInRoster.has(`${school}||${normStr(sf)}`)
+      || nameInRoster.has(`${school}||${sm}`)
+      || nameInRoster.has(`${school}||${normStr(sm)}`)
+      || nameInRoster.has(`${school}||${sfm}`)
+      || nameInRoster.has(`${school}||${normStr(sfm)}`)
   }
 
   // 7. Process each game
@@ -364,16 +402,17 @@ export async function syncStats(
           // Player has kicking stats but no roster position — treat as K
           unit = 'K'
         } else if (!pos && passE && ((passE.YDS || 0) > 0 || (passE.TD || 0) > 0)) {
-          // Player has passing stats but no roster position — treat as QB
-          unit = 'QB'
+          if (!isInRoster(school, name)) unit = 'QB'
         } else if (!pos && rushE && !recvE && !passE) {
-          unit = 'RB'
+          if (!isInRoster(school, name)) unit = 'RB'
         } else if (!pos && recvE && !rushE && !passE) {
-          unit = 'WR'
+          if (!isInRoster(school, name)) unit = 'WR'
         } else if (!pos && rushE && recvE && !passE) {
-          const rPts = (rushE.YDS || 0) * 0.1 + (rushE.TD || 0) * 6
-          const cPts = (recvE.YDS || 0) * 0.1 + (recvE.TD || 0) * 6
-          unit = rPts >= cPts ? 'RB' : 'WR'
+          if (!isInRoster(school, name)) {
+            const rPts = (rushE.YDS || 0) * 0.1 + (rushE.TD || 0) * 6
+            const cPts = (recvE.YDS || 0) * 0.1 + (recvE.TD || 0) * 6
+            unit = rPts >= cPts ? 'RB' : 'WR'
+          }
         } else if (!pos) {
           // No position found in cached_players — skip this player entirely
           // This ensures sync and breakdown use identical player sets

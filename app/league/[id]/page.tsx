@@ -748,6 +748,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
               league={league}
               walletBalance={walletBalance ?? 0}
               refreshWallet={refreshWallet ?? (() => {})}
+              currentWeek={currentWeek}
             />
           )}
           {activeTab === 'leaderboard' && (
@@ -829,7 +830,7 @@ const LINEUP_POS_COLOR: Record<string, string> = {
 };
 
 /* ── Weekly Lineup Tab ──────────────────────────────────────── */
-function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refreshWallet }: { leagueId: string; router: any; userId: string | null; league: any; walletBalance: number; refreshWallet: () => void }) {
+function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refreshWallet, currentWeek = 5 }: { leagueId: string; router: any; userId: string | null; league: any; walletBalance: number; refreshWallet: () => void; currentWeek?: number }) {
   const [picks,          setPicks]          = useState<any[] | null>(null);
   const [firstGameTime,  setFirstGameTime]  = useState<string | null>(null);
   const [loading,        setLoading]        = useState(true);
@@ -1099,7 +1100,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
                 </div>
                 {isExpanded && (
                   <div style={{ background:'rgba(0,0,0,.25)', borderBottom: i < sortedPicks.length-1 ? '1px solid #1a2b40' : 'none', padding:'8px 14px', overflowX:'auto' }}>
-                    <UnitExpansion school={school} unitType={unitType} currentWeek={week} season={2025} logos={teamLogos} />
+                    <UnitExpansion school={school} unitType={unitType} currentWeek={currentWeek} season={2025} logos={teamLogos} />
                   </div>
                 )}
               </React.Fragment>
