@@ -342,7 +342,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const [loading,      setLoading]      = useState(true);
   const [copied,       setCopied]       = useState(false);
   const [activeTab,    setActiveTab]    = useState<Tab>('draft');
-  const [currentWeek,  setCurrentWeek]  = useState(5);
+  const [currentWeek,  setCurrentWeek]  = useState(15);
   const [showSettings,     setShowSettings]     = useState(false);
   const [showCommSettings, setShowCommSettings] = useState(false);
   const [chatMessages,  setChatMessages]  = useState<any[]>([]);
@@ -830,7 +830,7 @@ const LINEUP_POS_COLOR: Record<string, string> = {
 };
 
 /* ── Weekly Lineup Tab ──────────────────────────────────────── */
-function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refreshWallet, currentWeek = 5 }: { leagueId: string; router: any; userId: string | null; league: any; walletBalance: number; refreshWallet: () => void; currentWeek?: number }) {
+function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refreshWallet, currentWeek = 15 }: { leagueId: string; router: any; userId: string | null; league: any; walletBalance: number; refreshWallet: () => void; currentWeek?: number }) {
   const [picks,          setPicks]          = useState<any[] | null>(null);
   const [firstGameTime,  setFirstGameTime]  = useState<string | null>(null);
   const [loading,        setLoading]        = useState(true);
@@ -1210,7 +1210,7 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
   const allGamesComplete = league?.status === 'completed' || league?.status === 'scoring';
 
   useEffect(() => {
-    const w = league?.current_week ?? 5;
+    const w = league?.current_week ?? 15;
     fetch(`/api/matchup-context?week=${w}&season=2025`)
       .then(r => r.json())
       .then(d => setMatchupCtx(d))
@@ -1968,7 +1968,7 @@ const STAT_COLS: Record<string, { key: string; label: string }[]> = {
   K:   [{ key: 'pts', label: 'PTS' }],
 };
 
-function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 5 }: {
+function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 15 }: {
   player: any; onBack: () => void; onAdd: () => void; canAdd: boolean; currentWeek?: number;
 }) {
   const [stats,         setStats]         = useState<any | null>(null);
@@ -2581,7 +2581,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         onBack={() => setViewing(null)}
         onAdd={() => { setViewing(null); setAdding(viewing); }}
         canAdd={!!userId && !draftedKeys.has(`${viewing.school}||${viewing.unitType}`)}
-        currentWeek={league?.current_week ?? 5}
+        currentWeek={league?.current_week ?? 15}
       />
     );
   }
@@ -4661,7 +4661,7 @@ function TeamSettingsModal({ leagueId, userId, currentName, currentLogoUrl, onCl
   );
 }
 
-function MatchupTab({ league, userId, members = [], currentWeek = 5 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
+function MatchupTab({ league, userId, members = [], currentWeek = 15 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
   const CURRENT_WEEK = currentWeek;
   const defaultWeek  = CURRENT_WEEK;
 
@@ -5025,7 +5025,7 @@ function canFillSlot(unitType: string, slotLabel: string): boolean {
   return (SLOT_ELIGIBLE[slotLabel] ?? []).includes(unitType);
 }
 
-function TeamTab({ league, userId, members = [], currentWeek = 5 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
+function TeamTab({ league, userId, members = [], currentWeek = 15 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
   const CURRENT_WEEK = currentWeek;
   const defaultWeek  = CURRENT_WEEK;
 
@@ -5575,7 +5575,7 @@ function getWeekMatchups(teams: any[], week: number): [any, any][] {
   return result;
 }
 
-function LeagueTab({ league, userId, members = [], currentWeek = 5 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
+function LeagueTab({ league, userId, members = [], currentWeek = 15 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
   type LView = 'matchups' | 'roster' | 'trade';
   const CURRENT_WEEK = currentWeek;
   const defaultWeek  = CURRENT_WEEK;
