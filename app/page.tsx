@@ -577,9 +577,9 @@ const NEWS = [
 
 const CUF_VIDEO = {
   title:       'How College Units Fantasy Works — 2025 Season Breakdown',
-  description: 'Watch how the unit system scores players and how the Opponent Difficulty Rating multiplier works using real Ohio State vs Texas highlights.',
+  description: 'Unit scoring system + ODR multiplier explained with real game footage',
   duration:    '1:28',
-  src:         '/videos/cuf_explainer.mp4',
+  src:         '/videos/cuf_intro.mp4',
 };
 
 function NewsSection() {
