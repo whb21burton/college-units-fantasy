@@ -2036,8 +2036,16 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 5 }: {
     return 0;
   };
 
-  // Top contributors: all named players sorted by fantasy pts desc
+  // Top contributors: filter to roster-confirmed players for this unit type,
+  // then sort by fantasy pts desc. Prevents WRs with rushing stats (e.g. Jeremiah Smith)
+  // from appearing in the RB Top Contributors list.
+  const unitPlayerNames: string[] | null = stats?.unitPlayerNames ?? null;
+  const normName = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, '');
   const contributors = sortedPlayers
+    .filter((p: any) => {
+      if (!unitPlayerNames || unitPlayerNames.length === 0) return true; // no filter if not provided
+      return unitPlayerNames.includes(p.name) || unitPlayerNames.includes(normName(p.name));
+    })
     .map((p: any) => ({ ...p, fpts: playerFpts(p, player.unitType) }))
     .sort((a: any, b: any) => b.fpts - a.fpts);
 

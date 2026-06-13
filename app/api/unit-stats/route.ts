@@ -267,7 +267,18 @@ export async function GET(req: Request) {
       rb1_opportunity: 1.0, rb2_opportunity: 0.7, rb3_opportunity: 0.4,
     };
 
-    const [weeks, playersRes, roleRows] = await Promise.all([
+    // Map unit type → roster positions that belong to this unit
+    const UNIT_POSITIONS: Record<string, string[]> = {
+      QB: ['QB'],
+      RB: ['RB', 'HB', 'FB'],
+      WR: ['WR'],
+      TE: ['TE'],
+      K:  ['K', 'PK'],
+      DEF: [], // no named players
+    };
+    const rosterPositions = UNIT_POSITIONS[unitType] ?? [];
+
+    const [weeks, playersRes, roleRows, rosterRes] = await Promise.all([
       getSchoolWeekGameLog(school, unitType, season, currentWeek),
       admin
         .from('cached_players')
@@ -284,7 +295,27 @@ export async function GET(req: Request) {
             .in('stat_type', ['rb1_opportunity', 'rb2_opportunity', 'rb3_opportunity'])
             .not('player_name', 'is', null)
         : Promise.resolve({ data: [] as any[], error: null }),
+      rosterPositions.length > 0
+        ? admin
+            .from('season_rosters')
+            .select('player_name, position')
+            .eq('school', school)
+            .eq('season', season)
+            .in('position', rosterPositions)
+        : Promise.resolve({ data: [] as any[], error: null }),
     ]);
+
+    // Build a normalized name set for this unit's position — used by the client
+    // to filter Top Contributors to only roster-confirmed players.
+    const normName = (n: string) => n.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const unitPlayerNamesSet = new Set<string>();
+    for (const p of rosterRes.data ?? []) {
+      if (p.player_name) {
+        unitPlayerNamesSet.add(p.player_name);
+        unitPlayerNamesSet.add(normName(p.player_name));
+      }
+    }
+    const unitPlayerNames = Array.from(unitPlayerNamesSet);
 
     const jerseyMap: Record<string, string> = {};
     for (const p of playersRes.data ?? []) {
@@ -329,7 +360,7 @@ export async function GET(req: Request) {
       .single();
 
     return NextResponse.json(
-      { school, unitType, weeks, jerseyMap, playerRoles, coachProfile: coachProfile ?? null },
+      { school, unitType, weeks, jerseyMap, playerRoles, unitPlayerNames, coachProfile: coachProfile ?? null },
       { headers: NO_STORE },
     );
   } catch (err: any) {
