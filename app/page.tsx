@@ -536,6 +536,31 @@ function SeasonRecapModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── VideoModal ────────────────────────────────────────────────────────────────
+
+function VideoModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+    >
+      <div onClick={e => e.stopPropagation()} style={{ position: 'relative', width: '100%', maxWidth: 900 }}>
+        <button
+          onClick={onClose}
+          style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: '#e8edf5', fontSize: 22, cursor: 'pointer', lineHeight: 1, padding: '4px 8px' }}
+        >✕</button>
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <video
+          src={CUF_VIDEO.src}
+          controls
+          autoPlay
+          style={{ width: '100%', borderRadius: 10, display: 'block', background: '#000' }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── NewsSection ───────────────────────────────────────────────────────────────
 
 const FEATURED = {
@@ -550,17 +575,21 @@ const NEWS = [
   { headline: "Conference Championship Odds: Who's Favored?",  summary: 'Early projections for every Power 4 conference — and which units to invest in.',               date: 'June 7, 2026'  },
 ];
 
-const VIDEOS = [
-  { title: 'How to Draft a Winning Team',     duration: '4:32' },
-  { title: '2025 Season Preview & Sleepers',  duration: '7:15' },
-];
+const CUF_VIDEO = {
+  title:       'How College Units Fantasy Works — 2025 Season Breakdown',
+  description: 'Watch how the unit system scores players and how the Opponent Difficulty Rating multiplier works using real Ohio State vs Texas highlights.',
+  duration:    '1:28',
+  src:         '/videos/cuf_explainer.mp4',
+};
 
 function NewsSection() {
   const [showRecap, setShowRecap] = useState(false);
+  const [showVideo, setShowVideo] = useState(false);
   return (
     <div style={{ padding: '16px 20px', overflowY: 'auto', height: '100%' }}>
 
       {showRecap && <SeasonRecapModal onClose={() => setShowRecap(false)} />}
+      {showVideo  && <VideoModal onClose={() => setShowVideo(false)} />}
 
       {/* Season Recap featured card */}
       <div
@@ -639,22 +668,20 @@ function NewsSection() {
         <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 10 }}>
           Videos
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          {VIDEOS.map((vid, i) => (
-            <div key={i}
-              style={{ background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', transition: 'border-color .12s' }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(212,168,40,.4)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = C.border)}
-            >
-              <div style={{ height: 76, background: 'linear-gradient(135deg,#0d1827,#1e2d47)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(212,168,40,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: C.bg }}>▶</div>
-                <span style={{ position: 'absolute', bottom: 5, right: 7, fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted }}>{vid.duration}</span>
-              </div>
-              <div style={{ padding: '8px 10px' }}>
-                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{vid.title}</div>
-              </div>
-            </div>
-          ))}
+        <div
+          onClick={() => setShowVideo(true)}
+          style={{ background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', transition: 'border-color .12s' }}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(212,168,40,.4)')}
+          onMouseLeave={e => (e.currentTarget.style.borderColor = C.border)}
+        >
+          <div style={{ height: 100, background: 'linear-gradient(135deg,#0d1827,#1e2d47)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(212,168,40,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, color: C.bg }}>▶</div>
+            <span style={{ position: 'absolute', bottom: 7, right: 9, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, background: 'rgba(0,0,0,.5)', padding: '2px 6px', borderRadius: 4 }}>{CUF_VIDEO.duration}</span>
+          </div>
+          <div style={{ padding: '10px 12px' }}>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.text, lineHeight: 1.35, marginBottom: 4 }}>{CUF_VIDEO.title}</div>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, lineHeight: 1.5 }}>{CUF_VIDEO.description}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -696,6 +723,7 @@ export default function HomePage() {
   const [mobileTab,    setMobileTab]    = useState<MobileTab>('scores');
   const [mobileAuth,   setMobileAuth]   = useState<'signin' | 'signup'>('signin');
   const [showRecap,    setShowRecap]    = useState(false);
+  const [showVideo,    setShowVideo]    = useState(false);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 640);
@@ -862,6 +890,7 @@ export default function HomePage() {
             {mobileTab === 'news' && (
               <div style={{ flex: 1, overflowY: 'auto', padding: '14px 14px 80px' }}>
                 {showRecap && <SeasonRecapModal onClose={() => setShowRecap(false)} />}
+                {showVideo  && <VideoModal onClose={() => setShowVideo(false)} />}
                 {/* Season Recap card */}
                 <div
                   onClick={() => setShowRecap(true)}
@@ -889,17 +918,16 @@ export default function HomePage() {
                 ))}
                 {/* Videos (full-width) */}
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', margin: '16px 0 10px' }}>Videos</div>
-                {VIDEOS.map((vid, i) => (
-                  <div key={i} style={{ background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 64, height: 56, background: 'linear-gradient(135deg,#0d1827,#1e2d47)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(212,168,40,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: C.bg }}>▶</div>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0, padding: '8px 10px 8px 0' }}>
-                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{vid.title}</div>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, marginTop: 3 }}>{vid.duration}</div>
-                    </div>
+                <div onClick={() => setShowVideo(true)} style={{ background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 8, cursor: 'pointer' }}>
+                  <div style={{ height: 80, background: 'linear-gradient(135deg,#0d1827,#1e2d47)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(212,168,40,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: C.bg }}>▶</div>
+                    <span style={{ position: 'absolute', bottom: 6, right: 8, fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, background: 'rgba(0,0,0,.5)', padding: '2px 5px', borderRadius: 3 }}>{CUF_VIDEO.duration}</span>
                   </div>
-                ))}
+                  <div style={{ padding: '10px 12px' }}>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, fontWeight: 600, color: C.text, lineHeight: 1.35, marginBottom: 3 }}>{CUF_VIDEO.title}</div>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 10, color: C.sub, lineHeight: 1.5 }}>{CUF_VIDEO.description}</div>
+                  </div>
+                </div>
               </div>
             )}
 
