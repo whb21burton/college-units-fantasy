@@ -738,7 +738,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
             <ScheduleTab league={league} />
           )}
           {activeTab === 'players' && (
-            <WaiverTab league={league} userId={userId} />
+            <WaiverTab league={league} userId={userId} currentWeek={currentWeek} />
           )}
           {activeTab === 'lineup' && (
             <WeeklyLineupTab
@@ -2363,7 +2363,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 15 }: {
 }
 
 /* ── Waiver Wire Tab ─────────────────────────────────────────── */
-function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
+function WaiverTab({ league, userId, currentWeek = 15 }: { league: any; userId: string | null; currentWeek?: number }) {
   const [allPicks,    setAllPicks]    = useState<any[]>([]);
   const [myPicks,     setMyPicks]     = useState<any[]>([]);
   const [pool,        setPool]        = useState<DraftUnit[]>([]);
@@ -2581,7 +2581,7 @@ function WaiverTab({ league, userId }: { league: any; userId: string | null }) {
         onBack={() => setViewing(null)}
         onAdd={() => { setViewing(null); setAdding(viewing); }}
         canAdd={!!userId && !draftedKeys.has(`${viewing.school}||${viewing.unitType}`)}
-        currentWeek={league?.current_week ?? 15}
+        currentWeek={currentWeek}
       />
     );
   }
@@ -4757,7 +4757,7 @@ function MatchupTab({ league, userId, members = [], currentWeek = 15 }: { league
   );
 
   if (viewingPlayer) return (
-    <PlayerDetailView player={viewingPlayer} onBack={() => setViewingPlayer(null)} onAdd={() => {}} canAdd={false} currentWeek={week} />
+    <PlayerDetailView player={viewingPlayer} onBack={() => setViewingPlayer(null)} onAdd={() => {}} canAdd={false} currentWeek={currentWeek} />
   );
 
   if (!myEntry || numTeams === 0) return (
@@ -5210,7 +5210,7 @@ function TeamTab({ league, userId, members = [], currentWeek = 15 }: { league: a
   );
 
   if (viewingPlayer) return (
-    <PlayerDetailView player={viewingPlayer} onBack={() => setViewingPlayer(null)} onAdd={() => {}} canAdd={false} currentWeek={week} />
+    <PlayerDetailView player={viewingPlayer} onBack={() => setViewingPlayer(null)} onAdd={() => {}} canAdd={false} currentWeek={currentWeek} />
   );
 
   if (myPicksRaw.length === 0) return (
