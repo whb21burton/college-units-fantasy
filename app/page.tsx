@@ -440,42 +440,42 @@ const BV_SECTIONS: { pos: string; color: string; title: string; units: ValueUnit
     pos: 'QB', color: '#e84545', title: 'Quarterback',
     units: [
       { school: 'Vanderbilt',   player: 'Diego Pavia',       badge: 'TOP VALUE', avgWk: 36.1, barPct: 100, stat: '3,247 YDS · 28 TD',
-        why: "Diego Pavia's dual-threat ability drove the highest QB unit score in the dataset. Despite playing in the SEC — statistically the hardest conference — he averaged 36.1 pts/wk. Most drafters still don't believe it. They will in 2026." },
+        why: "Nobody saw this coming. Diego Pavia's dual-threat ability and the Commodores' surprising offensive efficiency made Vanderbilt the #1 fantasy QB unit in the country. In a season full of surprises, this was the biggest." },
       { school: 'Baylor',       player: 'Sawyer Robertson',  badge: 'SLEEPER',   avgWk: 31.9, barPct: 88,  stat: '3,681 YDS · 26 TD',
-        why: "Robertson posted 3,681 passing yards and quietly ran one of the most efficient Big 12 offenses. At 31.9 avg/wk and a mid-round price tag, the ROI was massive. Baylor's air attack creates consistent weekly production regardless of opponent." },
+        why: "Robertson posted 3,681 passing yards and quietly ran one of the most efficient Big 12 offenses. At 31.9 avg/wk, the ROI was massive. He was the definition of a sleeper — flying under the radar while producing starter-level numbers all season long." },
       { school: 'Georgia Tech', player: 'Haynes King',        badge: 'SURPRISE',  avgWk: 29.1, barPct: 80,  stat: '3,102 YDS · 24 TD',
-        why: "Haynes King ran a modernized offense with massive efficiency numbers. At 29.1 avg/wk, Georgia Tech QB went undrafted in most leagues. The Yellow Jackets' quick-strike passing game creates easy fantasy points every single week." },
+        why: "Haynes King ran a modernized offense with massive efficiency numbers. At 29.1 avg/wk, Georgia Tech QB went unowned in most leagues yet delivered top-10 QB fantasy production week after week. The biggest surprise in the ACC in 2025." },
     ],
   },
   {
     pos: 'RB', color: '#2d7fe0', title: 'Running Back',
     units: [
       { school: 'Notre Dame', player: 'Jeremiyah Love',   badge: 'TOP VALUE', avgWk: 22.9, barPct: 100, stat: '1,372 YDS · 14 TD',
-        why: "Love carried the entire Notre Dame rushing attack. 1,372 yards, 14 touchdowns, 22.9 pts/wk. The Fighting Irish run a ground-first scheme — he's the clear starter and gets both rushing and receiving work. Zero weeks without meaningful touches." },
+        why: "Love carried the entire Notre Dame rushing attack on his back. 1,372 yards, 14 touchdowns, 22.9 pts/wk. Week after week, the Fighting Irish fed Love until defenses had no answer. The most reliable RB unit in college fantasy in 2025." },
       { school: 'Rutgers',    player: 'Antwan Raymond',   badge: 'SLEEPER',   avgWk: 19.6, barPct: 86,  stat: '1,241 YDS · 11 TD',
-        why: "Raymond surprised everyone. 1,241 yards in a Rutgers offense that no one drafted. At 19.6 avg/wk with essentially zero draft cost in most leagues, this was the RB value of the year. He's the workhorse in a ground-heavy Big Ten attack." },
+        why: "Raymond surprised everyone. 1,241 yards in a Rutgers offense that nobody expected to produce. At 19.6 avg/wk with essentially zero ownership cost in most leagues, this was the RB steal of the year. Nobody saw Rutgers RB coming." },
       { school: 'Missouri',   player: 'Ahmad Hardy',      badge: 'SURPRISE',  avgWk: 18.6, barPct: 81,  stat: '1,560 YDS · 12 TD',
-        why: "Hardy had 1,560 total yards in the SEC and averaged 18.6 pts/wk. The Tigers run a balanced attack — he gets both rushing and receiving opportunities every game. His role only expands as defenses load the box against Missouri's QB." },
+        why: "Hardy had 1,560 total yards in the SEC and averaged 18.6 pts/wk. The Tigers ran a balanced attack that gave Hardy both rushing and receiving opportunities every week. Putting up those numbers against SEC defenses all season was genuinely impressive." },
     ],
   },
   {
     pos: 'WR', color: '#d4a020', title: 'Wide Receiver',
     units: [
       { school: 'USC',     player: 'Makai Lemon',     badge: 'TOP VALUE', avgWk: 19.9, barPct: 100, stat: '1,156 YDS · 9 TD',
-        why: "Lemon exploded in year 2 as the true WR1 for USC. 1,156 yards, 9 touchdowns, 19.9 avg/wk. Lincoln Riley's system creates elite WR value every season — the targets don't disappear, they rotate. Lemon is the clear alpha." },
+        why: "Lemon exploded in year 2 as the unquestioned WR1 for USC. 1,156 yards, 9 touchdowns, 19.9 avg/wk. Lincoln Riley's system produced another elite WR fantasy season and Lemon was the clear alpha all year long. One of the best WR performances of 2025." },
       { school: 'TCU',     player: 'Eric McAlister',  badge: 'SLEEPER',   avgWk: 18.7, barPct: 94,  stat: '1,121 YDS · 8 TD',
-        why: "McAlister was the best receiver nobody talked about. 1,121 yards, 18.7 avg/wk. TCU's pass-heavy system generates consistent volume. He was a free square in salary cap leagues — costing almost nothing while delivering starter-level production." },
+        why: "McAlister was the best receiver nobody talked about. 1,121 yards, 18.7 avg/wk. TCU's pass-heavy system generated massive volume all season and McAlister soaked it up. He was a free square — costing almost nothing while delivering starter-level production every week." },
       { school: 'Rutgers', player: 'KJ Duff',         badge: 'SURPRISE',  avgWk: 17.8, barPct: 89,  stat: '1,084 YDS · 7 TD',
-        why: "Duff joined Antwan Raymond to make Rutgers the best two-for-one school in the draft. 1,084 yards at WR in an offense people kept underrating. Both the RB and WR units were elite — if you drafted Rutgers, you won." },
+        why: "Duff joined Antwan Raymond to make Rutgers the biggest surprise two-for-one school of the 2025 season. 1,084 yards at WR in an offense the fantasy world kept underrating. Both the RB and WR units were elite — if you started Rutgers, you won." },
     ],
   },
   {
     pos: 'DEF', color: '#15c678', title: 'Defense',
     units: [
       { school: 'Indiana',    badge: 'TOP VALUE', avgWk: 11.3, barPct: 100, stat: '#1 nationally · 11.3 avg/wk',
-        why: "The Indiana defense was historically great in 2025. 11.3 pts/wk — #1 in the nation by adjusted fantasy points. Curt Cignetti built a unit that could carry your roster. Elite at every level: pass rush, coverage, and ball-hawking. Elite, cheap, and repeatable." },
+        why: "The Indiana defense was historically great in 2025. 11.3 pts/wk — #1 in the nation by adjusted fantasy points. Curt Cignetti built an elite unit at every level: pass rush, coverage, and ball-hawking. The Hoosiers' defensive dominance was the most consistent story of the entire 2025 season." },
       { school: 'Texas Tech', badge: 'SLEEPER',   avgWk: 10.5, barPct: 93,  stat: '#2 nationally · 10.5 avg/wk',
-        why: "Texas Tech's defense finished #2 nationally at 10.5 avg/wk. The Red Raiders generated havoc with a rotating defensive line that produced consistent sacks and turnovers. At Big 12 prices, they were the safest DEF floor in fantasy." },
+        why: "Texas Tech's defense finished #2 nationally at 10.5 avg/wk. The Red Raiders generated havoc all season with a rotating defensive line that produced consistent sacks and turnovers. Nobody expected a Big 12 defense to rank this high — and yet here we are." },
     ],
   },
 ];
@@ -506,13 +506,13 @@ function BestValueModal({ onClose }: { onClose: () => void }) {
         {/* Hero */}
         <div style={{ background: 'linear-gradient(135deg,#061a0e 0%,#0a1f14 50%,#061a0e 100%)', borderRadius: '16px 16px 0 0', padding: '40px 36px 32px', borderBottom: `1px solid ${C.border}` }}>
           <div style={{ display: 'inline-block', padding: '2px 10px', background: 'rgba(21,198,120,.15)', border: `1px solid ${GREEN}55`, borderRadius: 20, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: GREEN, textTransform: 'uppercase', marginBottom: 12 }}>
-            📈 2025 Season Analysis · 2026 Draft Prep
+            🏆 2025 Season Recap · Hidden Gems
           </div>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.text, letterSpacing: 0.5, lineHeight: 1.15, marginBottom: 10 }}>
-            2025 Best Value Units<br />Your 2026 Draft Targets
+            2025 Most Surprising Units<br />The Season's Hidden Gems
           </div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 24, maxWidth: 580 }}>
-            These units outperformed expectations in 2025. Based on real adjusted fantasy points data, here's who to target in your 2026 draft before everyone else catches on.
+            These units defied expectations in 2025, outperforming their perceived talent level week after week. Here are the units that proved the college football world wrong.
           </div>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
             {[['73','Schools'],['14','Weeks'],['Real','FPTS Data'],['6','Positions']].map(([n, l]) => (
@@ -565,7 +565,7 @@ function BestValueModal({ onClose }: { onClose: () => void }) {
                     </div>
                     {/* Why callout */}
                     <div style={{ margin: '0 14px 14px', padding: '10px 12px', background: 'rgba(21,198,120,.06)', border: `1px solid ${GREEN}28`, borderRadius: 7 }}>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1.5, color: GREEN, textTransform: 'uppercase' as const, marginBottom: 4 }}>💡 Why They're Value</div>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1.5, color: GREEN, textTransform: 'uppercase' as const, marginBottom: 4 }}>💡 Why They Surprised in 2025</div>
                       <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub, lineHeight: 1.65 }}>{u.why}</div>
                     </div>
                   </div>
@@ -585,12 +585,21 @@ function BestValueModal({ onClose }: { onClose: () => void }) {
             ))}
           </div>
 
-          {/* Draft strategy */}
+          {/* Key takeaways */}
           <div style={{ background: 'rgba(21,198,120,.06)', border: `1px solid ${GREEN}33`, borderRadius: 10, padding: '18px 20px' }}>
-            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: GREEN, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8 }}>2026 Draft Strategy</div>
-            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, lineHeight: 1.7 }}>
-              Target Vanderbilt QB in rounds 1–2 — the price won't stay this low. Rutgers is the best two-for-one buy in a salary cap draft (RB + WR both elite value). Indiana DEF is the safest elite unit in the country. Load up on Big Ten DEF and power-conference QB before the market corrects.
-            </div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: GREEN, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12 }}>Key Takeaways from 2025</div>
+            {[
+              'Power conference defenses dominated — Indiana and Texas Tech proved elite DEF units can carry a fantasy roster.',
+              'Rutgers was the sleeper of the year — both RB and WR units outperformed everyone\'s expectations.',
+              'Vanderbilt QB was historically underowned relative to their output. The biggest value gap in the entire dataset.',
+              'SEC competition didn\'t stop Hardy (Missouri) or Pavia (Vanderbilt) from posting elite weekly numbers.',
+              'The best fantasy units in 2025 came from programs nobody expected. The data doesn\'t lie.',
+            ].map((t, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, marginBottom: i < 4 ? 10 : 0 }}>
+                <div style={{ color: GREEN, fontFamily: 'Anton,sans-serif', fontSize: 13, flexShrink: 0, marginTop: 1 }}>→</div>
+                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, lineHeight: 1.6 }}>{t}</div>
+              </div>
+            ))}
           </div>
 
           <div style={{ marginTop: 20, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textAlign: 'center' }}>
@@ -852,10 +861,10 @@ function NewsSection() {
           📈 2025 ANALYSIS
         </div>
         <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 19, color: C.text, letterSpacing: 0.5, lineHeight: 1.2, marginBottom: 8 }}>
-          2025 Best Value Units — Your 2026 Draft Targets
+          2025's Most Surprising Units — The Hidden Gems of College Fantasy
         </div>
         <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, lineHeight: 1.6, marginBottom: 12 }}>
-          Vanderbilt QB, Rutgers RB/WR, Indiana DEF — here's who to target before everyone else catches on.
+          Vanderbilt QB was #1 in the country. Rutgers showed up twice. Indiana DEF dominated. The 2025 season was full of surprises — here's what the data showed.
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1 }}>June 13, 2026 · College Units Fantasy</div>
@@ -1150,8 +1159,8 @@ export default function HomePage() {
                   onClick={() => setShowBestValue(true)}
                   style={{ background: 'linear-gradient(135deg,#061a0e,#0a1f14)', border: '1px solid rgba(21,198,120,.4)', borderLeft: `4px solid ${GREEN}`, borderRadius: 12, padding: '16px', marginBottom: 12, cursor: 'pointer' }}>
                   <div style={{ display: 'inline-block', padding: '2px 9px', background: 'rgba(21,198,120,.15)', border: '1px solid rgba(21,198,120,.4)', borderRadius: 20, fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: GREEN, textTransform: 'uppercase', marginBottom: 9 }}>📈 2025 ANALYSIS</div>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: C.text, lineHeight: 1.2, marginBottom: 7 }}>2025 Best Value Units — Your 2026 Draft Targets</div>
-                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, lineHeight: 1.5, marginBottom: 10 }}>Vanderbilt QB, Rutgers RB/WR, Indiana DEF — target these before prices adjust.</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: C.text, lineHeight: 1.2, marginBottom: 7 }}>2025's Most Surprising Units — The Hidden Gems of College Fantasy</div>
+                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, lineHeight: 1.5, marginBottom: 10 }}>Vanderbilt QB was #1 in the country. Rutgers showed up twice. Indiana DEF dominated. The 2025 season was full of surprises — here's what the data showed.</div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: GREEN, letterSpacing: 0.5 }}>Read Full Article →</div>
                 </div>
                 {/* Featured */}
