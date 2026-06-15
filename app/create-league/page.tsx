@@ -285,7 +285,10 @@ export default function CreateLeaguePage() {
   const [customCap,    setCustomCap]    = useState('');
   const [timePick,     setTimePick]     = useState('2min');
   const [schools,      setSchools]      = useState<Set<string>>(new Set());
-  const [rosterConfig, setRosterConfig] = useState<RosterConfig>(DEFAULT_ROSTER);
+  const [rosterConfig,  setRosterConfig]  = useState<RosterConfig>(DEFAULT_ROSTER);
+  const [waiverType,    setWaiverType]    = useState<'rolling' | 'faab'>('rolling');
+  const [faabBudget,    setFaabBudget]    = useState<number>(100);
+  const [customFaab,    setCustomFaab]    = useState('');
 
   // Step 3
   const [teamName, setTeamName] = useState('');
@@ -396,6 +399,10 @@ export default function CreateLeaguePage() {
             payout_structure: payoutStructure,
             payout_splits:    splits,
             roster_config:    rosterConfig,
+            waiver_type:  leagueType === 'season' ? waiverType : undefined,
+            faab_budget:  leagueType === 'season' ? (customFaab ? parseInt(customFaab) || 100 : faabBudget) : undefined,
+            waiver_days:  leagueType === 'season' ? 2 : undefined,
+            free_agency:  leagueType === 'season' ? true : undefined,
             ...(leagueType === 'bracket' ? { bracket_sport: bracketSport } : {}),
             ...(agreementAccepted ? {
               commissioner_agreement_accepted:    true,
@@ -902,6 +909,60 @@ export default function CreateLeaguePage() {
                 </div>
               </div>
             </div>
+
+            {/* ── Waiver Settings ── */}
+            {leagueType === 'season' && (
+              <div style={{ marginTop: 28 }}>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 12, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase', marginBottom: 14 }}>Waiver System</div>
+
+                {/* Radio-style waiver type selector */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                  {([
+                    ['rolling', 'Rolling Priority (ESPN-style)', 'Priority order resets after each successful claim. Lower position = higher priority.', '(default)'],
+                    ['faab',    'FAAB Budget (blind bidding)',    'Each manager gets a budget and bids secretly. Highest bid wins the player.',          ''],
+                  ] as const).map(([val, label, desc, badge]) => (
+                    <button key={val} onClick={() => setWaiverType(val)}
+                      style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', background: waiverType === val ? 'rgba(212,168,40,.06)' : C.surf2, border: '1px solid ' + (waiverType === val ? C.gold : C.border), borderRadius: 10, cursor: 'pointer', textAlign: 'left' }}>
+                      {/* Radio circle */}
+                      <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid ' + (waiverType === val ? C.gold : C.muted), background: waiverType === val ? C.gold : 'transparent', flexShrink: 0, marginTop: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {waiverType === val && <div style={{ width: 6, height: 6, borderRadius: '50%', background: C.bg }} />}
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                          <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 13, color: waiverType === val ? C.gold : C.text, letterSpacing: 0.5 }}>{label}</span>
+                          {badge && <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 9, color: C.muted, background: C.surf3, borderRadius: 4, padding: '1px 6px', letterSpacing: 1 }}>{badge}</span>}
+                        </div>
+                        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.3 }}>{desc}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* FAAB starting budget */}
+                {waiverType === 'faab' && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 11, color: C.muted, letterSpacing: 1, marginBottom: 8 }}>Starting Budget</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {[50, 100, 200].map(v => (
+                        <button key={v} onClick={() => { setFaabBudget(v); setCustomFaab(''); }}
+                          style={{ padding: '8px 20px', background: (faabBudget === v && !customFaab) ? C.gold : C.surf2, border: '1px solid ' + ((faabBudget === v && !customFaab) ? C.gold : C.border), borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton, sans-serif', fontSize: 14, color: (faabBudget === v && !customFaab) ? C.bg : C.sub }}>
+                          ${v}
+                        </button>
+                      ))}
+                      <input
+                        type="number" min={1} placeholder="Custom $" value={customFaab}
+                        onChange={e => { setCustomFaab(e.target.value); setFaabBudget(parseInt(e.target.value) || 100); }}
+                        style={{ width: 110, padding: '8px 12px', background: customFaab ? 'rgba(212,168,40,.06)' : C.surf2, border: '1px solid ' + (customFaab ? C.gold : C.border), borderRadius: 8, color: C.text, fontFamily: 'Oswald, sans-serif', fontSize: 12, outline: 'none' }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 10, color: C.muted, letterSpacing: 0.5 }}>
+                  Waivers process daily at 3 AM · Dropped players stay on waivers 2 days · Free agents available immediately
+                </div>
+              </div>
+            )}
           </div>
         )}
 
