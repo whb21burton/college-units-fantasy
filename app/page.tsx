@@ -431,47 +431,71 @@ const POS_COLOR: Record<string, string> = {
 const GREEN = '#15c678';
 
 type ValueUnit = {
-  school: string; player?: string; pos: string;
-  avgWk: number; stat?: string; note?: string;
+  school: string; player?: string; pos?: string; badge: 'TOP VALUE' | 'SLEEPER' | 'SURPRISE';
+  avgWk: number; barPct: number; stat?: string; why: string;
 };
 
-const BV_QBs: ValueUnit[] = [
-  { school: 'Vanderbilt',   player: 'Diego Pavia',        pos: 'QB', avgWk: 36.1, stat: '3,247 YDS · 28 TD', note: '#1 overall' },
-  { school: 'Georgia Tech', player: 'Haynes King',         pos: 'QB', avgWk: 29.1, stat: '3,102 YDS · 24 TD', note: 'Underowned' },
-  { school: 'Baylor',       player: 'Sawyer Robertson',   pos: 'QB', avgWk: 31.9, stat: '3,681 YDS · 26 TD', note: 'Late-round steal' },
+const BV_SECTIONS: { pos: string; color: string; title: string; units: ValueUnit[] }[] = [
+  {
+    pos: 'QB', color: '#e84545', title: 'Quarterback',
+    units: [
+      { school: 'Vanderbilt',   player: 'Diego Pavia',       badge: 'TOP VALUE', avgWk: 36.1, barPct: 100, stat: '3,247 YDS · 28 TD',
+        why: "Diego Pavia's dual-threat ability drove the highest QB unit score in the dataset. Despite playing in the SEC — statistically the hardest conference — he averaged 36.1 pts/wk. Most drafters still don't believe it. They will in 2026." },
+      { school: 'Baylor',       player: 'Sawyer Robertson',  badge: 'SLEEPER',   avgWk: 31.9, barPct: 88,  stat: '3,681 YDS · 26 TD',
+        why: "Robertson posted 3,681 passing yards and quietly ran one of the most efficient Big 12 offenses. At 31.9 avg/wk and a mid-round price tag, the ROI was massive. Baylor's air attack creates consistent weekly production regardless of opponent." },
+      { school: 'Georgia Tech', player: 'Haynes King',        badge: 'SURPRISE',  avgWk: 29.1, barPct: 80,  stat: '3,102 YDS · 24 TD',
+        why: "Haynes King ran a modernized offense with massive efficiency numbers. At 29.1 avg/wk, Georgia Tech QB went undrafted in most leagues. The Yellow Jackets' quick-strike passing game creates easy fantasy points every single week." },
+    ],
+  },
+  {
+    pos: 'RB', color: '#2d7fe0', title: 'Running Back',
+    units: [
+      { school: 'Notre Dame', player: 'Jeremiyah Love',   badge: 'TOP VALUE', avgWk: 22.9, barPct: 100, stat: '1,372 YDS · 14 TD',
+        why: "Love carried the entire Notre Dame rushing attack. 1,372 yards, 14 touchdowns, 22.9 pts/wk. The Fighting Irish run a ground-first scheme — he's the clear starter and gets both rushing and receiving work. Zero weeks without meaningful touches." },
+      { school: 'Rutgers',    player: 'Antwan Raymond',   badge: 'SLEEPER',   avgWk: 19.6, barPct: 86,  stat: '1,241 YDS · 11 TD',
+        why: "Raymond surprised everyone. 1,241 yards in a Rutgers offense that no one drafted. At 19.6 avg/wk with essentially zero draft cost in most leagues, this was the RB value of the year. He's the workhorse in a ground-heavy Big Ten attack." },
+      { school: 'Missouri',   player: 'Ahmad Hardy',      badge: 'SURPRISE',  avgWk: 18.6, barPct: 81,  stat: '1,560 YDS · 12 TD',
+        why: "Hardy had 1,560 total yards in the SEC and averaged 18.6 pts/wk. The Tigers run a balanced attack — he gets both rushing and receiving opportunities every game. His role only expands as defenses load the box against Missouri's QB." },
+    ],
+  },
+  {
+    pos: 'WR', color: '#d4a020', title: 'Wide Receiver',
+    units: [
+      { school: 'USC',     player: 'Makai Lemon',     badge: 'TOP VALUE', avgWk: 19.9, barPct: 100, stat: '1,156 YDS · 9 TD',
+        why: "Lemon exploded in year 2 as the true WR1 for USC. 1,156 yards, 9 touchdowns, 19.9 avg/wk. Lincoln Riley's system creates elite WR value every season — the targets don't disappear, they rotate. Lemon is the clear alpha." },
+      { school: 'TCU',     player: 'Eric McAlister',  badge: 'SLEEPER',   avgWk: 18.7, barPct: 94,  stat: '1,121 YDS · 8 TD',
+        why: "McAlister was the best receiver nobody talked about. 1,121 yards, 18.7 avg/wk. TCU's pass-heavy system generates consistent volume. He was a free square in salary cap leagues — costing almost nothing while delivering starter-level production." },
+      { school: 'Rutgers', player: 'KJ Duff',         badge: 'SURPRISE',  avgWk: 17.8, barPct: 89,  stat: '1,084 YDS · 7 TD',
+        why: "Duff joined Antwan Raymond to make Rutgers the best two-for-one school in the draft. 1,084 yards at WR in an offense people kept underrating. Both the RB and WR units were elite — if you drafted Rutgers, you won." },
+    ],
+  },
+  {
+    pos: 'DEF', color: '#15c678', title: 'Defense',
+    units: [
+      { school: 'Indiana',    badge: 'TOP VALUE', avgWk: 11.3, barPct: 100, stat: '#1 nationally · 11.3 avg/wk',
+        why: "The Indiana defense was historically great in 2025. 11.3 pts/wk — #1 in the nation by adjusted fantasy points. Curt Cignetti built a unit that could carry your roster. Elite at every level: pass rush, coverage, and ball-hawking. Elite, cheap, and repeatable." },
+      { school: 'Texas Tech', badge: 'SLEEPER',   avgWk: 10.5, barPct: 93,  stat: '#2 nationally · 10.5 avg/wk',
+        why: "Texas Tech's defense finished #2 nationally at 10.5 avg/wk. The Red Raiders generated havoc with a rotating defensive line that produced consistent sacks and turnovers. At Big 12 prices, they were the safest DEF floor in fantasy." },
+    ],
+  },
 ];
-const BV_RBs: ValueUnit[] = [
-  { school: 'Notre Dame', player: 'Jeremiyah Love',  pos: 'RB', avgWk: 22.9, stat: '1,372 YDS · 14 TD' },
-  { school: 'Rutgers',    player: 'Antwan Raymond',  pos: 'RB', avgWk: 19.6, stat: '1,241 YDS · 11 TD', note: 'Best value RB' },
-  { school: 'Missouri',   player: 'Ahmad Hardy',     pos: 'RB', avgWk: 18.6, stat: '1,560 YDS · 12 TD' },
-];
-const BV_WRs: ValueUnit[] = [
-  { school: 'USC',     player: 'Makai Lemon',    pos: 'WR', avgWk: 19.9, stat: '1,156 YDS · 9 TD' },
-  { school: 'TCU',     player: 'Eric McAlister', pos: 'WR', avgWk: 18.7, stat: '1,121 YDS · 8 TD', note: 'Underowned' },
-  { school: 'Rutgers', player: 'KJ Duff',        pos: 'WR', avgWk: 17.8, stat: '1,084 YDS · 7 TD' },
-];
-const BV_DEFs: ValueUnit[] = [
-  { school: 'Indiana',    pos: 'DEF', avgWk: 11.3, note: '#1 nationally' },
-  { school: 'Texas Tech', pos: 'DEF', avgWk: 10.5, note: '#2 nationally' },
-];
+
 const BV_QUICK = [
-  { label: 'Vanderbilt TE', val: '9.0 avg/wk' },
-  { label: 'Kansas TE',     val: '8.2 avg/wk' },
-  { label: 'Cincinnati QB', val: '29.2 avg/wk' },
-  { label: 'Nebraska RB (Emmett Johnson)', val: '1,451 YDS · 18.5/wk' },
-  { label: 'FSU WR (Duce Robinson)',       val: '1,074 YDS · 16.9/wk' },
-  { label: 'Ole Miss K (Lucas Carneiro)',  val: '7.7 avg/wk' },
+  { label: 'Vanderbilt TE',              val: '9.0 avg/wk' },
+  { label: 'Kansas TE',                  val: '8.2 avg/wk' },
+  { label: 'Cincinnati QB',              val: '29.2 avg/wk' },
+  { label: 'Nebraska RB – Emmett Johnson', val: '1,451 YDS · 18.5/wk' },
+  { label: 'FSU WR – Duce Robinson',      val: '1,074 YDS · 16.9/wk' },
+  { label: 'Ole Miss K – Lucas Carneiro', val: '7.7 avg/wk' },
 ];
+
+const BADGE_STYLE: Record<string, { bg: string; border: string; color: string }> = {
+  'TOP VALUE': { bg: 'rgba(21,198,120,.15)', border: 'rgba(21,198,120,.4)', color: GREEN },
+  'SLEEPER':   { bg: 'rgba(245,166,35,.12)', border: 'rgba(245,166,35,.35)', color: '#f5a623' },
+  'SURPRISE':  { bg: 'rgba(168,85,247,.12)', border: 'rgba(168,85,247,.35)', color: '#c084fc' },
+};
 
 function BestValueModal({ onClose }: { onClose: () => void }) {
-  const [activePos, setActivePos] = useState<string>('QB');
-  const bvData: Record<string, ValueUnit[]> = { QB: BV_QBs, RB: BV_RBs, WR: BV_WRs, DEF: BV_DEFs };
-  const rows = bvData[activePos] ?? [];
-  const posCols: { key: string; color: string }[] = [
-    { key: 'QB', color: '#e84545' }, { key: 'RB', color: '#2d7fe0' },
-    { key: 'WR', color: '#d4a020' }, { key: 'DEF', color: '#15c678' },
-  ];
-
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '24px 16px' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, width: '100%', maxWidth: 820, position: 'relative' }}>
@@ -482,16 +506,16 @@ function BestValueModal({ onClose }: { onClose: () => void }) {
         {/* Hero */}
         <div style={{ background: 'linear-gradient(135deg,#061a0e 0%,#0a1f14 50%,#061a0e 100%)', borderRadius: '16px 16px 0 0', padding: '40px 36px 32px', borderBottom: `1px solid ${C.border}` }}>
           <div style={{ display: 'inline-block', padding: '2px 10px', background: 'rgba(21,198,120,.15)', border: `1px solid ${GREEN}55`, borderRadius: 20, fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 2, color: GREEN, textTransform: 'uppercase', marginBottom: 12 }}>
-            📈 2026 Draft Guide
+            📈 2025 Season Analysis · 2026 Draft Prep
           </div>
           <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 26, color: C.text, letterSpacing: 0.5, lineHeight: 1.15, marginBottom: 10 }}>
             2025 Best Value Units<br />Your 2026 Draft Targets
           </div>
-          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 24, maxWidth: 560 }}>
-            These units outperformed expectations and their draft cost in 2025. Get ahead of the curve before prices adjust.
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 24, maxWidth: 580 }}>
+            These units outperformed expectations in 2025. Based on real adjusted fantasy points data, here's who to target in your 2026 draft before everyone else catches on.
           </div>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-            {[['6','Value Units Identified'],['36.1','Vanderbilt QB Avg/Wk'],['$200','Salary Cap Budget'],['15%','Price Advantage']].map(([n, l]) => (
+            {[['73','Schools'],['14','Weeks'],['Real','FPTS Data'],['6','Positions']].map(([n, l]) => (
               <div key={l}>
                 <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 24, color: GREEN, lineHeight: 1 }}>{n}</div>
                 <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 3 }}>{l}</div>
@@ -502,45 +526,56 @@ function BestValueModal({ onClose }: { onClose: () => void }) {
 
         <div style={{ padding: '28px 36px' }}>
 
-          {/* Position tabs */}
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 14 }}>Top Value Picks by Position</div>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-            {posCols.map(({ key, color }) => (
-              <button key={key} onClick={() => setActivePos(key)} style={{ padding: '5px 16px', borderRadius: 6, border: `1px solid ${activePos === key ? color : C.border}`, background: activePos === key ? color + '22' : C.surf2, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: activePos === key ? color : C.sub }}>
-                {key}
-              </button>
-            ))}
-          </div>
+          {/* Position sections */}
+          {BV_SECTIONS.map(sec => (
+            <div key={sec.pos} style={{ marginBottom: 36 }}>
+              {/* Section header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <div style={{ padding: '3px 12px', background: sec.color + '22', border: `1px solid ${sec.color}55`, borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1.5, color: sec.color, textTransform: 'uppercase' as const }}>{sec.pos}</div>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 1.5, color: C.text, textTransform: 'uppercase' as const }}>{sec.title}</div>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
+              </div>
 
-          {/* Value cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
-            {rows.map((u, i) => {
-              const col = posCols.find(p => p.key === activePos)?.color ?? GREEN;
-              return (
-                <div key={i} style={{ background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 16, borderLeft: `3px solid ${col}` }}>
-                  {/* Rank badge */}
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: col + '22', border: `1px solid ${col}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 14, color: col, flexShrink: 0 }}>{i + 1}</div>
-                  {/* Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                      <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 15, color: C.text, letterSpacing: 0.5 }}>{u.school}</span>
-                      {u.player && <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub }}>· {u.player}</span>}
-                      {u.note && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1, color: GREEN, background: 'rgba(21,198,120,.12)', border: '1px solid rgba(21,198,120,.3)', borderRadius: 10, padding: '1px 7px' }}>{u.note}</span>}
+              {/* Unit picks */}
+              {sec.units.map((u, i) => {
+                const bs = BADGE_STYLE[u.badge];
+                return (
+                  <div key={i} style={{ background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12, borderLeft: `3px solid ${sec.color}` }}>
+                    {/* Card header */}
+                    <div style={{ padding: '14px 18px 10px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                      {/* Rank */}
+                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: sec.color + '22', border: `1px solid ${sec.color}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, color: sec.color, flexShrink: 0, marginTop: 2 }}>{i + 1}</div>
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const, marginBottom: 3 }}>
+                          <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.text, letterSpacing: 0.5 }}>{u.school}</span>
+                          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: bs.color, background: bs.bg, border: `1px solid ${bs.border}`, borderRadius: 10, padding: '2px 8px', textTransform: 'uppercase' as const }}>{u.badge}</span>
+                          {u.player && <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub }}>· {u.player}</span>}
+                        </div>
+                        {u.stat && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 0.5, marginBottom: 6 }}>{u.stat}</div>}
+                        {/* Value bar */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ flex: 1, height: 5, background: C.surf3, borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ width: `${u.barPct}%`, height: '100%', background: `linear-gradient(90deg,${sec.color}88,${sec.color})`, borderRadius: 3 }} />
+                          </div>
+                          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: sec.color, lineHeight: 1, flexShrink: 0 }}>{u.avgWk.toFixed(1)}</div>
+                          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' as const, flexShrink: 0 }}>avg/wk</div>
+                        </div>
+                      </div>
                     </div>
-                    {u.stat && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 0.5 }}>{u.stat}</div>}
+                    {/* Why callout */}
+                    <div style={{ margin: '0 14px 14px', padding: '10px 12px', background: 'rgba(21,198,120,.06)', border: `1px solid ${GREEN}28`, borderRadius: 7 }}>
+                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1.5, color: GREEN, textTransform: 'uppercase' as const, marginBottom: 4 }}>💡 Why They're Value</div>
+                      <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub, lineHeight: 1.65 }}>{u.why}</div>
+                    </div>
                   </div>
-                  {/* Avg */}
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: col, lineHeight: 1 }}>{u.avgWk.toFixed(1)}</div>
-                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 }}>avg/wk</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ))}
 
           {/* Quick hits */}
-          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 14 }}>⚡ Quick Hits</div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 2, color: C.muted, textTransform: 'uppercase', marginBottom: 14 }}>⚡ Also Worth Targeting</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, marginBottom: 32 }}>
             {BV_QUICK.map((q, i) => (
               <div key={i} style={{ background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '11px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -554,12 +589,12 @@ function BestValueModal({ onClose }: { onClose: () => void }) {
           <div style={{ background: 'rgba(21,198,120,.06)', border: `1px solid ${GREEN}33`, borderRadius: 10, padding: '18px 20px' }}>
             <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: GREEN, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8 }}>2026 Draft Strategy</div>
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, lineHeight: 1.7 }}>
-              Target Vanderbilt QB in rounds 1–2 — the price won't stay this low. Rutgers is the best two-for-one buy in a salary cap draft (RB + WR both value). Indiana DEF is the safest elite unit in the country. Load up on Big Ten DEF and SEC QB before the market corrects.
+              Target Vanderbilt QB in rounds 1–2 — the price won't stay this low. Rutgers is the best two-for-one buy in a salary cap draft (RB + WR both elite value). Indiana DEF is the safest elite unit in the country. Load up on Big Ten DEF and power-conference QB before the market corrects.
             </div>
           </div>
 
           <div style={{ marginTop: 20, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textAlign: 'center' }}>
-            College Units Fantasy · 2025 Season Analysis · June 13, 2026
+            College Units Fantasy · 2025 Season Analysis · June 15, 2026
           </div>
         </div>
       </div>
@@ -814,7 +849,7 @@ function NewsSection() {
       >
         <div style={{ position: 'absolute', top: 0, right: 0, width: 120, height: '100%', background: `linear-gradient(135deg,rgba(21,198,120,.05),transparent)`, pointerEvents: 'none' }} />
         <div style={{ display: 'inline-block', padding: '2px 9px', background: 'rgba(21,198,120,.15)', border: `1px solid rgba(21,198,120,.45)`, borderRadius: 20, fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: GREEN, textTransform: 'uppercase', marginBottom: 10 }}>
-          📈 2026 Draft Guide
+          📈 2025 ANALYSIS
         </div>
         <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 19, color: C.text, letterSpacing: 0.5, lineHeight: 1.2, marginBottom: 8 }}>
           2025 Best Value Units — Your 2026 Draft Targets
@@ -1114,7 +1149,7 @@ export default function HomePage() {
                 <div
                   onClick={() => setShowBestValue(true)}
                   style={{ background: 'linear-gradient(135deg,#061a0e,#0a1f14)', border: '1px solid rgba(21,198,120,.4)', borderLeft: `4px solid ${GREEN}`, borderRadius: 12, padding: '16px', marginBottom: 12, cursor: 'pointer' }}>
-                  <div style={{ display: 'inline-block', padding: '2px 9px', background: 'rgba(21,198,120,.15)', border: '1px solid rgba(21,198,120,.4)', borderRadius: 20, fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: GREEN, textTransform: 'uppercase', marginBottom: 9 }}>📈 2026 Draft Guide</div>
+                  <div style={{ display: 'inline-block', padding: '2px 9px', background: 'rgba(21,198,120,.15)', border: '1px solid rgba(21,198,120,.4)', borderRadius: 20, fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 2, color: GREEN, textTransform: 'uppercase', marginBottom: 9 }}>📈 2025 ANALYSIS</div>
                   <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: C.text, lineHeight: 1.2, marginBottom: 7 }}>2025 Best Value Units — Your 2026 Draft Targets</div>
                   <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, lineHeight: 1.5, marginBottom: 10 }}>Vanderbilt QB, Rutgers RB/WR, Indiana DEF — target these before prices adjust.</div>
                   <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: GREEN, letterSpacing: 0.5 }}>Read Full Article →</div>
