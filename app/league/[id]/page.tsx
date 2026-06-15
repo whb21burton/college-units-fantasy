@@ -2682,7 +2682,7 @@ function WaiverTab({ league, userId, currentWeek = 15 }: { league: any; userId: 
               <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.gold }}>$</span>
               <input type="number" min={0} max={faabBalance} value={bidAmount}
                 onChange={e => setBidAmount(Math.min(faabBalance, Math.max(0, parseInt(e.target.value) || 0)))}
-                style={{ flex: 1, background: C.surf3, border: '1px solid ' + C.border, borderRadius: 6, padding: '10px 12px', color: C.text, fontFamily: 'Anton,sans-serif', fontSize: 22, outline: 'none', width: '100%' }}
+                style={{ flex: 1, background: C.surf3, border: '1px solid ' + C.surf3, borderRadius: 6, padding: '10px 12px', color: C.text, fontFamily: 'Anton,sans-serif', fontSize: 22, outline: 'none', width: '100%' }}
               />
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
