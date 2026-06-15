@@ -1257,6 +1257,21 @@ export default function HomePage() {
                     </button>
                   </div>
                 )}
+
+                {/* Discord founders banner */}
+                <div style={{ margin: '16px 16px 0', padding: '16px', background: '#0c1422', border: '1px solid #1a2b40', borderRadius: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <svg width="20" height="20" viewBox="0 0 127.14 96.36" fill="#5865F2" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
+                    <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.text, letterSpacing: 0.5 }}>Join the Founders Discord</div>
+                  </div>
+                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub, lineHeight: 1.55, marginBottom: 12 }}>
+                    Be part of the first 100 founding members. Talk directly to the founder. Shape the platform.
+                  </div>
+                  <a href="https://discord.gg/5n7y9wh4D" target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'block', padding: '13px', background: '#5865F2', borderRadius: 8, textAlign: 'center', textDecoration: 'none', fontFamily: 'Anton,sans-serif', fontSize: 13, letterSpacing: 1.5, color: '#fff', textTransform: 'uppercase' }}
+                  >Join Now — It's Free</a>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1, textAlign: 'center', marginTop: 8 }}>🥇 First 100 members get Founding Member status forever</div>
+                </div>
               </div>
             )}
 
@@ -1401,6 +1416,14 @@ export default function HomePage() {
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <a href="https://discord.gg/5n7y9wh4D" target="_blank" rel="noopener noreferrer"
+              style={{ padding: '5px 12px', background: '#5865F2', border: 'none', borderRadius: 6, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: '#fff', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#4752c4')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#5865F2')}
+            >
+              <svg width="13" height="13" viewBox="0 0 127.14 96.36" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
+              Discord
+            </a>
             {user ? (
               <>
                 {PAID_CONTESTS_ENABLED && (
@@ -1425,6 +1448,25 @@ export default function HomePage() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+
+        {/* ── Discord founders banner ────────────────────────────────────────── */}
+        <div style={{ background: '#0c1422', borderTop: '1px solid #1a2b40', borderBottom: '1px solid #1a2b40', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <svg width="26" height="26" viewBox="0 0 127.14 96.36" fill="#5865F2" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
+            <div>
+              <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.text, letterSpacing: 1, marginBottom: 2 }}>Join the Founders Discord</div>
+              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub }}>Be part of the first 100 founding members. Talk directly to the founder. Shape the platform.</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
+            <a href="https://discord.gg/5n7y9wh4D" target="_blank" rel="noopener noreferrer"
+              style={{ padding: '10px 22px', background: '#5865F2', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 11, letterSpacing: 1.5, color: '#fff', textDecoration: 'none', display: 'inline-block', whiteSpace: 'nowrap' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#4752c4')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#5865F2')}
+            >Join Now — It's Free</a>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1 }}>🥇 First 100 members get Founding Member status forever</div>
           </div>
         </div>
 
