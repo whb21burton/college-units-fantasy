@@ -372,29 +372,114 @@ export default function MockDraftPage() {
     );
   }
 
-  if (draftComplete) return (
-    <div style={{ background: C.bg, minHeight: '100vh', padding: 32, fontFamily: "'Oswald', sans-serif", color: C.text }}>
-      <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
-      <div style={{ maxWidth: 800, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-          <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 28, letterSpacing: 2, color: C.gold }}>MOCK DRAFT COMPLETE</div>
-          <button onClick={() => exitMockDraft()} style={{ padding: '10px 22px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.sub, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 2 }}>EXIT</button>
-        </div>
-        <div style={{ marginBottom: 16, fontSize: 11, color: C.muted, letterSpacing: 2, textTransform: 'uppercase' }}>Your Roster</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          {myPicks.map((p, i) => (
-            <div key={i} style={{ background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, padding: '12px 14px', borderLeft: `3px solid ${POS_COLORS[p.unit.unitType]}` }}>
-              <div style={{ fontSize: 10, color: POS_COLORS[p.unit.unitType], letterSpacing: 2, marginBottom: 4 }}>{p.unit.unitType}</div>
-              <div style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{p.unit.school}</div>
-              {p.unit.playerName && <div style={{ fontSize: 11, color: C.muted }}>{p.unit.playerName}</div>}
-              <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>Round {p.round + 1} · Pick #{p.pickNum + 1}</div>
+  if (draftComplete) {
+    // Auto-assign best unit to each starter slot
+    const units = myPicks.map(p => p.unit);
+    const ptg = (u: DraftUnit) => u.avgFpts || u.avgPerWeek || (u.seasonTotal ? (u.seasonTotal as number) / 14 : 0);
+    const best = (pool: DraftUnit[]) => pool.slice().sort((a, b) => ptg(b) - ptg(a));
+
+    const used = new Set<string>();
+    const assign = (types: UnitType[]): DraftUnit | null => {
+      const u = best(units.filter(u => types.includes(u.unitType as UnitType) && !used.has(u.id)))[0] ?? null;
+      if (u) used.add(u.id);
+      return u;
+    };
+
+    const slots: { label: string; pos: UnitType | 'FLEX'; unit: DraftUnit | null }[] = [
+      { label: 'QB',   pos: 'QB',   unit: assign(['QB']) },
+      { label: 'RB',   pos: 'RB',   unit: assign(['RB']) },
+      { label: 'RB',   pos: 'RB',   unit: assign(['RB']) },
+      { label: 'WR',   pos: 'WR',   unit: assign(['WR']) },
+      { label: 'WR',   pos: 'WR',   unit: assign(['WR']) },
+      { label: 'TE',   pos: 'TE',   unit: assign(['TE']) },
+      { label: 'FLEX', pos: 'FLEX', unit: assign(['RB', 'WR', 'TE']) },
+      { label: 'DEF',  pos: 'DEF',  unit: assign(['DEF']) },
+      { label: 'K',    pos: 'K',    unit: assign(['K']) },
+    ];
+    const bench = units.filter(u => !used.has(u.id));
+    const flexColor = '#a78bfa';
+
+    const SlotCard = ({ slot }: { slot: typeof slots[0] }) => {
+      const color = slot.pos === 'FLEX' ? flexColor : POS_COLORS[slot.pos as UnitType] ?? C.muted;
+      const u = slot.unit;
+      const ptsPerGame = u ? ptg(u) : 0;
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.surf, border: `1px solid ${C.surf3}`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: '10px 14px' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 6, background: `${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Anton', sans-serif", fontSize: 10, color, letterSpacing: 1, flexShrink: 0 }}>{slot.label}</div>
+          {u ? (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.school}{u.playerName ? ` · ${u.playerName}` : ''}</div>
+              <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{u.unitType}</div>
             </div>
-          ))}
+          ) : (
+            <div style={{ flex: 1, fontSize: 12, color: C.muted, fontStyle: 'italic' }}>Empty</div>
+          )}
+          {u && (
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 15, color: C.gold, lineHeight: 1 }}>{ptsPerGame > 0 ? ptsPerGame.toFixed(1) : '—'}</div>
+              <div style={{ fontSize: 7, color: C.muted, letterSpacing: .5 }}>PTS/GM</div>
+              {(u.seasonTotal ?? 0) > 0 && <div style={{ fontSize: 8, color: C.sub, marginTop: 1 }}>{(u.seasonTotal as number).toFixed(0)} tot</div>}
+            </div>
+          )}
         </div>
-        <button onClick={restartDraft} style={{ marginTop: 24, padding: '12px 28px', background: `linear-gradient(135deg, ${C.gold}, ${C.goldLight})`, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 13, letterSpacing: 2, color: C.bg }}>MOCK AGAIN</button>
+      );
+    };
+
+    return (
+      <div style={{ background: C.bg, minHeight: '100vh', padding: '28px 20px', fontFamily: "'Oswald', sans-serif", color: C.text }}>
+        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; }`}</style>
+        <div style={{ maxWidth: 680, margin: '0 auto' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+            <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 24, letterSpacing: 2, color: C.gold }}>MOCK DRAFT COMPLETE</div>
+            <button onClick={() => exitMockDraft()} style={{ padding: '8px 18px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.sub, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 11, letterSpacing: 2 }}>EXIT</button>
+          </div>
+
+          {/* Starters */}
+          <div style={{ fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 10 }}>STARTERS</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 24 }}>
+            {slots.map((slot, i) => <SlotCard key={i} slot={slot} />)}
+          </div>
+
+          {/* Bench */}
+          {bench.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 10 }}>BENCH ({bench.length} spot{bench.length !== 1 ? 's' : ''})</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 6, marginBottom: 24 }}>
+                {bench.map((u, i) => {
+                  const color = POS_COLORS[u.unitType] ?? C.muted;
+                  const ptsPerGame = ptg(u);
+                  return (
+                    <div key={i} style={{ background: C.surf2, border: `1px solid ${C.surf3}`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: '8px 12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 9, color, letterSpacing: 1, marginBottom: 2 }}>{u.unitType}</div>
+                          <div style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.school}</div>
+                          {u.playerName && <div style={{ fontSize: 10, color: C.muted }}>{u.playerName}</div>}
+                        </div>
+                        {ptsPerGame > 0 && (
+                          <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
+                            <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 13, color: C.sub, lineHeight: 1 }}>{ptsPerGame.toFixed(1)}</div>
+                            <div style={{ fontSize: 6, color: C.muted }}>PTS/GM</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={restartDraft} style={{ flex: 1, padding: '13px', background: `linear-gradient(135deg, ${C.gold}, ${C.goldLight})`, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 13, letterSpacing: 2, color: C.bg }}>MOCK AGAIN</button>
+            <button onClick={() => exitMockDraft()} style={{ padding: '13px 24px', background: C.surf, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.sub, cursor: 'pointer', fontFamily: "'Anton', sans-serif", fontSize: 13, letterSpacing: 2 }}>EXIT</button>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden', fontFamily: "'Oswald', sans-serif", color: C.text }}>
