@@ -972,6 +972,7 @@ export default function HomePage() {
   const [showAgeModal,   setShowAgeModal]   = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [isMobile,     setIsMobile]     = useState(false);
+  const [showForgot,   setShowForgot]   = useState(false);
   const [mobileTab,    setMobileTab]    = useState<MobileTab>('scores');
   const [mobileAuth,   setMobileAuth]   = useState<'signin' | 'signup'>('signin');
   const [showRecap,      setShowRecap]      = useState(false);
@@ -1089,6 +1090,16 @@ export default function HomePage() {
     if (error) setError(error.message);
     else setMessage('Check your email to confirm your account.');
     setLoading(false);
+  }
+
+  async function handleForgotPassword() {
+    setLoading(true); setError(null); setMessage(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://collegeunitsfantasy.com/reset-password',
+    });
+    setLoading(false);
+    if (error) setError(error.message);
+    else setMessage('Check your email for a password reset link.');
   }
 
   async function handleJoin() {
@@ -1316,33 +1327,62 @@ export default function HomePage() {
                     {/* Auth mode toggle */}
                     <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
                       {(['signin', 'signup'] as const).map(mode => (
-                        <button key={mode} onClick={() => { setMobileAuth(mode); setError(null); setMessage(null); }}
+                        <button key={mode} onClick={() => { setMobileAuth(mode); setShowForgot(false); setError(null); setMessage(null); }}
                           style={{ flex: 1, padding: '11px', background: mobileAuth === mode ? 'rgba(212,168,40,.12)' : 'none', border: 'none', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11, letterSpacing: 1, color: mobileAuth === mode ? gold : C.muted, textTransform: 'uppercase' }}>
                           {mode === 'signin' ? 'Sign In' : 'Create Account'}
                         </button>
                       ))}
                     </div>
                     <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, letterSpacing: 2, color: C.text, textTransform: 'uppercase', marginBottom: 18 }}>
-                      {mobileAuth === 'signin' ? 'Sign In' : 'Create Account'}
+                      {mobileAuth === 'signin' && showForgot ? 'Reset Password' : mobileAuth === 'signin' ? 'Sign In' : 'Create Account'}
                     </div>
-                    {mobileAuth === 'signup' && (
-                      <input style={{ width: '100%', padding: '12px 13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, outline: 'none', marginBottom: 10 }}
-                        type="text" placeholder="Display Name" value={displayName} onChange={e => setDisplayName(e.target.value)} />
+                    {mobileAuth === 'signin' && showForgot ? (
+                      <>
+                        <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, color: C.sub, lineHeight: 1.55, marginBottom: 14 }}>
+                          Enter your email and we'll send you a reset link.
+                        </div>
+                        <input style={{ width: '100%', padding: '12px 13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, outline: 'none', marginBottom: 10 }}
+                          type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleForgotPassword(); }} />
+                        {error   && <div style={{ color: C.red,   fontSize: 12, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{error}</div>}
+                        {message && <div style={{ color: C.green, fontSize: 12, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{message}</div>}
+                        <button onClick={handleForgotPassword} disabled={loading}
+                          style={{ width: '100%', padding: '14px', background: '#5865F2', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: '#fff', textTransform: 'uppercase', marginBottom: 12 }}>
+                          {loading ? 'Sending…' : 'Send Reset Link'}
+                        </button>
+                        <div style={{ textAlign: 'center', fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                          <span onClick={() => { setShowForgot(false); setError(null); setMessage(null); }} style={{ color: C.gold, cursor: 'pointer' }}>← Back to Sign In</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {mobileAuth === 'signup' && (
+                          <input style={{ width: '100%', padding: '12px 13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, outline: 'none', marginBottom: 10 }}
+                            type="text" placeholder="Display Name" value={displayName} onChange={e => setDisplayName(e.target.value)} />
+                        )}
+                        <input style={{ width: '100%', padding: '12px 13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, outline: 'none', marginBottom: 10 }}
+                          type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+                        <input style={{ width: '100%', padding: '12px 13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, outline: 'none', marginBottom: 6 }}
+                          type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') mobileAuth === 'signin' ? handleSignIn() : handleSignUp(); }} />
+                        {mobileAuth === 'signin' && (
+                          <div style={{ textAlign: 'right', marginBottom: 10 }}>
+                            <span onClick={() => { setShowForgot(true); setError(null); setMessage(null); }} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, cursor: 'pointer' }}>
+                              Forgot password?
+                            </span>
+                          </div>
+                        )}
+                        {error   && <div style={{ color: C.red,   fontSize: 12, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{error}</div>}
+                        {message && <div style={{ color: C.green, fontSize: 12, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{message}</div>}
+                        <button onClick={mobileAuth === 'signin' ? handleSignIn : handleSignUp} disabled={loading}
+                          style={{ width: '100%', padding: '14px', background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg, textTransform: 'uppercase', marginBottom: 12 }}>
+                          {loading ? (mobileAuth === 'signin' ? 'Signing in…' : 'Creating…') : (mobileAuth === 'signin' ? 'Sign In' : 'Create Account')}
+                        </button>
+                        <button onClick={() => router.push('/leagues')} style={{ width: '100%', padding: '13px', background: 'rgba(212,168,40,.07)', border: '1px solid rgba(212,168,40,.2)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: gold, textTransform: 'uppercase' }}>
+                          🏟️ Browse Public Leagues
+                        </button>
+                      </>
                     )}
-                    <input style={{ width: '100%', padding: '12px 13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, outline: 'none', marginBottom: 10 }}
-                      type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
-                    <input style={{ width: '100%', padding: '12px 13px', background: C.surf2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, outline: 'none', marginBottom: 10 }}
-                      type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') mobileAuth === 'signin' ? handleSignIn() : handleSignUp(); }} />
-                    {error   && <div style={{ color: C.red,   fontSize: 12, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{error}</div>}
-                    {message && <div style={{ color: C.green, fontSize: 12, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{message}</div>}
-                    <button onClick={mobileAuth === 'signin' ? handleSignIn : handleSignUp} disabled={loading}
-                      style={{ width: '100%', padding: '14px', background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 14, letterSpacing: 2, color: C.bg, textTransform: 'uppercase', marginBottom: 12 }}>
-                      {loading ? (mobileAuth === 'signin' ? 'Signing in…' : 'Creating…') : (mobileAuth === 'signin' ? 'Sign In' : 'Create Account')}
-                    </button>
-                    <button onClick={() => router.push('/leagues')} style={{ width: '100%', padding: '13px', background: 'rgba(212,168,40,.07)', border: '1px solid rgba(212,168,40,.2)', borderRadius: 8, cursor: 'pointer', fontFamily: 'Anton,sans-serif', fontSize: 12, letterSpacing: 1.5, color: gold, textTransform: 'uppercase' }}>
-                      🏟️ Browse Public Leagues
-                    </button>
                   </>
                 )}
               </div>
@@ -1583,21 +1623,48 @@ export default function HomePage() {
             {/* ── Sign-in form ── */}
             {view === 'signin' && (
               <div style={{ padding: '20px 16px' }} className="fade-up">
-                <button onClick={() => { setView('landing'); setError(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.muted, marginBottom: 14 }}>
+                <button onClick={() => { setView('landing'); setError(null); setShowForgot(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, letterSpacing: 1, color: C.muted, marginBottom: 14 }}>
                   ← Back
                 </button>
-                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, letterSpacing: 2, textTransform: 'uppercase', color: C.text, marginBottom: 18 }}>Sign In</div>
-                <input style={inputStyle} type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
-                <input style={inputStyle} type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleSignIn(); }} />
-                {error && <div style={{ color: C.red, fontSize: 11, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{error}</div>}
-                <button onClick={handleSignIn} disabled={loading} style={btnPrimary}>
-                  {loading ? 'Signing in…' : 'Sign In'}
-                </button>
-                <div style={{ textAlign: 'center', marginTop: 14, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
-                  No account?{' '}
-                  <span onClick={() => { setView('signup'); setError(null); }} style={{ color: C.gold, cursor: 'pointer' }}>Create one →</span>
+                <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, letterSpacing: 2, textTransform: 'uppercase', color: C.text, marginBottom: 18 }}>
+                  {showForgot ? 'Reset Password' : 'Sign In'}
                 </div>
+                {!showForgot ? (
+                  <>
+                    <input style={inputStyle} type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+                    <input style={{ ...inputStyle, marginBottom: 6 }} type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleSignIn(); }} />
+                    <div style={{ textAlign: 'right', marginBottom: 12 }}>
+                      <span onClick={() => { setShowForgot(true); setError(null); setMessage(null); }} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, cursor: 'pointer' }}>
+                        Forgot password?
+                      </span>
+                    </div>
+                    {error && <div style={{ color: C.red, fontSize: 11, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{error}</div>}
+                    <button onClick={handleSignIn} disabled={loading} style={btnPrimary}>
+                      {loading ? 'Signing in…' : 'Sign In'}
+                    </button>
+                    <div style={{ textAlign: 'center', marginTop: 14, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                      No account?{' '}
+                      <span onClick={() => { setView('signup'); setError(null); }} style={{ color: C.gold, cursor: 'pointer' }}>Create one →</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 12, color: C.sub, lineHeight: 1.55, marginBottom: 16 }}>
+                      Enter your email and we'll send you a reset link.
+                    </div>
+                    <input style={inputStyle} type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleForgotPassword(); }} />
+                    {error   && <div style={{ color: C.red,   fontSize: 11, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{error}</div>}
+                    {message && <div style={{ color: C.green, fontSize: 11, marginBottom: 10, fontFamily: 'Oswald,sans-serif' }}>{message}</div>}
+                    <button onClick={handleForgotPassword} disabled={loading} style={btnPrimary}>
+                      {loading ? 'Sending…' : 'Send Reset Link'}
+                    </button>
+                    <div style={{ textAlign: 'center', marginTop: 12, fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>
+                      <span onClick={() => { setShowForgot(false); setError(null); setMessage(null); }} style={{ color: C.gold, cursor: 'pointer' }}>← Back to Sign In</span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
