@@ -77,8 +77,13 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    console.error('Waiver claim error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Waiver claim error:', JSON.stringify(error));
+    return NextResponse.json({
+      error: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code
+    }, { status: 500 });
   }
 
   return NextResponse.json({ success: true, claim: data });
