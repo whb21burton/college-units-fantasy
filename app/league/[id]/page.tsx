@@ -2364,24 +2364,32 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 15 }: {
 
 /* ── Waiver Wire Tab ─────────────────────────────────────────── */
 function WaiverTab({ league, userId, currentWeek = 15 }: { league: any; userId: string | null; currentWeek?: number }) {
-  const [allPicks,    setAllPicks]    = useState<any[]>([]);
-  const [myPicks,     setMyPicks]     = useState<any[]>([]);
-  const [pool,        setPool]        = useState<DraftUnit[]>([]);
-  const [unitFilter,  setUnitFilter]  = useState<string>('ALL');
-  const [availFilter, setAvailFilter] = useState<'Available' | 'All'>('Available');
-  const [search,      setSearch]      = useState('');
-  const [viewing,     setViewing]     = useState<any | null>(null);
-  const [adding,      setAdding]      = useState<any | null>(null);
-  const [dropping,    setDropping]    = useState<any | null>(null);
-  const [busy,        setBusy]        = useState(false);
-  const [toast,       setToast]       = useState('');
-  const [loading,     setLoading]     = useState(true);
-  const [logos,       setLogos]       = useState<Record<string, string>>({});
-  const [gameCtx,     setGameCtx]     = useState<{ opponentMap: Record<string,string>; gameTimeMap: Record<string,string>; homeMap: Record<string,boolean>; rankMap: Record<string,number>; defRankMap: Record<string,number>; offRankMap: Record<string,number> } | null>(null);
-  // Derive which schools have already kicked off from gameCtx data
-  // gameCtx.gameTimeMap has display strings — we need raw kickoff times.
-  // We'll fetch them fresh in confirmAdd via the API instead.
-  const [lockedSchools, setLockedSchools] = useState<Set<string>>(new Set());
+  const [allPicks,       setAllPicks]       = useState<any[]>([]);
+  const [myPicks,        setMyPicks]        = useState<any[]>([]);
+  const [pool,           setPool]           = useState<DraftUnit[]>([]);
+  const [unitFilter,     setUnitFilter]     = useState<string>('ALL');
+  const [availFilter,    setAvailFilter]    = useState<'Available' | 'All'>('Available');
+  const [search,         setSearch]         = useState('');
+  const [viewing,        setViewing]        = useState<any | null>(null);
+  const [adding,         setAdding]         = useState<any | null>(null);
+  const [dropping,       setDropping]       = useState<any | null>(null);
+  const [busy,           setBusy]           = useState(false);
+  const [toast,          setToast]          = useState('');
+  const [loading,        setLoading]        = useState(true);
+  const [logos,          setLogos]          = useState<Record<string, string>>({});
+  const [gameCtx,        setGameCtx]        = useState<{ opponentMap: Record<string,string>; gameTimeMap: Record<string,string>; homeMap: Record<string,boolean>; rankMap: Record<string,number>; defRankMap: Record<string,number>; offRankMap: Record<string,number> } | null>(null);
+  const [lockedSchools,  setLockedSchools]  = useState<Set<string>>(new Set());
+  // Waiver-specific state
+  const [waiverSubTab,   setWaiverSubTab]   = useState<'available' | 'claims' | 'order' | 'results'>('available');
+  const [myClaims,       setMyClaims]       = useState<any[]>([]);
+  const [waiverPriority, setWaiverPriority] = useState<any[]>([]);
+  const [waiverResults,  setWaiverResults]  = useState<any[]>([]);
+  const [bidAmount,      setBidAmount]      = useState<number>(0);
+  const [faabBalance,    setFaabBalance]    = useState<number>(100);
+
+  const waiverType = (league?.settings?.waiver_type ?? 'rolling') as 'rolling' | 'faab';
+  const isFaab     = waiverType === 'faab';
+  const isComm     = userId === league?.commissioner_id;
 
   const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
@@ -2453,14 +2461,25 @@ function WaiverTab({ league, userId, currentWeek = 15 }: { league: any; userId: 
   }, [league?.id, userId]);
 
   useEffect(() => {
-    console.log('[WaiverTab] fetching pool, unitFilter:', unitFilter, 'allowedSchools:', allowedSchools);
     fetch(poolUrl(unitFilter, allowedSchools))
       .then(r => r.json())
-      .then(data => {
-        console.log('[WaiverTab] pool response count:', data?.length);
-        setPool(Array.isArray(data) ? data : []);
-      });
+      .then(data => { setPool(Array.isArray(data) ? data : []); });
   }, [unitFilter, allowedSchools]);
+
+  // Load waiver claims, priority, FAAB balance
+  useEffect(() => {
+    if (!userId || !league?.id) return;
+    fetch(`/api/waiver/claims?league_id=${league.id}`)
+      .then(r => r.json()).then(d => setMyClaims(d.claims ?? [])).catch(() => {});
+    fetch(`/api/waiver/priority?league_id=${league.id}`)
+      .then(r => r.json()).then(d => setWaiverPriority(d.priority ?? [])).catch(() => {});
+    fetch(`/api/waiver/claims?league_id=${league.id}&status=processed`)
+      .then(r => r.json()).then(d => setWaiverResults(d.claims ?? [])).catch(() => {});
+    if (isFaab) {
+      fetch(`/api/waiver/faab?league_id=${league.id}`)
+        .then(r => r.json()).then(d => setFaabBalance(d.balance ?? 100)).catch(() => {});
+    }
+  }, [userId, league?.id, waiverSubTab]);
 
   // Key drafted units by school||unitType rather than by id.
   // The draft page stores FULL_POOL entries whose ids include the player name
@@ -2507,64 +2526,64 @@ function WaiverTab({ league, userId, currentWeek = 15 }: { league: any; userId: 
   const emptySlots    = Math.max(0, ROSTER_MIN - myPicks.length);
   const canAddNoDrop  = emptySlots > 0;
 
-  async function confirmAdd() {
+  async function submitClaim() {
     if (!adding || !userId) return;
     if (!dropping && !canAddNoDrop) return;
     setBusy(true);
     try {
-      const week = league?.current_week ?? 1;
-      const res = await fetch('/api/players/drop-add', {
+      const res = await fetch('/api/waiver/claims', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           league_id:    league.id,
-          week,
-          drop_unit_id: dropping?.player_id ?? dropping?.id ?? null,
-          add_unit_id:  adding.id,
-          drop_school:  dropping?.player_data?.school ?? null,
-          add_school:   adding.school,
+          add_unit_id:  `${adding.school}_${adding.unitType}`,
+          drop_unit_id: dropping ? `${dropping.player_data?.school}_${dropping.player_data?.unitType}` : null,
+          priority_rank: myClaims.length + 1,
+          bid_amount:   isFaab ? bidAmount : 0,
         }),
       });
       const result = await res.json();
       if (!res.ok) {
-        setToast(`⚠️ ${result.error ?? 'Failed to add player'}`);
+        setToast(`⚠️ ${result.error ?? 'Failed to submit claim'}`);
         setTimeout(() => setToast(''), 5000);
         setBusy(false);
         return;
       }
-      // Refresh picks from DB
-      const { data } = await supabase
-        .from('draft_picks')
-        .select('*')
-        .eq('league_id', league.id);
-      const all = data || [];
-      setAllPicks(all);
-      const isComm2     = userId === league?.commissioner_id;
-      const draftOrder2: any[] = league?.settings?.draft_order || [];
-      const numTeams2   = draftOrder2.length;
-      const myEntry2    = draftOrder2.find((t: any) => t.userId === userId);
-      const slotIdx2    = myEntry2 ? myEntry2.slot - 1 : -1;
-      let mine2: any[]  = [];
-      if (isComm2 && numTeams2 > 0 && slotIdx2 >= 0) {
-        mine2 = all.filter((p: any) => snakeIdx(p.pick_number, numTeams2) === slotIdx2);
-        if (mine2.length === 0) mine2 = all.filter((p: any) => p.user_id === userId);
-      } else {
-        mine2 = all.filter((p: any) => p.user_id === userId);
-      }
-      setMyPicks(mine2);
-      setAdding(null);
-      setDropping(null);
-      const dropMsg = dropping
-        ? `, dropped ${dropping.player_data?.playerName || dropping.player_data?.school}`
-        : '';
-      setToast(`✅ Added ${adding.playerName || adding.school} ${adding.unitType}${dropMsg}`);
-      setTimeout(() => setToast(''), 4000);
-    } catch (err) {
+      const fresh = await fetch(`/api/waiver/claims?league_id=${league.id}`);
+      setMyClaims((await fresh.json()).claims ?? []);
+      setAdding(null); setDropping(null); setBidAmount(0);
+      setToast(`✅ Claim submitted: ${adding.playerName || adding.school} ${adding.unitType} — processes at 3 AM`);
+      setTimeout(() => setToast(''), 5000);
+      setWaiverSubTab('claims');
+    } catch {
       setToast('⚠️ Network error — please try again');
       setTimeout(() => setToast(''), 4000);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function cancelClaim(claimId: string) {
+    await fetch(`/api/waiver/claims/${claimId}`, { method: 'DELETE' });
+    setMyClaims(prev => prev.filter(c => c.id !== claimId));
+  }
+
+  async function movePriority(claimId: string, dir: 'up' | 'down') {
+    const idx = myClaims.findIndex(c => c.id === claimId);
+    if (dir === 'up' && idx === 0) return;
+    if (dir === 'down' && idx === myClaims.length - 1) return;
+    const swap = dir === 'up' ? idx - 1 : idx + 1;
+    const updated = [...myClaims];
+    [updated[idx], updated[swap]] = [updated[swap], updated[idx]];
+    setMyClaims(updated.map((c, i) => ({ ...c, priority_rank: i + 1 })));
+    await fetch(`/api/waiver/claims/${claimId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priority_rank: swap + 1 }),
+    });
+    await fetch(`/api/waiver/claims/${updated[dir === 'up' ? swap + 1 : swap - 1].id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priority_rank: idx + 1 }),
+    });
   }
 
   if (loading) return (
@@ -2586,272 +2605,369 @@ function WaiverTab({ league, userId, currentWeek = 15 }: { league: any; userId: 
     );
   }
 
-  /* ── Add Player screen ── */
+  /* ── Claim modal ── */
   if (adding) {
-    const faName = adding.playerName || adding.school;
+    const faName      = adding.playerName || adding.school;
     const addPosColor = UNIT_COLORS[adding.unitType] ?? C.sub;
     const canConfirm  = dropping != null || canAddNoDrop;
+    const faabStart   = league?.settings?.faab_budget ?? 100;
     const sorted = myPicks.slice().sort((a: any, b: any) => {
       const order = ['QB','RB','WR','TE','DEF','K'];
       return order.indexOf(a.player_data?.unitType) - order.indexOf(b.player_data?.unitType);
     });
     return (
       <div style={{ maxWidth: 500, margin: '0 auto', paddingTop: 8 }}>
-        {/* Header */}
-        <button onClick={() => { setAdding(null); setDropping(null); }} style={{ background: 'none', border: 'none', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, cursor: 'pointer', marginBottom: 12, letterSpacing: 1, padding: 0 }}>
+        <button onClick={() => { setAdding(null); setDropping(null); setBidAmount(0); }}
+          style={{ background: 'none', border: 'none', color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, cursor: 'pointer', marginBottom: 12, letterSpacing: 1, padding: 0 }}>
           ← BACK
         </button>
-        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.text, letterSpacing: 1, marginBottom: 2 }}>Add Player</div>
-        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.sub, letterSpacing: .5, marginBottom: 18 }}>
-          Add <span style={{ color: C.text }}>{faName}</span> to your roster
+        <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 22, color: C.text, letterSpacing: 1, marginBottom: 2 }}>Submit Claim</div>
+        <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.sub, letterSpacing: .5, marginBottom: 18 }}>
+          Claim <span style={{ color: C.text }}>{faName} {adding.unitType}</span> · Processes at 3 AM
         </div>
 
-        {/* Player being added */}
+        {/* Unit being claimed */}
         <div style={{ background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ background: addPosColor, color: '#fff', fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, borderRadius: 4, padding: '3px 7px', minWidth: 36, textAlign: 'center' }}>
-            {adding.unitType}
-          </div>
+          <div style={{ background: addPosColor, color: '#fff', fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, borderRadius: 4, padding: '3px 7px', minWidth: 36, textAlign: 'center' }}>{adding.unitType}</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 14, color: C.text }}>{faName}</div>
             <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{adding.school}</div>
           </div>
-          <div style={{ background: C.surf3, color: C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, borderRadius: 4, padding: '3px 7px' }}>BN</div>
-          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.green, minWidth: 40, textAlign: 'right' }}>{liveProj(adding).toFixed(1)}</div>
+          <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 16, color: C.green }}>{liveProj(adding).toFixed(1)}</div>
         </div>
 
-        {/* Empty slot warning */}
+        {/* Empty slot notice */}
         {canAddNoDrop && (
-          <div style={{ background: '#2d2200', border: '1px solid #a07800', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: '#f5c542', letterSpacing: .3 }}>
-            You have {emptySlots} empty slot{emptySlots !== 1 ? 's' : ''}. You can add this player without dropping anyone.
+          <div style={{ background: '#2d2200', border: '1px solid #a07800', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: '#f5c542' }}>
+            You have {emptySlots} empty slot{emptySlots !== 1 ? 's' : ''}. No drop required.
           </div>
         )}
 
-        {/* Roster table */}
+        {/* Step 1: Select drop */}
         {myPicks.length > 0 && (
-          <>
-            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 6 }}>
-              {canAddNoDrop ? 'YOUR ROSTER (optional: select a player to drop)' : 'SELECT A PLAYER TO DROP'}
-            </div>
-            {/* Column headers */}
-            <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr 52px 36px', gap: 8, padding: '4px 14px', marginBottom: 4 }}>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>POS</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1 }}>PLAYER</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>PTS</div>
-              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, textAlign: 'right' }}>BYE</div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 8 }}>
+              {canAddNoDrop ? 'STEP 1 — SELECT PLAYER TO DROP (optional)' : 'STEP 1 — SELECT PLAYER TO DROP *'}
             </div>
             {sorted.map((pick: any) => {
-              const pd = pick.player_data;
-              const name = pd?.playerName || pd?.school;
-              const posColor = UNIT_COLORS[pd?.unitType] ?? C.sub;
+              const pd        = pick.player_data;
+              const name      = pd?.playerName || pd?.school;
+              const posColor  = UNIT_COLORS[pd?.unitType] ?? C.sub;
               const isSelected = dropping?.id === pick.id;
+              const isLocked  = lockedSchools.has(pd?.school ?? '');
               return (
-                <div key={pick.id} onClick={() => {
-                  const school = pick.player_data?.school;
-                  if (school && lockedSchools.has(school)) return; // can't drop locked unit
-                  setDropping(isSelected ? null : pick);
-                }}
-                  style={{ display: 'grid', gridTemplateColumns: '48px 1fr 52px 36px', gap: 8, alignItems: 'center', padding: '10px 14px', marginBottom: 4, background: isSelected ? '#2a0d0d' : C.surf, border: '1px solid ' + (isSelected ? C.red : C.surf3), borderRadius: 8, cursor: 'pointer', transition: 'border-color .15s' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ background: posColor, color: '#fff', fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, borderRadius: 4, padding: '2px 6px', textAlign: 'center' }}>
-                      {pd?.unitType}
-                    </div>
-                  </div>
+                <div key={pick.id}
+                  onClick={() => { if (!isLocked) setDropping(isSelected ? null : pick); }}
+                  style={{ display: 'grid', gridTemplateColumns: '40px 1fr 48px 40px', gap: 8, alignItems: 'center', padding: '10px 12px', marginBottom: 4, background: isSelected ? '#2a0d0d' : C.surf, border: '1px solid ' + (isSelected ? C.red : C.surf3), borderRadius: 8, cursor: isLocked ? 'not-allowed' : 'pointer', opacity: isLocked ? 0.5 : 1, transition: 'border-color .15s' }}>
+                  <div style={{ background: posColor, color: '#fff', fontFamily: 'Oswald,sans-serif', fontSize: 10, fontWeight: 700, borderRadius: 4, padding: '2px 6px', textAlign: 'center' }}>{pd?.unitType}</div>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: isSelected ? C.red : C.text }}>{name}</div>
-                      {lockedSchools.has(pick.player_data?.school ?? '') && (
-                        <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.red, letterSpacing: .5 }}>🔒</span>
-                      )}
-                    </div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: isSelected ? C.red : C.text }}>{name} {isLocked && '🔒'}</div>
                     <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted }}>{pd?.school}</div>
                   </div>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.sub, textAlign: 'right' }}>
-                    {liveProj(pd).toFixed(1)}
-                  </div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: isSelected ? C.red : C.muted, textAlign: 'right', letterSpacing: .5 }}>
-                    {isSelected ? 'DROP' : '—'}
-                  </div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.sub, textAlign: 'right' }}>{liveProj(pd).toFixed(1)}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: isSelected ? C.red : C.muted, textAlign: 'right', fontWeight: 700 }}>{isSelected ? 'DROP' : '—'}</div>
                 </div>
               );
             })}
-          </>
+          </div>
         )}
 
-        {/* Confirm button */}
-        <button onClick={confirmAdd} disabled={!canConfirm || busy}
-          style={{ marginTop: 20, width: '100%', padding: '14px 0', background: canConfirm ? C.green : C.surf3, border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 1.5, color: canConfirm ? '#fff' : C.muted, cursor: canConfirm && !busy ? 'pointer' : 'not-allowed', opacity: busy ? .6 : 1, transition: 'background .2s' }}>
-          {busy ? 'PROCESSING…' : 'ADD PLAYER'}
+        {/* Step 2: FAAB bid (FAAB leagues only) */}
+        {isFaab && (
+          <div style={{ background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '14px 16px', marginBottom: 14 }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 10 }}>
+              STEP 2 — FAAB BID &nbsp;<span style={{ color: C.gold }}>${faabBalance} remaining of ${faabStart}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 20, color: C.gold }}>$</span>
+              <input type="number" min={0} max={faabBalance} value={bidAmount}
+                onChange={e => setBidAmount(Math.min(faabBalance, Math.max(0, parseInt(e.target.value) || 0)))}
+                style={{ flex: 1, background: C.surf3, border: '1px solid ' + C.border, borderRadius: 6, padding: '10px 12px', color: C.text, fontFamily: 'Anton,sans-serif', fontSize: 22, outline: 'none', width: '100%' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[0, 5, 10, 25, 50].filter(v => v <= faabBalance).map(v => (
+                <button key={v} onClick={() => setBidAmount(v)}
+                  style={{ padding: '5px 12px', background: bidAmount === v ? C.gold : C.surf3, border: 'none', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: bidAmount === v ? C.bg : C.sub, cursor: 'pointer' }}>
+                  ${v}
+                </button>
+              ))}
+              <button onClick={() => setBidAmount(faabBalance)}
+                style={{ padding: '5px 12px', background: bidAmount === faabBalance && faabBalance > 0 ? C.gold : C.surf3, border: 'none', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, color: bidAmount === faabBalance && faabBalance > 0 ? C.bg : C.sub, cursor: 'pointer' }}>
+                MAX
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Claim summary */}
+        <div style={{ background: 'rgba(21,198,120,.05)', border: '1px solid rgba(21,198,120,.2)', borderRadius: 8, padding: '12px 14px', marginBottom: 16 }}>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted, letterSpacing: 1.5, marginBottom: 8 }}>
+            {canAddNoDrop && !dropping ? 'STEP 2 — CONFIRM' : isFaab ? 'STEP 3 — CONFIRM' : 'STEP 2 — CONFIRM'}
+          </div>
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.green, marginBottom: 3 }}>+ Add {adding.school} {adding.unitType}</div>
+          {dropping
+            ? <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.red, marginBottom: 3 }}>− Drop {dropping.player_data?.school} {dropping.player_data?.unitType}</div>
+            : canAddNoDrop && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginBottom: 3 }}>No drop needed (empty slot)</div>
+          }
+          {isFaab && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.gold }}>💰 Bid ${bidAmount}</div>}
+        </div>
+
+        <button onClick={submitClaim} disabled={!canConfirm || busy}
+          style={{ width: '100%', padding: '14px 0', background: canConfirm ? C.green : C.surf3, border: 'none', borderRadius: 8, fontFamily: 'Anton,sans-serif', fontSize: 15, letterSpacing: 1.5, color: canConfirm ? '#fff' : C.muted, cursor: canConfirm && !busy ? 'pointer' : 'not-allowed', opacity: busy ? .6 : 1, transition: 'background .2s' }}>
+          {busy ? 'SUBMITTING…' : 'SUBMIT CLAIM'}
         </button>
       </div>
     );
   }
 
-  /* ── Free agent list ── */
+  /* ── 4-sub-tab layout ── */
+  const tab3Label = isFaab ? 'Budget' : 'Waiver Order';
+  const pendingCount = myClaims.length;
+
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
       {toast && (
-        <div style={{ background: '#14532d', border: '1px solid ' + C.green, borderRadius: 8, padding: '10px 16px', marginBottom: 14, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.green }}>
-          {toast}
-        </div>
-      )}
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-        {(['Available', 'All'] as const).map(opt => (
-          <button key={opt} onClick={() => setAvailFilter(opt)} style={{ padding: '5px 14px', borderRadius: 20, border: '1px solid ' + (availFilter === opt ? C.sub : C.surf3), background: availFilter === opt ? C.surf3 : C.surf2, color: availFilter === opt ? C.text : C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: .5 }}>
-            {opt}
-          </button>
-        ))}
-        <div style={{ width: 1, height: 20, background: C.surf3, flexShrink: 0 }} />
-        {POS_FILTERS.map(f => (
-          <button key={f} onClick={() => setUnitFilter(f)} style={{ padding: '5px 14px', borderRadius: 20, border: '1px solid ' + (unitFilter === f ? C.gold : C.surf3), background: unitFilter === f ? C.gold : C.surf2, color: unitFilter === f ? C.bg : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: .5 }}>
-            {f}
-          </button>
-        ))}
-        <div style={{ position: 'relative', flex: 1, minWidth: 140 }}>
-          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.muted, fontSize: 13, pointerEvents: 'none' }}>⌕</span>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…" style={{ width: '100%', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '6px 12px 6px 28px', color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
-        </div>
-      </div>
-
-      {/* Header row + count */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px', marginBottom: 6 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {['UNIT', 'SCHOOL', 'RANK'].map(h => (
-            <span key={h} style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase' }}>{h}</span>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase' }}>SEASON PTS</span>
-          <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, letterSpacing: 1.5, color: C.muted, textTransform: 'uppercase', minWidth: 44 }}>ACTION</span>
-        </div>
-      </div>
-      <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 0.5, marginBottom: 10 }}>
-        Showing {freeAgents.length} of {visiblePool.length} units
-      </div>
-
-      {freeAgents.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
-          {availFilter === 'Available' ? 'No available players found.' : 'No players found.'}
-        </div>
+        <div style={{ background: '#14532d', border: '1px solid ' + C.green, borderRadius: 8, padding: '10px 16px', marginBottom: 14, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.green }}>{toast}</div>
       )}
 
-      {freeAgents.map(p => {
-        const name      = p.playerName || p.school;
-        const posColor  = UNIT_COLORS[p.unitType] || C.muted;
-        const isDrafted = draftedKeys.has(`${p.school}||${p.unitType}`);
-        const posRank   = posRankMap.get(`${p.school}||${p.unitType}`) ?? null;
-        const logoUrl   = logos[p.school];
-        const opponent  = gameCtx?.opponentMap?.[p.school];
-        const gameTime  = gameCtx?.gameTimeMap?.[p.school];
-        const isHome    = gameCtx?.homeMap?.[p.school];
-        const oppRank   = opponent ? (gameCtx?.rankMap?.[opponent] ?? null) : null;
-        const oppLabel  = opponent
-          ? `${isHome ? 'vs' : '@'} ${opponent.length > 12 ? opponent.split(' ').pop() : opponent}${oppRank ? ` (${oppRank})` : ''}`
-          : 'BYE';
+      {/* Sub-tab nav */}
+      <div style={{ display: 'flex', borderBottom: '1px solid ' + C.surf3, marginBottom: 16 }}>
+        {(['available', 'claims', 'order', 'results'] as const).map(t => {
+          const labels: Record<string, string> = { available: 'Available', claims: `My Claims${pendingCount ? ` (${pendingCount})` : ''}`, order: tab3Label, results: 'Results' };
+          const active = waiverSubTab === t;
+          return (
+            <button key={t} onClick={() => setWaiverSubTab(t)}
+              style={{ padding: '9px 14px', background: 'none', border: 'none', borderBottom: '2px solid ' + (active ? C.gold : 'transparent'), cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 12, letterSpacing: .5, color: active ? C.gold : C.muted, textTransform: 'uppercase', marginBottom: -1, whiteSpace: 'nowrap' }}>
+              {labels[t]}
+            </button>
+          );
+        })}
+        {isFaab && (
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold, paddingRight: 4 }}>
+            💰 ${faabBalance}
+          </div>
+        )}
+      </div>
 
-        return (
-          <div
-            key={p.id}
-            onClick={() => setViewing(p)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 0,
-              background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10,
-              marginBottom: 5, cursor: 'pointer', overflow: 'hidden',
-              opacity: isDrafted ? 0.45 : 1, transition: 'border-color .15s',
-            }}
-            onMouseEnter={e => { if (!isDrafted) (e.currentTarget as HTMLElement).style.borderColor = posColor + '66'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = C.surf3; }}
-          >
-            {/* Pos color stripe */}
-            <div style={{ width: 4, alignSelf: 'stretch', background: posColor, flexShrink: 0 }} />
-
-            {/* Logo */}
-            <div style={{ width: 48, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '0 6px' }}>
-              {logoUrl ? (
-                <img src={logoUrl} alt={p.school} style={{ width: 36, height: 36, objectFit: 'contain' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-              ) : (
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: posColor + '33', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 10, color: posColor }}>
-                  {p.school.slice(0, 2).toUpperCase()}
-                </div>
-              )}
-            </div>
-
-            {/* Main info */}
-            <div style={{ flex: 1, minWidth: 0, padding: '8px 4px 8px 0' }}>
-              {/* Pos badge + name */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  height: 18, minWidth: 30, padding: '0 5px', borderRadius: 4,
-                  background: posColor, fontFamily: 'Anton,sans-serif', fontSize: 9,
-                  color: '#fff', flexShrink: 0, letterSpacing: 0.5,
-                }}>{p.unitType}</div>
-                <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 14, fontWeight: 700, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {name}
-                </div>
-              </div>
-              {/* School + rank badge */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-                <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub, letterSpacing: 0.3 }}>
-                  {p.unitType} · {p.school}
-                </span>
-                {posRank && (() => {
-                  const rc = posRank <= 3 ? '#f5a623' : posRank <= 10 ? '#15c678' : posRank <= 25 ? '#7a92aa' : C.muted;
-                  return (
-                    <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 10, color: rc, background: rc + '22', border: `1px solid ${rc}44`, borderRadius: 4, padding: '1px 5px' }}>
-                      #{posRank}
-                    </span>
-                  );
-                })()}
-              </div>
-              {/* Game info */}
-              {gameCtx && (
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: opponent ? C.muted : C.red, letterSpacing: 0.3 }}>
-                    {oppLabel}
-                  </span>
-                  {gameTime && (
-                    <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 0.3 }}>
-                      {gameTime}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Projected pts — avgFpts × odrMult(defRankMap[opp]) */}
-            {(() => {
-              const avgF    = p.avgFpts ?? p.avgPerWeek ?? 0;
-              const opp     = gameCtx?.opponentMap?.[p.school] ?? null;
-              const oppRank = (opp && gameCtx)
-                ? (p.unitType === 'DEF' ? (gameCtx.offRankMap[opp] ?? 50) : (gameCtx.defRankMap[opp] ?? 50))
-                : 50;
-              const wkProj  = avgF > 0 ? avgF * (opp ? rankMult(oppRank) : 1.0) : liveProj(p);
-              return (
-                <div style={{ textAlign: 'center', padding: '0 12px', flexShrink: 0 }}>
-                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 18, color: C.sub }}>
-                    {wkProj.toFixed(1)}
-                  </div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1, textTransform: 'uppercase' }}>
-                    proj
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Action */}
-            <div style={{ padding: '0 10px 0 4px', flexShrink: 0 }}>
-              {isDrafted ? (
-                <div style={{ padding: '5px 8px', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.muted, textAlign: 'center' }}>DRAFTED</div>
-              ) : lockedSchools.has(p.school) ? (
-                <div title="Game has started - cannot add" style={{ padding: '5px 8px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 9, fontWeight: 700, color: C.red, textAlign: 'center', letterSpacing: .5 }}>🔒 LOCKED</div>
-              ) : (
-                <button onClick={e => { e.stopPropagation(); setAdding(p); }} style={{ padding: '6px 10px', background: 'rgba(21,198,120,.12)', border: '1px solid rgba(21,198,120,.35)', borderRadius: 6, fontFamily: "'Space Grotesk',sans-serif", fontSize: 11, fontWeight: 700, color: C.green, cursor: 'pointer' }}>+ ADD</button>
-              )}
+      {/* ── TAB 1: AVAILABLE ── */}
+      {waiverSubTab === 'available' && (
+        <div>
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+            {(['Available', 'All'] as const).map(opt => (
+              <button key={opt} onClick={() => setAvailFilter(opt)} style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid ' + (availFilter === opt ? C.sub : C.surf3), background: availFilter === opt ? C.surf3 : C.surf2, color: availFilter === opt ? C.text : C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 11, cursor: 'pointer' }}>
+                {opt}
+              </button>
+            ))}
+            <div style={{ width: 1, height: 18, background: C.surf3, flexShrink: 0 }} />
+            {POS_FILTERS.map(f => (
+              <button key={f} onClick={() => setUnitFilter(f)} style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid ' + (unitFilter === f ? C.gold : C.surf3), background: unitFilter === f ? C.gold : C.surf2, color: unitFilter === f ? C.bg : C.sub, fontFamily: 'Oswald,sans-serif', fontSize: 11, cursor: 'pointer' }}>
+                {f}
+              </button>
+            ))}
+            <div style={{ position: 'relative', flex: 1, minWidth: 120 }}>
+              <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: C.muted, fontSize: 12, pointerEvents: 'none' }}>⌕</span>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…" style={{ width: '100%', background: C.surf2, border: '1px solid ' + C.surf3, borderRadius: 8, padding: '5px 10px 5px 26px', color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
             </div>
           </div>
-        );
-      })}
+
+          <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginBottom: 10 }}>
+            {freeAgents.length} unit{freeAgents.length !== 1 ? 's' : ''} available
+          </div>
+
+          {freeAgents.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>
+              No units found.
+            </div>
+          )}
+
+          {freeAgents.map(p => {
+            const name     = p.playerName || p.school;
+            const posColor = UNIT_COLORS[p.unitType] || C.muted;
+            const isDrafted = draftedKeys.has(`${p.school}||${p.unitType}`);
+            const posRank  = posRankMap.get(`${p.school}||${p.unitType}`) ?? null;
+            const logoUrl  = logos[p.school];
+            const opponent = gameCtx?.opponentMap?.[p.school];
+            const gameTime = gameCtx?.gameTimeMap?.[p.school];
+            const isHome   = gameCtx?.homeMap?.[p.school];
+            const oppRk    = opponent ? (gameCtx?.rankMap?.[opponent] ?? null) : null;
+            const oppLabel = opponent
+              ? `${isHome ? 'vs' : '@'} ${opponent.length > 12 ? opponent.split(' ').pop() : opponent}${oppRk ? ` (${oppRk})` : ''}`
+              : 'BYE';
+            const avgF    = p.avgFpts ?? p.avgPerWeek ?? 0;
+            const opp     = gameCtx?.opponentMap?.[p.school] ?? null;
+            const oppDR   = (opp && gameCtx) ? (p.unitType === 'DEF' ? (gameCtx.offRankMap[opp] ?? 50) : (gameCtx.defRankMap[opp] ?? 50)) : 50;
+            const wkProj  = avgF > 0 ? avgF * (opp ? rankMult(oppDR) : 1.0) : liveProj(p);
+
+            return (
+              <div key={p.id} onClick={() => setViewing(p)}
+                style={{ display: 'flex', alignItems: 'center', gap: 0, background: C.surf, border: '1px solid ' + C.surf3, borderRadius: 10, marginBottom: 5, cursor: 'pointer', overflow: 'hidden', opacity: isDrafted ? 0.4 : 1, transition: 'border-color .15s' }}
+                onMouseEnter={e => { if (!isDrafted) (e.currentTarget as HTMLElement).style.borderColor = posColor + '66'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = C.surf3; }}
+              >
+                <div style={{ width: 4, alignSelf: 'stretch', background: posColor, flexShrink: 0 }} />
+                <div style={{ width: 46, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {logoUrl
+                    ? <img src={logoUrl} alt={p.school} style={{ width: 34, height: 34, objectFit: 'contain' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                    : <div style={{ width: 34, height: 34, borderRadius: '50%', background: posColor + '33', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 10, color: posColor }}>{p.school.slice(0,2).toUpperCase()}</div>
+                  }
+                </div>
+                <div style={{ flex: 1, minWidth: 0, padding: '8px 4px 8px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                    <div style={{ height: 17, minWidth: 28, padding: '0 4px', borderRadius: 4, background: posColor, fontFamily: 'Anton,sans-serif', fontSize: 9, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{p.unitType}</div>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 13, fontWeight: 700, color: '#7eb8f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                    {posRank && (() => { const rc = posRank <= 3 ? '#f5a623' : posRank <= 10 ? C.green : posRank <= 25 ? '#7a92aa' : C.muted; return <span style={{ fontFamily: 'Anton,sans-serif', fontSize: 9, color: rc, background: rc+'22', border:`1px solid ${rc}44`, borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>#{posRank}</span>; })()}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.sub }}>{p.school}</div>
+                  {gameCtx && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{oppLabel}{gameTime ? ' · '+gameTime : ''}</div>}
+                </div>
+                <div style={{ textAlign: 'center', padding: '0 10px', flexShrink: 0 }}>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 17, color: C.sub }}>{wkProj.toFixed(1)}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.muted, letterSpacing: 1 }}>PROJ</div>
+                </div>
+                <div style={{ padding: '0 10px 0 4px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                  {isDrafted
+                    ? <div style={{ padding: '5px 8px', background: C.surf2, border: '1px solid '+C.surf3, borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>DRAFTED</div>
+                    : lockedSchools.has(p.school)
+                      ? <div style={{ padding: '5px 8px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.red }}>🔒 LOCKED</div>
+                      : <button onClick={() => setAdding(p)} style={{ padding: '6px 11px', background: 'rgba(21,198,120,.12)', border: '1px solid rgba(21,198,120,.35)', borderRadius: 6, fontFamily: 'Oswald,sans-serif', fontSize: 11, fontWeight: 700, color: C.green, cursor: 'pointer' }}>+ ADD</button>
+                  }
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── TAB 2: MY CLAIMS ── */}
+      {waiverSubTab === 'claims' && (
+        <div>
+          {myClaims.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 0' }}>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: C.muted, marginBottom: 8 }}>No pending claims.</div>
+              <button onClick={() => setWaiverSubTab('available')} style={{ background: 'none', border: '1px solid '+C.surf3, borderRadius: 6, padding: '7px 16px', color: C.sub, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 11 }}>Browse Available</button>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 12 }}>
+                {isFaab ? 'FAAB CLAIMS · highest bid wins' : 'ROLLING CLAIMS · processed in priority order'} · next run at 3 AM
+              </div>
+              {myClaims.map((claim, i) => (
+                <div key={claim.id} style={{ background: C.surf, border: '1px solid '+C.surf3, borderLeft: '3px solid '+C.gold, borderRadius: 10, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.surf2, border: '1px solid '+C.surf3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, color: C.gold, flexShrink: 0 }}>{i+1}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.green, marginBottom: 2 }}>+ {claim.add_unit_id?.replace('_',' ')}</div>
+                    {claim.drop_unit_id && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.red, marginBottom: 2 }}>− {claim.drop_unit_id?.replace('_',' ')}</div>}
+                    {isFaab && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.gold }}>💰 Bid ${claim.bid_amount ?? 0}</div>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <button onClick={() => movePriority(claim.id, 'up')} disabled={i === 0}
+                      style={{ background: i===0 ? C.surf3 : C.surf2, border: '1px solid '+C.surf3, borderRadius: 4, color: i===0 ? C.muted : C.sub, cursor: i===0 ? 'default' : 'pointer', fontSize: 9, padding: '3px 8px', lineHeight: 1 }}>▲</button>
+                    <button onClick={() => movePriority(claim.id, 'down')} disabled={i === myClaims.length-1}
+                      style={{ background: i===myClaims.length-1 ? C.surf3 : C.surf2, border: '1px solid '+C.surf3, borderRadius: 4, color: i===myClaims.length-1 ? C.muted : C.sub, cursor: i===myClaims.length-1 ? 'default' : 'pointer', fontSize: 9, padding: '3px 8px', lineHeight: 1 }}>▼</button>
+                  </div>
+                  <button onClick={() => cancelClaim(claim.id)}
+                    style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 6, color: C.red, cursor: 'pointer', fontFamily: 'Oswald,sans-serif', fontSize: 10, padding: '6px 10px', flexShrink: 0 }}>
+                    Cancel
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB 3a: WAIVER ORDER (rolling) ── */}
+      {waiverSubTab === 'order' && !isFaab && (
+        <div>
+          {waiverPriority.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>Priority order not set yet.</div>
+          ) : (
+            <>
+              {(() => { const myPos = waiverPriority.findIndex(p => p.user_id === userId); return myPos >= 0 && (
+                <div style={{ background: 'rgba(212,168,40,.07)', border: '1px solid rgba(212,168,40,.2)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.gold }}>
+                  You are #{myPos+1} of {waiverPriority.length} in waiver priority
+                </div>
+              );})()}
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 10 }}>WAIVER PRIORITY ORDER</div>
+              {waiverPriority.map((entry, i) => {
+                const isMe = entry.user_id === userId;
+                return (
+                  <div key={entry.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: isMe ? 'rgba(212,168,40,.06)' : C.surf, border: '1px solid ' + (isMe ? 'rgba(212,168,40,.3)' : C.surf3), borderRadius: 8, marginBottom: 5 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: isMe ? 'rgba(212,168,40,.2)' : C.surf2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Anton,sans-serif', fontSize: 13, color: isMe ? C.gold : C.muted, flexShrink: 0 }}>{entry.priority_position ?? i+1}</div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 13, color: isMe ? C.gold : C.text, flex: 1 }}>
+                      {entry.display_name ?? entry.user_id?.slice(0,8)}
+                      {isMe && <span style={{ marginLeft: 8, fontSize: 9, color: C.muted }}>← you</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB 3b: BUDGET (FAAB) ── */}
+      {waiverSubTab === 'order' && isFaab && (
+        <div>
+          {/* Big budget display */}
+          <div style={{ background: C.surf, border: '1px solid '+C.surf3, borderRadius: 12, padding: '24px', marginBottom: 16, textAlign: 'center' }}>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1.5, marginBottom: 8 }}>REMAINING FAAB BUDGET</div>
+            <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 48, color: C.gold, lineHeight: 1, marginBottom: 4 }}>${faabBalance}</div>
+            <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted }}>of ${league?.settings?.faab_budget ?? 100} starting budget</div>
+            {/* Progress bar */}
+            <div style={{ height: 6, background: C.surf3, borderRadius: 3, marginTop: 14, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.round((faabBalance / (league?.settings?.faab_budget ?? 100)) * 100)}%`, background: faabBalance > 30 ? C.green : faabBalance > 10 ? '#f5a623' : C.red, borderRadius: 3, transition: 'width .3s' }} />
+            </div>
+          </div>
+          {/* Pending bids */}
+          {myClaims.length > 0 && (
+            <>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 10 }}>PENDING BIDS</div>
+              {myClaims.map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: C.surf, border: '1px solid '+C.surf3, borderRadius: 8, marginBottom: 6 }}>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>{c.add_unit_id?.replace('_',' ')}</div>
+                  <div style={{ fontFamily: 'Anton,sans-serif', fontSize: 14, color: C.gold }}>💰 ${c.bid_amount ?? 0}</div>
+                </div>
+              ))}
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, marginTop: 8 }}>
+                Total committed: ${myClaims.reduce((s, c) => s + (c.bid_amount ?? 0), 0)}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB 4: RESULTS ── */}
+      {waiverSubTab === 'results' && (
+        <div>
+          {waiverResults.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: C.muted, fontFamily: 'Oswald,sans-serif', fontSize: 12 }}>No processed claims yet. Check back after 3 AM.</div>
+          ) : (
+            <>
+              <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.muted, letterSpacing: 1, marginBottom: 12 }}>RECENT WAIVER RESULTS</div>
+              {waiverResults.map(claim => {
+                const awarded = claim.status === 'awarded';
+                return (
+                  <div key={claim.id} style={{ background: C.surf, border: '1px solid '+(awarded ? 'rgba(21,198,120,.3)' : 'rgba(239,68,68,.3)'), borderLeft: '3px solid '+(awarded ? C.green : C.red), borderRadius: 8, padding: '12px 14px', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: awarded ? C.green : C.red, letterSpacing: 1 }}>{awarded ? '✅ AWARDED' : '❌ FAILED'}</span>
+                      {claim.processed_at && <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>{new Date(claim.processed_at).toLocaleDateString()}</span>}
+                    </div>
+                    <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 12, color: C.text }}>
+                      + {claim.add_unit_id?.replace('_',' ')}
+                      {claim.drop_unit_id && <span style={{ color: C.muted }}> · − {claim.drop_unit_id?.replace('_',' ')}</span>}
+                    </div>
+                    {isFaab && claim.bid_amount > 0 && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 11, color: C.muted, marginTop: 2 }}>Bid ${claim.bid_amount}</div>}
+                    {!awarded && <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 10, color: C.red, marginTop: 4 }}>Unit already claimed by another manager</div>}
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
