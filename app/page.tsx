@@ -1087,8 +1087,16 @@ export default function HomePage() {
   async function handleSignUp() {
     setLoading(true); setError(null);
     const { error } = await supabase.auth.signUp({ email, password, options: { data: { display_name: displayName } } });
-    if (error) setError(error.message);
-    else setMessage('Check your email to confirm your account.');
+    if (error) {
+      setError(error.message);
+    } else {
+      setMessage('Check your email to confirm your account.');
+      fetch('/api/send-welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name: displayName }),
+      }).catch(() => {});
+    }
     setLoading(false);
   }
 
