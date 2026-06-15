@@ -978,6 +978,12 @@ export default function HomePage() {
   const [showVideo,      setShowVideo]      = useState(false);
   const [showBestValue,  setShowBestValue]  = useState(false);
 
+  const handleNavTab = (tab: string) => {
+    setShowRecap(false);
+    setShowBestValue(false);
+    setMobileTab(tab as MobileTab);
+  };
+
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 640);
     check();
@@ -1330,9 +1336,9 @@ export default function HomePage() {
           </div>
 
           {/* ── Bottom nav bar ── */}
-          <div style={{ height: 60, flexShrink: 0, background: navBg, borderTop: `1px solid ${navBdr}`, display: 'flex' }}>
+          <div style={{ height: 60, flexShrink: 0, background: navBg, borderTop: `1px solid ${navBdr}`, display: 'flex', position: 'relative', zIndex: 10000 }}>
             {MOBILE_NAV.map(tab => (
-              <button key={tab.key} onClick={() => setMobileTab(tab.key)}
+              <button key={tab.key} onClick={() => handleNavTab(tab.key)}
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', color: mobileTab === tab.key ? gold : gray, transition: 'color .12s', WebkitTapHighlightColor: 'transparent' }}>
                 <span style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</span>
                 <span style={{ fontFamily: 'Oswald,sans-serif', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase' }}>{tab.label}</span>
