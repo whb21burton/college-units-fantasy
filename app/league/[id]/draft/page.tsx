@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
-import { ROSTER_SLOTS, sortByVORP, type DraftUnit, type UnitType } from '@/lib/playerPool';
+import { ROSTER_SLOTS, sortByVORP, sortByPtsPerGame, type DraftUnit, type UnitType } from '@/lib/playerPool';
 import { generateSchedule } from '@/lib/scheduleEngine';
 import type { TeamEfficiency } from '@/types';
 
@@ -253,7 +253,7 @@ export default function DraftPage() {
       }
       if (!cancelled) setFullPool(livePool); // store original pool for stable salary pricing
       const takenIds = new Set(existingPicks.map((p: any) => p.player_id));
-      setAvail(sortByVORP(livePool).filter(u => !takenIds.has(u.id)));
+      setAvail(sortByPtsPerGame(livePool).filter(u => !takenIds.has(u.id)));
 
       // Non-blocking logo fetch
       fetch('/api/team-logos').then(r => r.json())
@@ -442,7 +442,7 @@ export default function DraftPage() {
         setPicks(prev => prev.filter(p => p.pick_number !== pickNum));
         setAvail(prev => {
           if (prev.some(u => u.id === unit.id)) return prev;
-          return [unit, ...prev].sort((a, b) => (b.vorp ?? 0) - (a.vorp ?? 0));
+          return sortByPtsPerGame([unit, ...prev]);
         });
       } else {
         console.error('Pick insert error:', error);
@@ -902,12 +902,20 @@ export default function DraftPage() {
                     )}
                   </div>
 
-                  {/* Projected */}
+                  {/* PTS/GM + season total */}
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 13, color: C.gold, lineHeight: 1 }}>
                       {(unit.avgFpts ?? unit.avgPerWeek ?? 0) > 0 ? (unit.avgFpts ?? unit.avgPerWeek ?? 0).toFixed(1) : '—'}
                     </div>
-                    <div style={{ fontSize: 7, color: C.muted, letterSpacing: .5 }}>PROJ</div>
+                    <div style={{ fontSize: 7, color: C.muted, letterSpacing: .5 }}>PTS/GM</div>
+                    {(unit.seasonTotal ?? 0) > 0 && (
+                      <>
+                        <div style={{ fontFamily: "'Anton', sans-serif", fontSize: 9, color: C.sub, lineHeight: 1, marginTop: 2 }}>
+                          {(unit.seasonTotal as number).toFixed(0)}
+                        </div>
+                        <div style={{ fontSize: 6, color: C.muted, letterSpacing: .3 }}>2026 TOT</div>
+                      </>
+                    )}
                   </div>
 
                   {/* Draft button */}

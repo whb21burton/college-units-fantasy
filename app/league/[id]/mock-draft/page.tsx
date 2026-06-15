@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-browser';
-import { POSITION_CAPS, ROSTER_SLOTS, sortByVORP, type DraftUnit, type UnitType } from '@/lib/playerPool';
+import { POSITION_CAPS, ROSTER_SLOTS, sortByPtsPerGame, type DraftUnit, type UnitType } from '@/lib/playerPool';
 import type { TeamEfficiency } from '@/types';
 
 const C = {
@@ -227,7 +227,7 @@ export default function MockDraftPage() {
       console.log('[loadPool] error:', !res.ok ? res.status : null);
 
       setPoolData(data ?? []);
-      setAvailable(sortByVORP(data ?? []));
+      setAvailable(sortByPtsPerGame(data ?? []));
     }
 
     loadPool(id);
@@ -358,7 +358,7 @@ export default function MockDraftPage() {
     setTimer(PICK_TIME);
     setDraftComplete(false);
     setRosters(Array.from({ length: leagueSize }, emptyRoster));
-    setAvailable(sortByVORP(poolData));
+    setAvailable(sortByPtsPerGame(poolData));
     setSetupDone(false);
   };
 

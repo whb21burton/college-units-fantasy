@@ -437,7 +437,7 @@ export function calculateVORP(players: DraftUnit[]): DraftUnit[] {
     const posStdDev = Math.sqrt(
       group.reduce((s, x) => s + Math.pow((x.projectedPoints ?? 0) - posAvg, 2), 0) / (group.length || 1)
     );
-    const isOutlier = (p.projectedPoints ?? 0) > posAvg + posStdDev * 1.5;
+    const isOutlier = (p.avgFpts ?? p.avgPerWeek ?? 0) > 30;
     const replacement = replacementPts[p.unitType] ?? 0;
     const rawVORP = (p.projectedPoints ?? 0) - replacement;
     const vorp = rawVORP * (SCARCITY_MULTIPLIER[p.unitType] ?? 1.0) * (isOutlier ? 1.2 : 1.0);
@@ -447,5 +447,17 @@ export function calculateVORP(players: DraftUnit[]): DraftUnit[] {
 
 export function sortByVORP(players: DraftUnit[]): DraftUnit[] {
   return calculateVORP(players).sort((a, b) => (b.vorp ?? 0) - (a.vorp ?? 0));
+}
+
+// Sort by avg pts/game with DEF and K pushed after all skill positions
+const POS_GROUP: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0, DEF: 1, K: 2 };
+export function sortByPtsPerGame(players: DraftUnit[]): DraftUnit[] {
+  return [...players].sort((a, b) => {
+    const ga = POS_GROUP[a.unitType] ?? 0;
+    const gb = POS_GROUP[b.unitType] ?? 0;
+    if (ga !== gb) return ga - gb;
+    return (b.avgFpts ?? b.avgPerWeek ?? b.projectedPoints ?? 0)
+         - (a.avgFpts ?? a.avgPerWeek ?? a.projectedPoints ?? 0);
+  });
 }
 
