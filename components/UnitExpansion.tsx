@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import React, { useEffect, useState } from 'react';
 
 type Props = {
@@ -44,7 +44,7 @@ function odrMult(rank: number): number {
 }
 
 export default function UnitExpansion({
-  school, unitType, currentWeek, season = 2025,
+  school, unitType, currentWeek, season = 2026,
   logos: logosIn, homeMap: homeMapIn, defRankMap: defRankMapIn, offRankMap: offRankMapIn,
 }: Props) {
   const [unitStats,     setUnitStats]     = useState<any>(null);

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * lib/sportsDataService.ts
  * ONLY file that calls CFBD API directly.
  * Simple pipeline: fetch roster → assign positions → score by unit → store
@@ -104,7 +104,7 @@ export async function syncScores(week: number, season: number): Promise<number> 
 }
 
 // ─── syncRosters ─────────────────────────────────────────────────────────────
-export async function syncRosters(teams: string[], season = 2025): Promise<number> {
+export async function syncRosters(teams: string[], season = 2026): Promise<number> {
   const db = createAdminClient()
   let total = 0
 

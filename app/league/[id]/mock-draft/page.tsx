@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
@@ -233,7 +233,7 @@ export default function MockDraftPage() {
     loadPool(id);
 
     // Fetch current efficiency data for badges
-    const season = 2025;
+    const season = 2026;
     fetch(`/api/efficiency?week=1&season=${season}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
@@ -249,7 +249,7 @@ export default function MockDraftPage() {
     if (!viewingUnit) { setUnitStats(null); return; }
     setStatsLoading(true);
     setUnitStats(null);
-    fetch(`/api/unit-stats?school=${encodeURIComponent(viewingUnit.school)}&unitType=${viewingUnit.unitType}&season=2025`)
+    fetch(`/api/unit-stats?school=${encodeURIComponent(viewingUnit.school)}&unitType=${viewingUnit.unitType}&season=2026`)
       .then(r => r.json())
       .then(d => { setUnitStats(d); setStatsLoading(false); })
       .catch(() => setStatsLoading(false));

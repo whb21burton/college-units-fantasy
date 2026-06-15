@@ -8,6 +8,9 @@
     },
     "app/api/cron/advance-week/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/process-waivers/route.ts": {
+      "maxDuration": 120
     }
   },
   "crons": [
@@ -42,6 +45,10 @@
     {
       "path": "/api/cron/advance-week",
       "schedule": "0 8 * * 1"
+    },
+    {
+      "path": "/api/cron/process-waivers",
+      "schedule": "0 3 * * *"
     }
   ]
 }

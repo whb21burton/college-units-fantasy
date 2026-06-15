@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const week   = searchParams.get('week');
-  const season = searchParams.get('season') ?? '2025';
+  const season = searchParams.get('season') ?? '2026';
   const admin  = createAdminClient();
 
   let query = admin

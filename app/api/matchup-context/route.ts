@@ -1,4 +1,4 @@
-/**
+﻿/**
  * GET /api/matchup-context?week=N&season=YYYY
  *
  * Returns for each school:
@@ -18,7 +18,7 @@ import { initCfbdClient } from '@/lib/cfbd-client';
 const pkg = require('cfbd');
 const { getElo, getSp } = pkg;
 
-const SEASON = 2025;
+const SEASON = 2026;
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);

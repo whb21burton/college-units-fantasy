@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
@@ -342,7 +342,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   const [loading,      setLoading]      = useState(true);
   const [copied,       setCopied]       = useState(false);
   const [activeTab,    setActiveTab]    = useState<Tab>('draft');
-  const [currentWeek,  setCurrentWeek]  = useState(15);
+  const [currentWeek,  setCurrentWeek]  = useState(1);
   const [showSettings,     setShowSettings]     = useState(false);
   const [showCommSettings, setShowCommSettings] = useState(false);
   const [chatMessages,  setChatMessages]  = useState<any[]>([]);
@@ -830,7 +830,7 @@ const LINEUP_POS_COLOR: Record<string, string> = {
 };
 
 /* ── Weekly Lineup Tab ──────────────────────────────────────── */
-function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refreshWallet, currentWeek = 15 }: { leagueId: string; router: any; userId: string | null; league: any; walletBalance: number; refreshWallet: () => void; currentWeek?: number }) {
+function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refreshWallet, currentWeek = 1 }: { leagueId: string; router: any; userId: string | null; league: any; walletBalance: number; refreshWallet: () => void; currentWeek?: number }) {
   const [picks,          setPicks]          = useState<any[] | null>(null);
   const [firstGameTime,  setFirstGameTime]  = useState<string | null>(null);
   const [loading,        setLoading]        = useState(true);
@@ -864,7 +864,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
           .eq('week', week)
           .eq('entry_type', 'lineup')
           .eq('entry_number', activeEntryNum),
-        fetch(`/api/matchup-context?week=${week}&season=2025`)
+        fetch(`/api/matchup-context?week=${week}&season=2026`)
           .then(r => r.json()).catch(() => ({})),
         supabase
           .from('draft_picks')
@@ -886,7 +886,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
       try {
         const [logosRes, gamesRes] = await Promise.all([
           fetch('/api/team-logos'),
-          fetch(`/api/games?week=${week}&season=2025`),
+          fetch(`/api/games?week=${week}&season=2026`),
         ]);
         const logosData = logosRes.ok ? await logosRes.json() : [];
         const gamesData = gamesRes.ok ? await gamesRes.json() : [];
@@ -1100,7 +1100,7 @@ function WeeklyLineupTab({ leagueId, router, userId, league, walletBalance, refr
                 </div>
                 {isExpanded && (
                   <div style={{ background:'rgba(0,0,0,.25)', borderBottom: i < sortedPicks.length-1 ? '1px solid #1a2b40' : 'none', padding:'8px 14px', overflowX:'auto' }}>
-                    <UnitExpansion school={school} unitType={unitType} currentWeek={currentWeek} season={2025} logos={teamLogos} />
+                    <UnitExpansion school={school} unitType={unitType} currentWeek={currentWeek} season={2026} logos={teamLogos} />
                   </div>
                 )}
               </React.Fragment>
@@ -1211,7 +1211,7 @@ function WeeklyLeaderboardTab({ leagueId, league, userId }: { leagueId: string; 
 
   useEffect(() => {
     const w = league?.current_week ?? 15;
-    fetch(`/api/matchup-context?week=${w}&season=2025`)
+    fetch(`/api/matchup-context?week=${w}&season=2026`)
       .then(r => r.json())
       .then(d => setMatchupCtx(d))
       .catch(() => {});
@@ -1968,7 +1968,7 @@ const STAT_COLS: Record<string, { key: string; label: string }[]> = {
   K:   [{ key: 'pts', label: 'PTS' }],
 };
 
-function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 15 }: {
+function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 1 }: {
   player: any; onBack: () => void; onAdd: () => void; canAdd: boolean; currentWeek?: number;
 }) {
   const [stats,         setStats]         = useState<any | null>(null);
@@ -1978,13 +1978,13 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 15 }: {
 
   useEffect(() => {
     fetch('/api/team-logos').then(r => r.json()).then(d => setLogos(d.logos ?? {})).catch(() => {});
-    fetch(`/api/matchup-context?week=${currentWeek}&season=2025`).then(r => r.json()).then(d => setMatchupCtx(d)).catch(() => {});
+    fetch(`/api/matchup-context?week=${currentWeek}&season=2026`).then(r => r.json()).then(d => setMatchupCtx(d)).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWeek]);
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/unit-stats?school=${encodeURIComponent(player.school)}&unitType=${player.unitType}&season=2025`)
+    fetch(`/api/unit-stats?school=${encodeURIComponent(player.school)}&unitType=${player.unitType}&season=2026`)
       .then(r => r.json())
       .then(d => { setStats(d); setLoading(false); })
       .catch(() => setLoading(false));
@@ -2245,7 +2245,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 15 }: {
         school={player.school}
         unitType={player.unitType}
         currentWeek={currentWeek}
-        season={2025}
+        season={2026}
       />
 
       {/* Unit Players (season totals) — all unit types */}
@@ -2363,7 +2363,7 @@ function PlayerDetailView({ player, onBack, onAdd, canAdd, currentWeek = 15 }: {
 }
 
 /* ── Waiver Wire Tab ─────────────────────────────────────────── */
-function WaiverTab({ league, userId, currentWeek = 15 }: { league: any; userId: string | null; currentWeek?: number }) {
+function WaiverTab({ league, userId, currentWeek = 1 }: { league: any; userId: string | null; currentWeek?: number }) {
   const [allPicks,       setAllPicks]       = useState<any[]>([]);
   const [myPicks,        setMyPicks]        = useState<any[]>([]);
   const [pool,           setPool]           = useState<DraftUnit[]>([]);
@@ -2399,7 +2399,7 @@ function WaiverTab({ league, userId, currentWeek = 15 }: { league: any; userId: 
 
   useEffect(() => {
     const week = league?.current_week ?? 1;
-    fetch(`/api/matchup-context?week=${week}&season=2025`)
+    fetch(`/api/matchup-context?week=${week}&season=2026`)
       .then(r => r.json())
       .then(d => {
         setGameCtx(d);
@@ -2410,7 +2410,7 @@ function WaiverTab({ league, userId, currentWeek = 15 }: { league: any; userId: 
       .catch(() => {});
 
     // Fetch per-school kickoff times to know what's locked
-    fetch(`/api/schedule?week=${week}&season=2025`)
+    fetch(`/api/schedule?week=${week}&season=2026`)
       .then(r => r.json())
       .then((games: any[]) => {
         if (!Array.isArray(games)) return;
@@ -4403,8 +4403,8 @@ function StandingsTab({ league, userId }: { league: any; userId: string | null }
     Promise.all([
       supabase.from('draft_picks').select('*').eq('league_id', league.id).order('pick_number'),
       ...completedWeeks.flatMap(w => [
-        fetch(`/api/game-stats?week=${w}&season=2025`).then(r => r.json()).catch(() => null),
-        fetch(`/api/matchup-context?week=${w}&season=2025`).then(r => r.json()).catch(() => null),
+        fetch(`/api/game-stats?week=${w}&season=2026`).then(r => r.json()).catch(() => null),
+        fetch(`/api/matchup-context?week=${w}&season=2026`).then(r => r.json()).catch(() => null),
       ]),
     ]).then(([picksResult, ...rest]) => {
       setAllPicks((picksResult as any).data ?? []);
@@ -4571,8 +4571,8 @@ function PlayoffTab({ league, userId }: { league: any; userId: string | null }) 
     Promise.all([
       supabase.from('draft_picks').select('*').eq('league_id', league.id).order('pick_number'),
       ...completedWeeks.flatMap(w => [
-        fetch(`/api/game-stats?week=${w}&season=2025`).then(r => r.json()).catch(() => null),
-        fetch(`/api/matchup-context?week=${w}&season=2025`).then(r => r.json()).catch(() => null),
+        fetch(`/api/game-stats?week=${w}&season=2026`).then(r => r.json()).catch(() => null),
+        fetch(`/api/matchup-context?week=${w}&season=2026`).then(r => r.json()).catch(() => null),
       ]),
     ]).then(([picksResult, ...rest]) => {
       setAllPicks((picksResult as any).data ?? []);
@@ -4777,7 +4777,7 @@ function TeamSettingsModal({ leagueId, userId, currentName, currentLogoUrl, onCl
   );
 }
 
-function MatchupTab({ league, userId, members = [], currentWeek = 15 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
+function MatchupTab({ league, userId, members = [], currentWeek = 1 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
   const CURRENT_WEEK = currentWeek;
   const defaultWeek  = CURRENT_WEEK;
 
@@ -4818,9 +4818,9 @@ function MatchupTab({ league, userId, members = [], currentWeek = 15 }: { league
     projCache.clear();
     setIsReady(false);
     setGameStats(null);
-    fetch(`/api/matchup-context?week=${week}&season=2025`)
+    fetch(`/api/matchup-context?week=${week}&season=2026`)
       .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
-    fetch(`/api/game-stats?week=${week}&season=2025`)
+    fetch(`/api/game-stats?week=${week}&season=2026`)
       .then(r => r.json()).then(setGameStats).catch(() => {});
   }, [week]);
 
@@ -5141,7 +5141,7 @@ function canFillSlot(unitType: string, slotLabel: string): boolean {
   return (SLOT_ELIGIBLE[slotLabel] ?? []).includes(unitType);
 }
 
-function TeamTab({ league, userId, members = [], currentWeek = 15 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
+function TeamTab({ league, userId, members = [], currentWeek = 1 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
   const CURRENT_WEEK = currentWeek;
   const defaultWeek  = CURRENT_WEEK;
 
@@ -5184,9 +5184,9 @@ function TeamTab({ league, userId, members = [], currentWeek = 15 }: { league: a
     setSwapLockMsg(null);
     setSelectedBench(null);
     setSelectedStarter(null);
-    fetch(`/api/matchup-context?week=${week}&season=2025`)
+    fetch(`/api/matchup-context?week=${week}&season=2026`)
       .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
-    fetch(`/api/game-stats?week=${week}&season=2025`)
+    fetch(`/api/game-stats?week=${week}&season=2026`)
       .then(r => r.json()).then(setGameStats).catch(() => {});
   }, [week]);
 
@@ -5691,7 +5691,7 @@ function getWeekMatchups(teams: any[], week: number): [any, any][] {
   return result;
 }
 
-function LeagueTab({ league, userId, members = [], currentWeek = 15 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
+function LeagueTab({ league, userId, members = [], currentWeek = 1 }: { league: any; userId: string | null; members?: any[]; currentWeek?: number }) {
   type LView = 'matchups' | 'roster' | 'trade';
   const CURRENT_WEEK = currentWeek;
   const defaultWeek  = CURRENT_WEEK;
@@ -5734,9 +5734,9 @@ function LeagueTab({ league, userId, members = [], currentWeek = 15 }: { league:
     projCache.clear();
     setIsReady(false);
     setGameStats(null);
-    fetch(`/api/matchup-context?week=${week}&season=2025`)
+    fetch(`/api/matchup-context?week=${week}&season=2026`)
       .then(r => r.json()).then(setMatchupCtx).catch(() => setMatchupCtx(null));
-    fetch(`/api/game-stats?week=${week}&season=2025`)
+    fetch(`/api/game-stats?week=${week}&season=2026`)
       .then(r => r.json()).then(setGameStats).catch(() => {});
   }, [week]);
 

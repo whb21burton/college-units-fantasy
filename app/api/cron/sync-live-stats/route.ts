@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { odrMult } from '@/lib/odr'
 
 export const dynamic = 'force-dynamic'
 
 const BASE   = 'https://apinext.collegefootballdata.com'
-const SEASON = 2025
+const SEASON = 2026
 
 const SCORING = {
   passYd: 0.1, passTd: 4, int: -2,

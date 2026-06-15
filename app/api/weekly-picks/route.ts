@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
@@ -146,7 +146,7 @@ export async function PATCH(req: NextRequest) {
       const [school, ut] = combo.split('|||');
       try {
         const r = await fetch(
-          `${baseUrl}/api/unit-stats?school=${encodeURIComponent(school)}&unitType=${ut}&season=2025`,
+          `${baseUrl}/api/unit-stats?school=${encodeURIComponent(school)}&unitType=${ut}&season=2026`,
         );
         const d = await r.json();
         const weekData = d.weeks?.find((w: any) => w.week === week);

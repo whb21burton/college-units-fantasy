@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
 const BASE   = 'https://apinext.collegefootballdata.com'
-const SEASON = 2025
+const SEASON = 2026
 
 const CFBD_POS: Record<string, string> = {
   QB: 'QB', QUARTERBACK: 'QB',

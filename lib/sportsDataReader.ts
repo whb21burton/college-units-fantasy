@@ -1,4 +1,4 @@
-/**
+﻿/**
  * lib/sportsDataReader.ts
  *
  * Frontend-safe reader functions — reads from Supabase ONLY.
@@ -404,7 +404,7 @@ export async function getSchoolWeekGameLog(
 export async function getPlayerProjectedPoints(
   school: string,
   unitType: UnitType,
-  season: number = 2025,
+  season: number = 2026,
 ): Promise<number> {
   const admin = createAdminClient();
 

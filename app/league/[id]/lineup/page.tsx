@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -270,7 +270,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
       const contestWeek = lg.week ?? 5;  // league.week IS the contest week
       setUpcomingWeek(contestWeek);
 
-      fetch(`/api/matchup-context?week=${contestWeek}&season=2025`)
+      fetch(`/api/matchup-context?week=${contestWeek}&season=2026`)
         .then(r => r.json())
         .then(d => {
           setOpponentMap(d.opponentMap ?? {});
@@ -669,7 +669,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                         } else {
                           setExpandedUnit(unit.id);
                           if (!unitStats[unit.id]) {
-                            fetch(`/api/unit-stats?school=${encodeURIComponent(unit.school)}&unitType=${unit.unitType}&season=2025&currentWeek=${league?.week ?? 4}`)
+                            fetch(`/api/unit-stats?school=${encodeURIComponent(unit.school)}&unitType=${unit.unitType}&season=2026&currentWeek=${league?.week ?? 4}`)
                               .then(r => r.json())
                               .then(d => setUnitStats(prev => ({ ...prev, [unit.id]: d })))
                               .catch(() => {});
@@ -968,7 +968,7 @@ export default function LineupPage({ params }: { params: { id: string } }) {
                                             setExpandedWeek(prev => ({ ...prev, [expandKey]: newWk }));
                                             if (!isExpanded && !bd) {
                                               // Fetch breakdown for this specific week
-                                              fetch(`/api/unit-stats?school=${encodeURIComponent(unit.school)}&unitType=${unit.unitType}&season=2025&week=${wk.week}`)
+                                              fetch(`/api/unit-stats?school=${encodeURIComponent(unit.school)}&unitType=${unit.unitType}&season=2026&week=${wk.week}`)
                                                 .then(r => r.json())
                                                 .then(d => setWeekBreakdown(prev => ({ ...prev, [bdKey]: d })))
                                                 .catch(() => {});

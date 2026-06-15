@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { syncStats, syncScores } from '@/lib/sportsDataService';
 import { CONFERENCES } from '@/lib/playerPool';
 
 export const dynamic = 'force-dynamic';
 
-const CURRENT_SEASON = 2025;
+const CURRENT_SEASON = 2026;
 
 // All P4 + Independent schools derived from CONFERENCES constant
 const ALL_SCHOOLS = Object.values(CONFERENCES).flat();

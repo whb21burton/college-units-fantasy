@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
@@ -11,7 +11,7 @@ export async function GET(req: Request) {
 
   try {
     const admin = createAdminClient()
-    const season = 2025
+    const season = 2026
     console.log('[sync-sp-ratings] admin client created, season:', season)
 
     const CFBD_KEY = process.env.CFBD_API_KEY

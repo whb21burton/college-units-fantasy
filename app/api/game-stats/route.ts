@@ -1,4 +1,4 @@
-/**
+﻿/**
  * GET /api/game-stats?week=N&season=YYYY
  *
  * Returns actual fantasy points scored for each school's units in a given week.
@@ -10,7 +10,7 @@ import { getUnitPointsForWeek, getCompletedSchoolsForWeek, getLiveSchoolsForWeek
 
 export const dynamic = 'force-dynamic';
 
-const SEASON = 2025;
+const SEASON = 2026;
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);

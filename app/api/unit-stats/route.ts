@@ -1,5 +1,5 @@
-/**
- * GET /api/unit-stats?school=X&unitType=Y&season=2025
+﻿/**
+ * GET /api/unit-stats?school=X&unitType=Y&season=2026
  *
  * Returns week-by-week game log stats for a school's fantasy unit.
  * Reads from Supabase cache (cached_stats + cached_schedule).
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const school    = searchParams.get('school')   ?? '';
   const unitType  = (searchParams.get('unitType') ?? '') as UnitType;
-  const season    = parseInt(searchParams.get('season') || '2025', 10);
+  const season    = parseInt(searchParams.get('season') || '2026', 10);
   const breakdown = searchParams.get('breakdown') === 'true';
   const weekParam = searchParams.get('week') ? parseInt(searchParams.get('week')!, 10) : null;
   const currentWeekParam = searchParams.get('currentWeek')

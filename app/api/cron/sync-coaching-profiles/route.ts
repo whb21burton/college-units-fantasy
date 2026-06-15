@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 
   try {
     const admin  = createAdminClient()
-    const season = 2025
+    const season = 2026
 
     console.log('[sync-coaching] fetching coaches + advanced stats...')
 
@@ -53,7 +53,7 @@ export async function GET(req: Request) {
       const name = `${entry.firstName ?? ''} ${entry.lastName ?? ''}`.trim()
       if (!name) continue
       for (const s of entry.seasons ?? []) {
-        if (s.year !== 2025) continue
+        if (s.year !== 2026) continue
         const school = s.school ?? ''
         if (!school) continue
         if (!schoolCoaches[school]) schoolCoaches[school] = []

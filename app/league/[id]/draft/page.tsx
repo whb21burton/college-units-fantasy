@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -260,7 +260,7 @@ export default function DraftPage() {
         .then(d => { if (!cancelled) setLogos(d.logos ?? (typeof d === 'object' && !Array.isArray(d) ? d : {})); })
         .catch(() => {});
 
-      const season = 2025;
+      const season = 2026;
       fetch(`/api/efficiency?week=1&season=${season}`)
         .then(r => r.ok ? r.json() : null)
         .then(json => {
@@ -402,7 +402,7 @@ export default function DraftPage() {
     if (!viewingUnit) { setUnitStats(null); return; }
     setStatsLoading(true);
     setUnitStats(null);
-    fetch(`/api/unit-stats?school=${encodeURIComponent(viewingUnit.school)}&unitType=${viewingUnit.unitType}&season=2025`)
+    fetch(`/api/unit-stats?school=${encodeURIComponent(viewingUnit.school)}&unitType=${viewingUnit.unitType}&season=2026`)
       .then(r => r.json())
       .then(d => { setUnitStats(d); setStatsLoading(false); })
       .catch(() => setStatsLoading(false));

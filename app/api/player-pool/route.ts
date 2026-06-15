@@ -1,4 +1,4 @@
-/**
+﻿/**
  * GET /api/player-pool
  *
  * Builds the draft-eligible player pool from Supabase cached_stats.
@@ -12,7 +12,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-server';
 import { CONFERENCES, FULL_POOL, type DraftUnit, type UnitType, type Tier, type Conference } from '@/lib/playerPool';
 
-const SEASON          = 2025;
+const SEASON          = 2026;
 const UNIT_TYPES: UnitType[] = ['QB', 'RB', 'WR', 'TE', 'DEF', 'K'];
 
 // Normalize cached_stats school names to match CONFERENCES canonical names.

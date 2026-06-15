@@ -1,4 +1,4 @@
-/**
+﻿/**
  * POST /api/cron/weekly-sync
  *
  * Runs every Sunday at 8AM (vercel.json: "0 8 * * 0").
@@ -20,7 +20,7 @@ import { CONFERENCES } from '@/lib/playerPool';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const CURRENT_SEASON = 2025;
+const CURRENT_SEASON = 2026;
 const ADMIN_EMAIL    = 'whb21burton@gmail.com';
 const ALL_SCHOOLS    = Object.values(CONFERENCES).flat();
 

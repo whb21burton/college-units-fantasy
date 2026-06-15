@@ -1,4 +1,4 @@
-/**
+﻿/**
  * POST /api/calculate-scores
  * Body: { league_id: string }
  *
@@ -193,8 +193,8 @@ export async function POST(req: Request) {
     const weekData = await Promise.all(
       Array.from({ length: TOTAL_WEEKS }, (_, i) => i + 1).map(async (week) => {
         const [gsRes, ctxRes] = await Promise.all([
-          fetch(`${base}/api/game-stats?week=${week}&season=2025`, { cache: 'no-store' }),
-          fetch(`${base}/api/matchup-context?week=${week}&season=2025`, { cache: 'no-store' }),
+          fetch(`${base}/api/game-stats?week=${week}&season=2026`, { cache: 'no-store' }),
+          fetch(`${base}/api/matchup-context?week=${week}&season=2026`, { cache: 'no-store' }),
         ]);
         const gs  = gsRes.ok  ? await gsRes.json()  : {};
         const ctx = ctxRes.ok ? await ctxRes.json() : {};

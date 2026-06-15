@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
@@ -608,7 +608,7 @@ function PublicBracketCreator() {
         .insert({
           name: contestName,
           sport,
-          season: 2025,
+          season: 2026,
           status: 'open',
           entry_fee_cents: entryFeeCents,
           max_entries: maxAccounts,
@@ -696,13 +696,13 @@ function PublicBracketCreator() {
 
       <label style={labelStyle}>Contest Name</label>
       <input value={name} onChange={e => setName(e.target.value)}
-        placeholder={`e.g. 2025 ${sport.charAt(0).toUpperCase() + sport.slice(1)} Bracket`}
+        placeholder={`e.g. 2026 ${sport.charAt(0).toUpperCase() + sport.slice(1)} Bracket`}
         maxLength={60}
         style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 13, marginBottom: 16, boxSizing: 'border-box', outline: 'none' }} />
 
       <label style={labelStyle}>Contest Description (optional)</label>
       <input value={description} onChange={e => setDescription(e.target.value)}
-        placeholder="e.g. Pick all 27 games in the 2025 CWS bracket"
+        placeholder="e.g. Pick all 27 games in the 2026 CWS bracket"
         maxLength={100}
         style={{ width: '100%', padding: '10px 12px', background: C.surf2, border: `1px solid ${C.surf3}`, borderRadius: 8, color: C.text, fontFamily: 'Oswald,sans-serif', fontSize: 12, marginBottom: 16, boxSizing: 'border-box' as const }} />
 

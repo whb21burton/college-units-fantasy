@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 import { CONFERENCES } from '@/lib/playerPool'
 
 export const dynamic = 'force-dynamic'
 
 const BASE   = 'https://apinext.collegefootballdata.com'
-const SEASON = 2025
+const SEASON = 2026
 const ALL_FBS = Object.values(CONFERENCES).flat()
 
 async function cfbdGet(path: string, params: Record<string, string | number> = {}) {
