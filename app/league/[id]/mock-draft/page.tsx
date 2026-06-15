@@ -657,12 +657,15 @@ export default function MockDraftPage() {
                 <div style={{ width: 26, height: 26, borderRadius: 5, flexShrink: 0, background: `${POS_COLORS[unit.unitType]}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, fontWeight: 700 }}>{unit.unitType}</div>
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div style={{ fontSize: 12, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{unit.school}{unit.playerName && <span style={{ color: C.sub, fontWeight: 400 }}> · {unit.playerName}</span>}</div>
-                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>VORP: {(unit.vorp ?? 0).toFixed(1)}</div>
+                  <div style={{ fontFamily: 'Oswald,sans-serif', fontSize: 9, color: C.muted }}>
+                    {(() => { const ptg = unit.avgFpts || unit.avgPerWeek || (unit.seasonTotal ? (unit.seasonTotal as number) / 14 : 0); return ptg > 0 ? `${ptg.toFixed(1)} PTS/GM` : ''; })()}
+                    {(unit.seasonTotal ?? 0) > 0 ? ` · ${(unit.seasonTotal as number).toFixed(0)} 2025 Total` : ''}
+                  </div>
                   <div style={{ display: 'flex', gap: 5, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ fontSize: 9, color: POS_COLORS[unit.unitType], letterSpacing: 1, padding: '1px 5px', background: `${POS_COLORS[unit.unitType]}18`, borderRadius: 3 }}>{unit.tier}</span>
                     <span style={{ fontSize: 9, color: C.muted }}>{unit.projectedPoints} pts</span>
-                    {unit.isOutlier && (
-                      <span style={{ padding: '2px 6px', background: 'rgba(245,166,35,.2)', border: '1px solid rgba(245,166,35,.4)', borderRadius: 4, fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.gold, letterSpacing: 1, textTransform: 'uppercase' as const }}>⭐ OUTLIER</span>
+                    {(unit.avgFpts || unit.avgPerWeek || 0) > 30 && (
+                      <span style={{ padding: '2px 6px', background: 'rgba(245,166,35,.2)', border: '1px solid rgba(245,166,35,.4)', borderRadius: 4, fontFamily: 'Oswald,sans-serif', fontSize: 8, color: C.gold, letterSpacing: 1, textTransform: 'uppercase' as const }}>⭐ ELITE</span>
                     )}
                     {effMap[unit.school] && (() => {
                       const eff = effMap[unit.school];
